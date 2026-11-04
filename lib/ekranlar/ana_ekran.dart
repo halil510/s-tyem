@@ -40,7 +40,7 @@ class _AnaEkranState extends State<AnaEkran> {
     _NavItem(label: 'Cariler', icon: Icons.people_outline_rounded, activeIcon: Icons.people_rounded, renk: Color(0xFF1A237E)),
     _NavItem(label: 'Süt', icon: Icons.water_drop_outlined, activeIcon: Icons.water_drop, renk: Color(0xFF0D47A1)),
     _NavItem(label: 'Yem', icon: Icons.grass_outlined, activeIcon: Icons.grass, renk: Color(0xFF1B5E20)),
-    _NavItem(label: 'Öde', icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet, renk: Color(0xFFB71C1C)),
+    _NavItem(label: 'Ödemeler', icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet, renk: Color(0xFFB71C1C)),
   ];
 
   @override
@@ -152,46 +152,62 @@ class _AnaEkranState extends State<AnaEkran> {
 
   Widget _buildBottomBar() {
     return Container(
+      key: const ValueKey('altPanel'),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(_navItems.length, _navBarItem),
+            children: [for (var i = 0; i < _navItems.length; i++) Expanded(child: _navBarItem(i))],
           ),
         ),
       ),
     );
   }
 
+  /// Her sekmede ikon + yazı HER ZAMAN görünür (eskiden yazı yalnız seçili
+  /// sekmede çıkıyordu); seçili sekme renk ve zemin ile belirginleşir.
   Widget _navBarItem(int index) {
     final item = _navItems[index];
     final selected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedIndex = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: selected
-            ? const EdgeInsets.symmetric(horizontal: 18, vertical: 10)
-            : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? item.renk.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(selected ? item.activeIcon : item.icon,
-                color: selected ? item.renk : Colors.grey[500], size: 22),
-            if (selected) ...[
-              const SizedBox(width: 6),
-              Text(item.label, style: TextStyle(color: item.renk, fontWeight: FontWeight.w600, fontSize: 13)),
+    final renk = selected ? item.renk : Colors.grey[600]!;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => setState(() => _selectedIndex = index),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: selected ? item.renk.withValues(alpha: 0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(selected ? item.activeIcon : item.icon, color: renk, size: 24),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: renk,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
             ],
-          ],
+          ),
         ),
       ),
     );

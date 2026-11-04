@@ -192,7 +192,7 @@ class _AppActivationScreenState extends State<AppActivationScreen> {
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Her kullanıcı için farklı şifre vardır. Size verilen şifreyi girin.',
+                            'Size verilen aktivasyon şifresini girin.',
                             style: TextStyle(fontSize: 12, color: Colors.blue),
                           ),
                         ),
@@ -251,11 +251,16 @@ class _AppActivationScreenState extends State<AppActivationScreen> {
                           children: [
                             Icon(Icons.check_circle),
                             SizedBox(width: 10),
-                            Text(
-                              'UYGULAMAYI AKTİVE ET',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'UYGULAMAYI AKTİVE ET',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
                           ],

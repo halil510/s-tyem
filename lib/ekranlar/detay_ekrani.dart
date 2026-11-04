@@ -402,11 +402,15 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                 children: [
                   Icon(Icons.calendar_today, size: 18, color: Colors.blue[700]),
                   const SizedBox(width: 8),
-                  Text(
-                    _selectedRange != null
+                  Flexible(
+                    child: Text(
+                      _selectedRange != null
                         ? '${DateFormat('dd MMMM yyyy', 'tr_TR').format(_selectedRange!.start)} - ${DateFormat('dd MMMM yyyy', 'tr_TR').format(_selectedRange!.end)}'
                         : 'Tarih Seçin',
-                    style: TextStyle(fontSize: 14, color: Colors.blue[800]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, color: Colors.blue[800]),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Icon(Icons.arrow_drop_down, size: 18, color: Colors.blue[700]),
@@ -592,17 +596,16 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Flexible(
-                        child: Text(
-                          DateFormat('dd MMMM yyyy', 'tr_TR').format(DateTime.parse(sut.tarih)),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      Text(
+                        DateFormat('dd MMMM yyyy', 'tr_TR').format(DateTime.parse(sut.tarih)),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       if (bugunKayit) ...[
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(

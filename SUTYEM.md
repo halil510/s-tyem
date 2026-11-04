@@ -52,7 +52,7 @@
 ## Testler
 
 ```bash
-flutter test          # 132 test — hepsi geçmeli
+flutter test          # 150 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -78,6 +78,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/data/veri_yonetimi_test.dart` | Veri yönetimi repo (sayılar, temizlik + dönem kilidi, .db doğrulama), toplu fiyat (ya hep ya hiç), tarih indeksleri sorgu planında |
 | `test/features/cari_excel_test.dart` | Excel'den cari: rapor biçimi, ayrı Ad/Soyad/Telefon, "Cari Kodu" tuzağı, başlıksız, tekrar, Türkçe İ/ı, ekran akışı |
 | `test/akis_test.dart` | UYGULAMA AKIŞI (AnaEkran): Süt sekmesinde girilen süt → Cariler listesi + detay; yeni/içe alınan cari tüm açık sekmelere düşer; Türkçe arama; Ödemelerde pasif alacaklı |
+| `test/ekran_tarama_test.dart` | TÜM EKRANLAR 360 px'de gerçekçi veriyle açılır (taşma/hata yok); alt panel yazıları; boş veritabanı |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -342,6 +343,26 @@ alıyordu → yeni eklenen / Excel'den alınan cari, uygulama yeniden açılana 
 - Testler: 132/132; `flutter analyze` 0 error.
 - **GitHub push bu adımda otomatik izin sisteminde engellendi**; commit yalnız yerelde. Kullanıcı `git push` ile gönderebilir.
 
+### 2026-11-04 (13) — Alt panel yazıları + tüm ekran taraması
+
+- **Alt panel:** yazılar yalnız seçili sekmede görünüyordu → artık 5 sekmenin yazısı (Özet, Cariler,
+  Süt, Yem, Ödemeler) HER ZAMAN görünür; seçili sekme renk + zeminle belirgin. "Öde" → "Ödemeler".
+  Panel `ValueKey('altPanel')`.
+- **`test/ekran_tarama_test.dart`:** her ekran 360 px telefon genişliğinde, uzun isimli / büyük rakamlı
+  gerçekçi veriyle açılır; taşma veya hata = test kırılır. 16 ekran + ana ekran 5 sekme + boş veritabanı.
+  **Yeni ekran eklenince bu listeye eklenmeli.**
+- Taramanın bulduğu ve düzeltilen hatalar (hepsi dar telefonda / büyük yazı boyutunda görünür):
+  1. **Hesap Ekstresi:** "Tahsilat Al" + "Ödeme Yap" düğmeleri yan yana sığmıyor, ekrandan taşıyordu
+     → ekranı ikiye bölen iki düğme; bakiye rakamı ve 4'lü özet tek satırda küçülür; etiketler `Wrap`.
+  2. **Cari Detay:** tarih aralığı kutusu ("01 Kasım 2026 - 30 Kasım 2026") ve süt kartında tarih + "BUGÜN" taşıyordu.
+  3. **Hızlı Süt Girişi:** alt paneldeki Kayıtlı / Boş / Günlük Toplam kutuları büyük toplamla taşıyordu.
+  4. **Yem Fiyatları:** `ExpansionTile` renkli kutuda → dokunma efekti görünmüyordu (debug hata).
+  5. **Aktivasyon:** "UYGULAMAYI AKTİVE ET" düğme yazısı taşıyordu; eskimiş "her kullanıcı için farklı şifre" metni düzeltildi.
+  6. **Yedekleme:** başlık satırı taşması.
+- Testler: 150/150; `flutter analyze` 0 error.
+
+**Kullanıcıya önerilen ekran iyileştirmeleri (karar bekliyor)** — bkz. "Sıradaki işler".
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
@@ -361,6 +382,23 @@ alıyordu → yeni eklenen / Excel'den alınan cari, uygulama yeniden açılana 
 5. `withOpacity` vb. ~180 adet "info" düzeyinde eski API uyarısı var (çalışmayı etkilemez).
 
 ## Sıradaki işler (öneri sırası)
+
+### D. Ekran taraması önerileri (2026-11-04, kullanıcı onayı bekleniyor)
+
+- [ ] D1. **Cari Kartı birleştirme:** "Detay" (yalnız kg) ve "Hesap Ekstresi" (yalnız ₺) iki ayrı ekran;
+      kullanıcı ikisini karıştırıyor. Tek ekran, sekmeler: Özet (bakiye) · Süt · Yem · Ödemeler.
+- [ ] D2. **Açılış ve aktivasyon ekranında sabit "HALİL İBRAHİM KABATLI / HALK MARKET"** yazıyor (market
+      uygulamasından kalma). İşletme adı ayardan gelsin. WhatsApp/Excel altındaki sabit
+      "Süt Yem Takip Sistemi" de işletme adı olsun.
+- [ ] D3. **Ayarlar ekranı (B10):** işletme adı/telefonu (fiş, WhatsApp, Excel, açılış), şifre değiştirme,
+      otomatik yedek hatırlatma. Bugün bu ayarlar dört farklı ekrana dağınık.
+- [ ] D4. **Sayı biçimi tek tip:** Özet/Dönem/Fiş "1.234,5 kg" (Türkçe), Detay/Cari listesi/Yem "1234.5kg".
+      Tüm ekranlarda Türkçe biçim (`NumberFormat('#,##0.##','tr_TR')`). 22 yer.
+- [ ] D5. **Hızlı Süt Girişi menünün içinde gizli** — en çok kullanılan ekran. Süt sekmesinin en üstüne büyük
+      "Toplu Giriş (tüm cariler)" düğmesi.
+- [ ] D6. **İşlem geçmişi ekranı (B9):** kayıt zaten tutuluyor; Cari Kartı'nda "Geçmiş" sekmesi.
+- [ ] D7. **Yem girişinde tutar önizlemesi:** girilen kg × o ayın fiyatı = ₺ (şu an yalnız kg görünüyor; fiyat eksikse uyarı).
+- [ ] D8. Yedekleme ekranı şifresi (`12345`, düz metin) — bkz. Açık riskler 1.
 
 ### Profesyonelleşme planı (kullanıcı onayı bekleniyor)
 

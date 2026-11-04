@@ -11,12 +11,42 @@ import '../utils/sayi_format.dart';
 
 // Yem türleri sabit liste
 const List<Map<String, dynamic>> kYemTurleri = [
-  {'alan': 'sutYemiFiyat', 'ad': 'Süt Yemi', 'ikon': Icons.water_drop, 'renk': Color(0xFF0D47A1)},
-  {'alan': 'besiYemiFiyat', 'ad': 'Besi Yemi', 'ikon': Icons.agriculture, 'renk': Color(0xFF4E342E)},
-  {'alan': 'bBaslangicFiyat', 'ad': 'B. Başlangıç', 'ikon': Icons.start, 'renk': Color(0xFF6A1B9A)},
-  {'alan': 'bBuyutmeFiyat', 'ad': 'B. Büyütme', 'ikon': Icons.trending_up, 'renk': Color(0xFF283593)},
-  {'alan': 'kuzuYemiFiyat', 'ad': 'Kuzu Yemi', 'ikon': Icons.pets, 'renk': Color(0xFFE65100)},
-  {'alan': 'tavukYemiFiyat', 'ad': 'Tavuk Yemi', 'ikon': Icons.egg, 'renk': Color(0xFFF9A825)},
+  {
+    'alan': 'sutYemiFiyat',
+    'ad': 'Süt Yemi',
+    'ikon': Icons.water_drop,
+    'renk': Color(0xFF0D47A1)
+  },
+  {
+    'alan': 'besiYemiFiyat',
+    'ad': 'Besi Yemi',
+    'ikon': Icons.agriculture,
+    'renk': Color(0xFF4E342E)
+  },
+  {
+    'alan': 'bBaslangicFiyat',
+    'ad': 'B. Başlangıç',
+    'ikon': Icons.start,
+    'renk': Color(0xFF6A1B9A)
+  },
+  {
+    'alan': 'bBuyutmeFiyat',
+    'ad': 'B. Büyütme',
+    'ikon': Icons.trending_up,
+    'renk': Color(0xFF283593)
+  },
+  {
+    'alan': 'kuzuYemiFiyat',
+    'ad': 'Kuzu Yemi',
+    'ikon': Icons.pets,
+    'renk': Color(0xFFE65100)
+  },
+  {
+    'alan': 'tavukYemiFiyat',
+    'ad': 'Tavuk Yemi',
+    'ikon': Icons.egg,
+    'renk': Color(0xFFF9A825)
+  },
 ];
 
 class YemFiyatEkrani extends ConsumerStatefulWidget {
@@ -59,13 +89,20 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
 
   double _fiyatDegeri(CariFiyat f, String alan) {
     switch (alan) {
-      case 'sutYemiFiyat': return f.sutYemiFiyat;
-      case 'besiYemiFiyat': return f.besiYemiFiyat;
-      case 'bBaslangicFiyat': return f.bBaslangicFiyat;
-      case 'bBuyutmeFiyat': return f.bBuyutmeFiyat;
-      case 'kuzuYemiFiyat': return f.kuzuYemiFiyat;
-      case 'tavukYemiFiyat': return f.tavukYemiFiyat;
-      default: return 0;
+      case 'sutYemiFiyat':
+        return f.sutYemiFiyat;
+      case 'besiYemiFiyat':
+        return f.besiYemiFiyat;
+      case 'bBaslangicFiyat':
+        return f.bBaslangicFiyat;
+      case 'bBuyutmeFiyat':
+        return f.bBuyutmeFiyat;
+      case 'kuzuYemiFiyat':
+        return f.kuzuYemiFiyat;
+      case 'tavukYemiFiyat':
+        return f.tavukYemiFiyat;
+      default:
+        return 0;
     }
   }
 
@@ -83,7 +120,8 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
     }
     _controllers.clear();
 
-    _fiyatlar = await _fiyatRepo.getAyFiyatlariHepsi(_cariler.map((c) => c.id!).toList(), _ayStr);
+    _fiyatlar = await _fiyatRepo.getAyFiyatlariHepsi(
+        _cariler.map((c) => c.id!).toList(), _ayStr);
 
     for (final cari in _cariler) {
       final f = _fiyatlar[cari.id!]!;
@@ -133,7 +171,8 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
         .any((ctrl) => sayiCoz(ctrl.text) == null);
     if (hataliVar) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Geçersiz fiyat var, lütfen girdiğiniz değerleri kontrol edin'),
+        content: Text(
+            'Geçersiz fiyat var, lütfen girdiğiniz değerleri kontrol edin'),
         backgroundColor: Colors.red,
       ));
       return;
@@ -149,10 +188,12 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
           sutFiyat: mevcut.sutFiyat,
           sutYemiFiyat: _oku(cari.id!, 'sutYemiFiyat', mevcut.sutYemiFiyat),
           besiYemiFiyat: _oku(cari.id!, 'besiYemiFiyat', mevcut.besiYemiFiyat),
-          bBaslangicFiyat: _oku(cari.id!, 'bBaslangicFiyat', mevcut.bBaslangicFiyat),
+          bBaslangicFiyat:
+              _oku(cari.id!, 'bBaslangicFiyat', mevcut.bBaslangicFiyat),
           bBuyutmeFiyat: _oku(cari.id!, 'bBuyutmeFiyat', mevcut.bBuyutmeFiyat),
           kuzuYemiFiyat: _oku(cari.id!, 'kuzuYemiFiyat', mevcut.kuzuYemiFiyat),
-          tavukYemiFiyat: _oku(cari.id!, 'tavukYemiFiyat', mevcut.tavukYemiFiyat),
+          tavukYemiFiyat:
+              _oku(cari.id!, 'tavukYemiFiyat', mevcut.tavukYemiFiyat),
         ));
       }
       // Tek transaction: ya hepsi ya hiçbiri.
@@ -163,11 +204,14 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
           content: const Text('Yem fiyatları kaydedildi'),
           backgroundColor: Colors.green[700],
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
     }
     setState(() => _kaydediliyor = false);
   }
@@ -177,19 +221,28 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FFF8),
       appBar: AppBar(
-        title: const Text('Yem Fiyatları', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Yem Fiyatları',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: const Color(0xFF2E7D32),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           if (_kaydediliyor)
-            const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+            const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2)))
           else
             TextButton.icon(
               onPressed: _kaydet,
               icon: const Icon(Icons.save, color: Colors.white, size: 18),
-              label: const Text('Kaydet', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Kaydet',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -204,22 +257,42 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
                     margin: const EdgeInsets.all(16),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF2E7D32), Color(0xFF388E3C)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      gradient: const LinearGradient(
+                          colors: [Color(0xFF2E7D32), Color(0xFF388E3C)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight),
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: const Color(0xFF2E7D32).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
+                      boxShadow: [
+                        BoxShadow(
+                            color: const Color(0xFF2E7D32).withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4))
+                      ],
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.grass, color: Colors.white, size: 22),
+                          decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.grass,
+                              color: Colors.white, size: 22),
                         ),
                         const SizedBox(width: 14),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Yem Fiyatı Dönemi', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          Text(_ayGoster, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        ])),
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              const Text('Yem Fiyatı Dönemi',
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 12)),
+                              Text(_ayGoster,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold)),
+                            ])),
                         const Icon(Icons.edit_calendar, color: Colors.white70),
                       ],
                     ),
@@ -228,8 +301,10 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
 
                 // Bilgi notu
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.green[50],
                     borderRadius: BorderRadius.circular(10),
@@ -237,9 +312,14 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.green[700], size: 16),
+                      Icon(Icons.info_outline,
+                          color: Colors.green[700], size: 16),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Her cariye farklı fiyat girebilirsiniz. Boş = önceki ay.', style: TextStyle(color: Colors.green[800], fontSize: 12))),
+                      Expanded(
+                          child: Text(
+                              'Her cariye farklı fiyat girebilirsiniz. Boş = önceki ay.',
+                              style: TextStyle(
+                                  color: Colors.green[800], fontSize: 12))),
                     ],
                   ),
                 ),
@@ -249,7 +329,9 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
                 // Cari listesi
                 Expanded(
                   child: _cariler.isEmpty
-                      ? Center(child: Text('Henüz cari yok', style: TextStyle(color: Colors.grey[500])))
+                      ? Center(
+                          child: Text('Henüz cari yok',
+                              style: TextStyle(color: Colors.grey[500])))
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                           itemCount: _cariler.length,
@@ -267,66 +349,95 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          leading: Container(
-            width: 42, height: 42,
-            decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(10)),
-            child: Icon(Icons.person, color: Colors.green[700], size: 20),
-          ),
-          title: Text('${cari.ad} ${cari.soyad}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          subtitle: Text(cari.hayvanTuru ?? '', style: TextStyle(color: Colors.grey[500], fontSize: 11)),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          children: kYemTurleri.map((tur) {
-            final alan = tur['alan'] as String;
-            final ctrl = _controllers[cari.id!]![alan]!;
-            final renk = tur['renk'] as Color;
-            final ikon = tur['ikon'] as IconData;
-            final ad = tur['ad'] as String;
+      // ExpansionTile'ın dokunma efekti en yakın Material'a çizilir; renkli
+      // Container onu gizliyordu (debug'da hata, cihazda efekt görünmüyordu).
+      child: Material(
+        type: MaterialType.transparency,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            leading: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(10)),
+              child: Icon(Icons.person, color: Colors.green[700], size: 20),
+            ),
+            title: Text('${cari.ad} ${cari.soyad}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            subtitle: Text(cari.hayvanTuru ?? '',
+                style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: kYemTurleri.map((tur) {
+              final alan = tur['alan'] as String;
+              final ctrl = _controllers[cari.id!]![alan]!;
+              final renk = tur['renk'] as Color;
+              final ikon = tur['ikon'] as IconData;
+              final ad = tur['ad'] as String;
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(color: renk.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Icon(ikon, color: renk, size: 16),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(ad, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                  SizedBox(
-                    width: 100,
-                    child: TextField(
-                      controller: ctrl,
-                      textAlign: TextAlign.center,
-                      decoration: InputDecoration(
-                        hintText: '0.00',
-                        suffixText: '₺',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: renk.withOpacity(0.3)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: renk, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: renk.withOpacity(0.05),
-                      ),
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: renk),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                          color: renk.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Icon(ikon, color: renk, size: 16),
                     ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Text(ad,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w500))),
+                    SizedBox(
+                      width: 100,
+                      child: TextField(
+                        controller: ctrl,
+                        textAlign: TextAlign.center,
+                        decoration: InputDecoration(
+                          hintText: '0.00',
+                          suffixText: '₺',
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                BorderSide(color: renk.withOpacity(0.3)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: renk, width: 2),
+                          ),
+                          filled: true,
+                          fillColor: renk.withOpacity(0.05),
+                        ),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: renk),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
         ),
       ),
     );

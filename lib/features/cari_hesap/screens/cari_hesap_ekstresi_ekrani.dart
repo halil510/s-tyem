@@ -136,25 +136,33 @@ class _CariHesapEkstresiEkraniState extends ConsumerState<CariHesapEkstresiEkran
           ],
         ),
       ),
-      floatingActionButton: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'tahsilat',
+      // İki düğme ekranı ikiye böler: dar telefonda (360 px) yan yana sığmıyor, taşıyordu.
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: FloatingActionButton.extended(
+                heroTag: 'tahsilat',
             onPressed: _tahsilatAlDialogGoster,
             backgroundColor: AppColors.success,
             icon: const Icon(Icons.arrow_downward_rounded),
             label: const Text('Tahsilat Al'),
-          ),
-          const SizedBox(width: 10),
-          FloatingActionButton.extended(
-            heroTag: 'odeme',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FloatingActionButton.extended(
+                heroTag: 'odeme',
             onPressed: _odemeYapDialogGoster,
             backgroundColor: AppColors.primary,
             icon: const Icon(Icons.arrow_upward_rounded),
             label: const Text('Ödeme Yap'),
-          ),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -402,7 +410,9 @@ class _BakiyeOzetKarti extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -410,7 +420,6 @@ class _BakiyeOzetKarti extends StatelessWidget {
                 child: Text(etiket, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
               ),
               if (ekstre.filtreliMi) ...[
-                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
@@ -420,9 +429,13 @@ class _BakiyeOzetKarti extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            paraFormat.format(ekstre.bakiye.abs()),
-            style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              paraFormat.format(ekstre.bakiye.abs()),
+              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -471,7 +484,11 @@ class _MiniIstatistik extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(deger, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(deger,
+              maxLines: 1, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+        ),
         const SizedBox(height: 2),
         Text(baslik, style: const TextStyle(color: Colors.white70, fontSize: 10)),
       ],

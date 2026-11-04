@@ -460,8 +460,11 @@ class _AltPanel extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(deger, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: renk)),
-          Text(baslik, style: TextStyle(fontSize: 10, color: renk)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(deger, maxLines: 1, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: renk)),
+          ),
+          Text(baslik, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: renk)),
         ],
       ),
     );
@@ -479,12 +482,17 @@ class _AltPanel extends StatelessWidget {
         ),
         child: Column(
           children: [
+            // Kutular genişliği paylaşır; büyük günlük toplam dar ekranda taşmaz.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _kutu('Kayıtlı', '$kayitliSayisi', Colors.green),
-                _kutu('Boş', '${cariSayisi - kayitliSayisi < 0 ? 0 : cariSayisi - kayitliSayisi}', Colors.grey),
-                _kutu('Günlük Toplam', '${sayiGoster(gunlukToplamKg)} kg', Colors.blue),
+                Expanded(child: _kutu('Kayıtlı', '$kayitliSayisi', Colors.green)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _kutu(
+                      'Boş', '${cariSayisi - kayitliSayisi < 0 ? 0 : cariSayisi - kayitliSayisi}', Colors.grey),
+                ),
+                const SizedBox(width: 8),
+                Expanded(flex: 2, child: _kutu('Günlük Toplam', '${sayiGoster(gunlukToplamKg)} kg', Colors.blue)),
               ],
             ),
             const SizedBox(height: 16),

@@ -594,12 +594,15 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
                         children: [
                           Icon(Icons.backup, color: Colors.white, size: 28),
                           SizedBox(width: 8),
-                          Text(
-                            'Veri Yönetimi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                          Flexible(
+                            child: Text(
+                              'Veri Yönetimi',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
