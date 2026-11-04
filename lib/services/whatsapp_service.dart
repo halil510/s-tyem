@@ -8,7 +8,7 @@ class WhatsAppService {
       debugPrint('📞 Orijinal telefon: $phone');
       
       // Telefon numarasını temizle ve formatla
-      String cleanPhone = _cleanAndFormatPhoneNumber(phone);
+      String cleanPhone = telefonNormalize(phone);
       
       if (cleanPhone.isEmpty) {
         debugPrint('❌ Geçersiz telefon numarası: $phone');
@@ -65,14 +65,14 @@ class WhatsAppService {
     }
   }
   
-  static String _cleanAndFormatPhoneNumber(String phone) {
+  /// Türkiye cep numarasını WhatsApp biçimine (90 + 10 hane) çevirir;
+  /// geçersizse boş metin döner. Tüm ekranlar bunu kullanır.
+  static String telefonNormalize(String phone) {
     if (phone.isEmpty) return '';
     
     // 1. Tüm boşluk ve özel karakterleri kaldır
     String cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    
-    debugPrint('1. Temizlenmiş: $cleaned');
-    
+        
     // 2. Numara boş mu kontrol et
     if (cleaned.isEmpty) return '';
     
@@ -100,16 +100,12 @@ class WhatsAppService {
         cleaned = cleaned.substring(cleaned.length - 12);
       }
     }
-    
-    debugPrint('2. Formatlanmış: $cleaned');
-    
+        
     // 4. Son kontrol: 12 haneli mi ve 90 ile başlıyor mu?
     if (cleaned.length == 12 && cleaned.startsWith('90')) {
       return cleaned;
     }
-    
-    debugPrint('❌ Son kontrol başarısız: $cleaned (uzunluk: ${cleaned.length})');
-    return '';
+        return '';
   }
 
   // Mesaj oluşturma fonksiyonları - AYNEN KALDI

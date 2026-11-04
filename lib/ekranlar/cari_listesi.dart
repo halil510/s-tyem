@@ -13,6 +13,9 @@ import '../data/repositories/yem_repository.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import 'package:intl/intl.dart';
+import '../services/toplu_mesaj_servisi.dart';
+import 'cari/cari_dialoglari.dart';
+import 'cari/cari_duzenle.dart';
 
 class CariListesi extends ConsumerStatefulWidget {
   const CariListesi({super.key});
@@ -250,10 +253,12 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     );
   }
 
+  // ─── Excel raporları ────────────────────────────────────────────────
+
   void _excelExportDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Excel\'e Aktar'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -261,12 +266,18 @@ class _CariListesiState extends ConsumerState<CariListesi> {
             ListTile(
               leading: const Icon(Icons.download),
               title: const Text('Süt Raporu'),
-              onTap: () => _sutRaporuDialog(),
+              onTap: () {
+                Navigator.pop(ctx);
+                _excelRaporu(sut: true);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.download),
               title: const Text('Yem Raporu'),
-              onTap: () => _yemRaporuDialog(),
+              onTap: () {
+                Navigator.pop(ctx);
+                _excelRaporu(sut: false);
+              },
             ),
           ],
         ),
@@ -274,562 +285,112 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     );
   }
 
-  void _sutRaporuDialog() {
-    Navigator.pop(context);
-    showDialog(
-      context: context,
-      builder: (context) => _SutRaporDialog(onOlustur: _sutRaporuOlustur),
-    );
-  }
-
-  void _yemRaporuDialog() {
-    Navigator.pop(context);
-    showDialog(
-      context: context,
-      builder: (context) => _YemRaporDialog(onOlustur: _yemRaporuOlustur),
-    );
-  }
-
-  Future<void> _sutRaporuOlustur(DateTimeRange tarihAraligi) async {
-    Navigator.pop(context);
+  Future<void> _excelRaporu({required bool sut}) async {
+    final aralik = await raporTarihAraligiSor(context, sut ? 'Süt Raporu' : 'Yem Raporu');
+    if (aralik == null || !mounted) return;
+    final gun = DateFormat('yyyy-MM-dd');
+    final bas = gun.format(aralik.start), bit = gun.format(aralik.end);
+    final ad = '${sut ? 'Sut' : 'Yem'}_Raporu_${DateFormat('yyyy_MM_dd').format(DateTime.now())}';
     try {
-      final sutler = await _sutRepo.getAllInRange(
-        DateFormat('yyyy-MM-dd').format(tarihAraligi.start),
-        DateFormat('yyyy-MM-dd').format(tarihAraligi.end),
-      );
-
-      final file = await ExcelExport.exportSutRaporu(
-        cariler: _cariler,
-        sutler: sutler,
-        startDate: tarihAraligi.start,
-        endDate: tarihAraligi.end,
-        raporAdi: 'Sut_Raporu_${DateFormat('yyyy_MM_dd').format(DateTime.now())}',
-      );
-
+      final file = sut
+          ? await ExcelExport.exportSutRaporu(
+              cariler: _cariler,
+              sutler: await _sutRepo.getAllInRange(bas, bit),
+              startDate: aralik.start,
+              endDate: aralik.end,
+              raporAdi: ad,
+            )
+          : await ExcelExport.exportYemRaporu(
+              cariler: _cariler,
+              yemler: await _yemRepo.getAllInRange(bas, bit),
+              startDate: aralik.start,
+              endDate: aralik.end,
+              raporAdi: ad,
+            );
       await ExcelExport.shareFile(file);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Süt raporu başarıyla oluşturuldu')),
-      );
+      _mesajGoster('${sut ? 'Süt' : 'Yem'} raporu oluşturuldu');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
+      _mesajGoster('Rapor oluşturulamadı: $e');
     }
   }
 
-  Future<void> _yemRaporuOlustur(DateTimeRange tarihAraligi) async {
-    Navigator.pop(context);
-    try {
-      final yemler = await _yemRepo.getAllInRange(
-        DateFormat('yyyy-MM-dd').format(tarihAraligi.start),
-        DateFormat('yyyy-MM-dd').format(tarihAraligi.end),
-      );
+  // ─── Toplu WhatsApp ─────────────────────────────────────────────────
 
-      final file = await ExcelExport.exportYemRaporu(
-        cariler: _cariler,
-        yemler: yemler,
-        startDate: tarihAraligi.start,
-        endDate: tarihAraligi.end,
-        raporAdi: 'Yem_Raporu_${DateFormat('yyyy_MM_dd').format(DateTime.now())}',
-      );
-
-      await ExcelExport.shareFile(file);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yem raporu başarıyla oluşturuldu')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
-    }
-  }
+  List<Cari> get _seciliCariNesneleri =>
+      _cariler.where((c) => c.id != null && _seciliCariler.contains(c.id)).toList();
 
   Future<void> _whatsappGonder() async {
-    if (_seciliCariler.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lütfen en az bir cari seçin')),
-      );
+    final secili = _seciliCariNesneleri;
+    if (secili.isEmpty) {
+      _mesajGoster('Lütfen en az bir cari seçin');
       return;
     }
+    final secenek = await whatsappSecenekSor(context, secili.length);
+    if (secenek == null || !mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('WhatsApp Gönder'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.local_drink, color: Colors.blue),
-              title: const Text('Süt Raporu Gönder'),
-              onTap: () {
-                Navigator.pop(context);
-                _sutRaporuWhatsappGonder();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.agriculture, color: Colors.green),
-              title: const Text('Yem Raporu Gönder'),
-              onTap: () {
-                Navigator.pop(context);
-                _yemRaporuWhatsappGonder();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.message, color: Colors.green),
-              title: const Text('Özel Mesaj Gönder'),
-              onTap: () {
-                Navigator.pop(context);
-                _ozelMesajGonder();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.payment, color: Colors.orange),
-              title: const Text('Ödeme Bildirimi Gönder'),
-              onTap: () {
-                Navigator.pop(context);
-                _odemeBildirimiGonder();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    final bugun = DateTime.now();
+    final gun = DateFormat('yyyy-MM-dd');
+    final tarihMetni = DateFormat('dd MMMM yyyy', 'tr_TR').format(bugun);
 
-  Future<void> _sutRaporuWhatsappGonder() async {
-    try {
-      final now = DateTime.now();
-      final bugun = DateFormat('dd MMMM yyyy', 'tr_TR').format(now);
-      final haftaBaslangic = now.subtract(const Duration(days: 6));
-      final ayBaslangic = DateTime(now.year, now.month, 1);
-
-      int gonderilenSayisi = 0;
-      int hataSayisi = 0;
-      int telefonuOlmayanSayisi = 0;
-      List<String> basarisizCariler = [];
-
-      for (int cariId in _seciliCariler) {
-        try {
-          var cari = _cariler.firstWhere((c) => c.id == cariId);
-          
-          // Telefon numarası kontrolü
-          if (cari.telefon == null || cari.telefon!.trim().isEmpty) {
-            telefonuOlmayanSayisi++;
-            basarisizCariler.add('${cari.ad} ${cari.soyad} (telefon yok)');
-            continue;
-          }
-
-          // Telefon numarasını temizle
-          String cleanPhone = _cleanPhoneNumber(cari.telefon!);
-          if (cleanPhone.isEmpty) {
-            telefonuOlmayanSayisi++;
-            basarisizCariler.add('${cari.ad} ${cari.soyad} (geçersiz telefon)');
-            continue;
-          }
-
-          // Süt verilerini getir
-          final sutler = await _sutRepo.getByCari(
-            cariId, 
-            DateFormat('yyyy-MM-dd').format(ayBaslangic),
-            DateFormat('yyyy-MM-dd').format(now)
-          );
-
-          // Toplamları hesapla
-          double gunlukToplam = 0;
-          double haftalikToplam = 0;
-          double aylikToplam = 0;
-
-          for (var sut in sutler) {
-            final sutTarih = DateTime.parse(sut.tarih);
-            aylikToplam += sut.toplam;
-            
-            if (sutTarih.isAfter(haftaBaslangic)) {
-              haftalikToplam += sut.toplam;
-            }
-            
-            if (sutTarih.day == now.day && sutTarih.month == now.month && sutTarih.year == now.year) {
-              gunlukToplam += sut.toplam;
-            }
-          }
-
-          // Mesaj oluştur
-          final mesaj = WhatsAppService.createSutRaporuMessage(
+    switch (secenek) {
+      case WhatsappSecenek.sutRaporu:
+        final bas = gun.format(sutRaporuBaslangici(bugun));
+        await _topluGonder(secili, 'süt raporu', (cari) async {
+          final t = sutRaporuToplamlari(
+              await _sutRepo.getByCari(cari.id!, bas, gun.format(bugun)), bugun);
+          return WhatsAppService.createSutRaporuMessage(
             cariAd: '${cari.ad} ${cari.soyad}',
-            gunlukToplam: gunlukToplam,
-            haftalikToplam: haftalikToplam,
-            aylikToplam: aylikToplam,
-            tarih: bugun,
+            gunlukToplam: t.gunluk,
+            haftalikToplam: t.haftalik,
+            aylikToplam: t.aylik,
+            tarih: tarihMetni,
           );
-
-          // WhatsApp'a gönder
-          print('${cari.ad} ${cari.soyad} için WhatsApp gönderiliyor...');
-          final success = await WhatsAppService.sendToWhatsApp(cleanPhone, mesaj);
-          
-          // Her gönderim arasında 3 saniye bekle
-          await Future.delayed(const Duration(seconds: 3));
-          
-          if (success) {
-            gonderilenSayisi++;
-            print('✅ ${cari.ad} ${cari.soyad} - Başarılı');
-          } else {
-            hataSayisi++;
-            basarisizCariler.add('${cari.ad} ${cari.soyad} (gönderim hatası)');
-            print('❌ ${cari.ad} ${cari.soyad} - Başarısız');
-          }
-          
-        } catch (e) {
-          hataSayisi++;
-          basarisizCariler.add('${_cariler.firstWhere((c) => c.id == cariId).ad} (hata: ${e.toString().substring(0, 50)})');
-          print('${_cariler.firstWhere((c) => c.id == cariId).ad} için WhatsApp gönderim hatası: $e');
-        }
-      }
-
-      // Sonuçları göster
-      String sonucMesaji = '✅ $gonderilenSayisi cariye süt raporu gönderildi';
-      if (hataSayisi > 0) sonucMesaji += '\n❌ $hataSayisi cariye gönderilemedi';
-      if (telefonuOlmayanSayisi > 0) sonucMesaji += '\n📞 $telefonuOlmayanSayisi caride telefon numarası yok';
-      
-      if (basarisizCariler.isNotEmpty) {
-        sonucMesaji += '\n\nBaşarısız Cariler:\n${basarisizCariler.join('\n')}';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: SingleChildScrollView(
-            child: Text(sonucMesaji),
-          ),
-          duration: const Duration(seconds: 10),
-          action: SnackBarAction(
-            label: 'Tamam',
-            onPressed: () {
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            },
-          ),
-        ),
-      );
-      
-    } catch (e) {
-      print('Genel hata: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Genel hata: $e'),
-          duration: const Duration(seconds: 5),
-        ),
-      );
-    }
-  }
-
-  Future<void> _yemRaporuWhatsappGonder() async {
-    try {
-      final now = DateTime.now();
-      final bugun = DateFormat('dd MMMM yyyy', 'tr_TR').format(now);
-      final ayBaslangic = DateTime(now.year, now.month, 1);
-
-      int gonderilenSayisi = 0;
-      int hataSayisi = 0;
-      int telefonuOlmayanSayisi = 0;
-
-      for (int cariId in _seciliCariler) {
-        try {
-          var cari = _cariler.firstWhere((c) => c.id == cariId);
-
-          if (cari.telefon == null || cari.telefon!.trim().isEmpty) {
-            telefonuOlmayanSayisi++;
-            continue;
-          }
-
-          String cleanPhone = _cleanPhoneNumber(cari.telefon!);
-          if (cleanPhone.isEmpty) {
-            telefonuOlmayanSayisi++;
-            continue;
-          }
-
-          final yemler = await _yemRepo.getByCari(
-            cariId,
-            DateFormat('yyyy-MM-dd').format(ayBaslangic),
-            DateFormat('yyyy-MM-dd').format(now)
-          );
-
-          double toplamYem = 0;
-          String yemDetay = '';
-
-          for (var yem in yemler) {
-            toplamYem += yem.toplam;
-
-            List<String> detaylar = [];
-            if (yem.sutYemi > 0) detaylar.add('Süt Yemi: ${yem.sutYemi}kg');
-            if (yem.besiYemi > 0) detaylar.add('Besi Yemi: ${yem.besiYemi}kg');
-            if (yem.kuzuYemi > 0) detaylar.add('Kuzu Yemi: ${yem.kuzuYemi}kg');
-            if (yem.tavukYemi > 0) detaylar.add('Tavuk Yemi: ${yem.tavukYemi}kg');
-
-            if (detaylar.isNotEmpty) {
-              yemDetay += '${DateFormat('dd.MM.yyyy').format(DateTime.parse(yem.tarih))}: ${detaylar.join(', ')}\n';
-            }
-          }
-
-          final mesaj = WhatsAppService.createYemRaporuMessage(
+        });
+      case WhatsappSecenek.yemRaporu:
+        final bas = gun.format(DateTime(bugun.year, bugun.month, 1));
+        await _topluGonder(secili, 'yem raporu', (cari) async {
+          final y = yemRaporuDetayi(await _yemRepo.getByCari(cari.id!, bas, gun.format(bugun)));
+          return WhatsAppService.createYemRaporuMessage(
             cariAd: '${cari.ad} ${cari.soyad}',
-            toplamYem: toplamYem,
-            yemDetay: yemDetay,
-            tarih: bugun,
+            toplamYem: y.toplam,
+            yemDetay: y.detay,
+            tarih: tarihMetni,
           );
-
-          await WhatsAppService.sendToWhatsApp(cari.telefon!, mesaj);
-          await Future.delayed(const Duration(seconds: 3));
-          gonderilenSayisi++;
-        } catch (e) {
-          hataSayisi++;
-          print('${_cariler.firstWhere((c) => c.id == cariId).ad} için WhatsApp gönderim hatası: $e');
-        }
-      }
-
-      String sonucMesaji = '$gonderilenSayisi cariye yem raporu gönderildi';
-      if (hataSayisi > 0) sonucMesaji += ', $hataSayisi cariye gönderilemedi';
-      if (telefonuOlmayanSayisi > 0) sonucMesaji += ', $telefonuOlmayanSayisi caride telefon numarası yok';
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(sonucMesaji)),
-      );
-      
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Genel hata: $e')),
-      );
-    }
-  }
-
-  Future<void> _ozelMesajGonder() async {
-    final messageController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Özel Mesaj Gönder'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: messageController,
-              decoration: const InputDecoration(
-                labelText: 'Mesajınız',
-                border: OutlineInputBorder(),
-                hintText: 'Mesajınızı buraya yazın...',
-              ),
-              maxLines: 5,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Mesaj ${_seciliCariler.length} cariye gönderilecek',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (messageController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Lütfen mesaj giriniz')),
-                );
-                return;
-              }
-              Navigator.pop(context);
-              await _ozelMesajlariGonder(messageController.text);
-            },
-            child: const Text('Gönder'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _odemeBildirimiGonder() async {
-    final tutarController = TextEditingController();
-    final donemController = TextEditingController(
-      text: DateFormat('MMMM yyyy', 'tr_TR').format(DateTime.now()),
-    );
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ödeme Bildirimi Gönder'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: tutarController,
-              decoration: const InputDecoration(
-                labelText: 'Tutar (₺)',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: donemController,
-              decoration: const InputDecoration(
-                labelText: 'Dönem',
-                border: OutlineInputBorder(),
-                hintText: 'Örn: Mayıs 2024',
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '${_seciliCariler.length} cariye gönderilecek',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (tutarController.text.trim().isEmpty || donemController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Lütfen tüm alanları doldurun')),
-                );
-                return;
-              }
-              
-              final tutar = double.tryParse(tutarController.text);
-              if (tutar == null || tutar <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Lütfen geçerli bir tutar girin')),
-                );
-                return;
-              }
-              
-              Navigator.pop(context);
-              await _odemeBildirimleriniGonder(tutar, donemController.text);
-            },
-            child: const Text('Gönder'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _ozelMesajlariGonder(String mesaj) async {
-    try {
-      int gonderilenSayisi = 0;
-      int hataSayisi = 0;
-      int telefonuOlmayanSayisi = 0;
-
-      for (int cariId in _seciliCariler) {
-        try {
-          var cari = _cariler.firstWhere((c) => c.id == cariId);
-          
-          if (cari.telefon == null || cari.telefon!.isEmpty) {
-            telefonuOlmayanSayisi++;
-            continue;
-          }
-
-          String cleanPhone = _cleanPhoneNumber(cari.telefon!);
-          if (cleanPhone.isEmpty) {
-            telefonuOlmayanSayisi++;
-            continue;
-          }
-
-          await WhatsAppService.sendToWhatsApp(cleanPhone, mesaj);
-          await Future.delayed(const Duration(seconds: 3));
-          gonderilenSayisi++;
-        } catch (e) {
-          hataSayisi++;
-          print('${_cariler.firstWhere((c) => c.id == cariId).ad} için WhatsApp gönderim hatası: $e');
-        }
-      }
-
-      String sonucMesaji = '$gonderilenSayisi cariye mesaj gönderildi';
-      if (hataSayisi > 0) sonucMesaji += ', $hataSayisi cariye gönderilemedi';
-      if (telefonuOlmayanSayisi > 0) sonucMesaji += ', $telefonuOlmayanSayisi caride telefon numarası yok';
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(sonucMesaji)),
-      );
-      
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
-    }
-  }
-
-  Future<void> _odemeBildirimleriniGonder(double tutar, String donem) async {
-    try {
-      int gonderilenSayisi = 0;
-      int hataSayisi = 0;
-      int telefonuOlmayanSayisi = 0;
-
-      for (int cariId in _seciliCariler) {
-        try {
-          var cari = _cariler.firstWhere((c) => c.id == cariId);
-          
-          if (cari.telefon == null || cari.telefon!.isEmpty) {
-            telefonuOlmayanSayisi++;
-            continue;
-          }
-
-          String cleanPhone = _cleanPhoneNumber(cari.telefon!);
-          if (cleanPhone.isEmpty) {
-            telefonuOlmayanSayisi++;
-            continue;
-          }
-
-          final mesaj = WhatsAppService.createOdemeBildirimiMessage(
+        });
+      case WhatsappSecenek.ozelMesaj:
+        final mesaj = await ozelMesajSor(context, secili.length);
+        if (mesaj == null) return;
+        await _topluGonder(secili, 'mesaj', (_) async => mesaj);
+      case WhatsappSecenek.odemeBildirimi:
+        final b = await odemeBildirimiSor(context, secili.length);
+        if (b == null) return;
+        await _topluGonder(
+          secili,
+          'ödeme bildirimi',
+          (cari) async => WhatsAppService.createOdemeBildirimiMessage(
             cariAd: '${cari.ad} ${cari.soyad}',
-            tutar: tutar,
-            donem: donem,
-          );
-
-          await WhatsAppService.sendToWhatsApp(cleanPhone, mesaj);
-          await Future.delayed(const Duration(seconds: 3));
-          gonderilenSayisi++;
-        } catch (e) {
-          hataSayisi++;
-          print('${_cariler.firstWhere((c) => c.id == cariId).ad} için WhatsApp gönderim hatası: $e');
-        }
-      }
-
-      String sonucMesaji = '$gonderilenSayisi cariye ödeme bildirimi gönderildi';
-      if (hataSayisi > 0) sonucMesaji += ', $hataSayisi cariye gönderilemedi';
-      if (telefonuOlmayanSayisi > 0) sonucMesaji += ', $telefonuOlmayanSayisi caride telefon numarası yok';
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(sonucMesaji)),
-      );
-      
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
+            tutar: b.tutar,
+            donem: b.donem,
+          ),
+        );
     }
   }
 
-  String _cleanPhoneNumber(String phone) {
-    String cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleaned.startsWith('0')) {
-      cleaned = '90' + cleaned.substring(1);
-    } else if (cleaned.length == 10) {
-      cleaned = '90' + cleaned;
-    } else if (cleaned.startsWith('90') && cleaned.length == 12) {
-      // zaten doğru
-    } else if (cleaned.length > 12) {
-      cleaned = cleaned.substring(cleaned.length - 12);
-    }
-    return cleaned;
+  Future<void> _topluGonder(List<Cari> cariler, String ne, MesajUretici uret) async {
+    final sonuc = await TopluMesajServisi().gonder(cariler, uret);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: SingleChildScrollView(child: Text(sonuc.ozet(ne))),
+      duration: const Duration(seconds: 10),
+      action: SnackBarAction(label: 'Tamam', onPressed: () {}),
+    ));
   }
 
-  @override
+  void _mesajGoster(String metin) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(metin)));
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -1258,419 +819,5 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       case 'Tavuk': return Colors.orange;
       default: return Colors.grey;
     }
-  }
-}
-
-// Dialog Widget'ları
-class _SutRaporDialog extends StatefulWidget {
-  final Function(DateTimeRange) onOlustur;
-  const _SutRaporDialog({required this.onOlustur});
-
-  @override
-  State<_SutRaporDialog> createState() => _SutRaporDialogState();
-}
-
-class _SutRaporDialogState extends State<_SutRaporDialog> {
-  DateTimeRange? _tarihAraligi;
-  String _seciliPeriyot = 'bugun';
-
-  @override
-  void initState() {
-    super.initState();
-    _periyotSec('bugun');
-  }
-
-  void _periyotSec(String periyot) {
-    setState(() {
-      _seciliPeriyot = periyot;
-      final now = DateTime.now();
-      switch (periyot) {
-        case 'bugun':
-          _tarihAraligi = DateTimeRange(start: now, end: now);
-          break;
-        case 'haftalik':
-          _tarihAraligi = DateTimeRange(
-            start: now.subtract(const Duration(days: 6)),
-            end: now
-          );
-          break;
-        case 'aylik':
-          _tarihAraligi = DateTimeRange(
-            start: DateTime(now.year, now.month, 1),
-            end: DateTime(now.year, now.month + 1, 0)
-          );
-          break;
-        case 'ozel':
-          if (_tarihAraligi == null) {
-            _tarihAraligi = DateTimeRange(
-              start: now.subtract(const Duration(days: 30)),
-              end: now
-            );
-          }
-          break;
-      }
-    });
-  }
-
-  Future<void> _tarihAraligiSec() async {
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _tarihAraligi,
-      builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale: const Locale('tr', 'TR'),
-          child: child,
-        );
-      },
-    );
-    if (range != null) {
-      setState(() {
-        _tarihAraligi = range;
-        _seciliPeriyot = 'ozel';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Süt Raporu Seçenekleri'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildPeriyotSecim('Bugün', 'bugun'),
-          _buildPeriyotSecim('Son 7 Gün', 'haftalik'),
-          _buildPeriyotSecim('Bu Ay', 'aylik'),
-          _buildTarihAraligiSecim(),
-          if (_tarihAraligi != null)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                '${DateFormat('dd MMMM yyyy', 'tr_TR').format(_tarihAraligi!.start)} - ${DateFormat('dd MMMM yyyy', 'tr_TR').format(_tarihAraligi!.end)}',
-                style: const TextStyle(fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('İptal'),
-        ),
-        ElevatedButton(
-          onPressed: _tarihAraligi == null ? null : () {
-            Navigator.pop(context);
-            widget.onOlustur(_tarihAraligi!);
-          },
-          child: const Text('Oluştur'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPeriyotSecim(String title, String value) {
-    return ListTile(
-      title: Text(title),
-      leading: Radio<String>(
-        value: value,
-        groupValue: _seciliPeriyot,
-        onChanged: (value) => _periyotSec(value!),
-      ),
-    );
-  }
-
-  Widget _buildTarihAraligiSecim() {
-    return ListTile(
-      title: const Text('Tarih Aralığı'),
-      leading: Radio<String>(
-        value: 'ozel',
-        groupValue: _seciliPeriyot,
-        onChanged: (value) => _tarihAraligiSec(),
-      ),
-      onTap: _tarihAraligiSec,
-    );
-  }
-}
-
-class _YemRaporDialog extends StatefulWidget {
-  final Function(DateTimeRange) onOlustur;
-  const _YemRaporDialog({required this.onOlustur});
-
-  @override
-  State<_YemRaporDialog> createState() => _YemRaporDialogState();
-}
-
-class _YemRaporDialogState extends State<_YemRaporDialog> {
-  DateTimeRange? _tarihAraligi;
-  String _seciliPeriyot = 'bugun';
-
-  @override
-  void initState() {
-    super.initState();
-    _periyotSec('bugun');
-  }
-
-  void _periyotSec(String periyot) {
-    setState(() {
-      _seciliPeriyot = periyot;
-      final now = DateTime.now();
-      switch (periyot) {
-        case 'bugun':
-          _tarihAraligi = DateTimeRange(start: now, end: now);
-          break;
-        case 'haftalik':
-          _tarihAraligi = DateTimeRange(
-            start: now.subtract(const Duration(days: 6)),
-            end: now
-          );
-          break;
-        case 'aylik':
-          _tarihAraligi = DateTimeRange(
-            start: DateTime(now.year, now.month, 1),
-            end: DateTime(now.year, now.month + 1, 0)
-          );
-          break;
-        case 'ozel':
-          if (_tarihAraligi == null) {
-            _tarihAraligi = DateTimeRange(
-              start: now.subtract(const Duration(days: 30)),
-              end: now
-            );
-          }
-          break;
-      }
-    });
-  }
-
-  Future<void> _tarihAraligiSec() async {
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _tarihAraligi,
-      builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale: const Locale('tr', 'TR'),
-          child: child,
-        );
-      },
-    );
-    if (range != null) {
-      setState(() {
-        _tarihAraligi = range;
-        _seciliPeriyot = 'ozel';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Yem Raporu Seçenekleri'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildPeriyotSecim('Bugün', 'bugun'),
-          _buildPeriyotSecim('Son 7 Gün', 'haftalik'),
-          _buildPeriyotSecim('Bu Ay', 'aylik'),
-          _buildTarihAraligiSecim(),
-          if (_tarihAraligi != null)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                '${DateFormat('dd MMMM yyyy', 'tr_TR').format(_tarihAraligi!.start)} - ${DateFormat('dd MMMM yyyy', 'tr_TR').format(_tarihAraligi!.end)}',
-                style: const TextStyle(fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('İptal'),
-        ),
-        ElevatedButton(
-          onPressed: _tarihAraligi == null ? null : () {
-            Navigator.pop(context);
-            widget.onOlustur(_tarihAraligi!);
-          },
-          child: const Text('Oluştur'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPeriyotSecim(String title, String value) {
-    return ListTile(
-      title: Text(title),
-      leading: Radio<String>(
-        value: value,
-        groupValue: _seciliPeriyot,
-        onChanged: (value) => _periyotSec(value!),
-      ),
-    );
-  }
-
-  Widget _buildTarihAraligiSecim() {
-    return ListTile(
-      title: const Text('Tarih Aralığı'),
-      leading: Radio<String>(
-        value: 'ozel',
-        groupValue: _seciliPeriyot,
-        onChanged: (value) => _tarihAraligiSec(),
-      ),
-      onTap: _tarihAraligiSec,
-    );
-  }
-}
-
-// Cari Düzenleme Sayfası
-class CariDuzenle extends ConsumerStatefulWidget {
-  final Cari cari;
-  const CariDuzenle({required this.cari, super.key});
-
-  @override
-  ConsumerState<CariDuzenle> createState() => _CariDuzenleState();
-}
-
-class _CariDuzenleState extends ConsumerState<CariDuzenle> {
-  final _formKey = GlobalKey<FormState>();
-  final _adController = TextEditingController();
-  final _soyadController = TextEditingController();
-  final _adresController = TextEditingController();
-  final _telefonController = TextEditingController();
-  String _hayvanTuru = 'İnek';
-  bool _kaydediliyor = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _adController.text = widget.cari.ad;
-    _soyadController.text = widget.cari.soyad;
-    _adresController.text = widget.cari.adres ?? '';
-    _telefonController.text = widget.cari.telefon ?? '';
-    _hayvanTuru = widget.cari.hayvanTuru ?? 'İnek';
-  }
-
-  @override
-  void dispose() {
-    _adController.dispose();
-    _soyadController.dispose();
-    _adresController.dispose();
-    _telefonController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _cariGuncelle() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _kaydediliyor = true);
-
-    try {
-      final guncellenenCari = Cari(
-        id: widget.cari.id,
-        ad: _adController.text.trim(),
-        soyad: _soyadController.text.trim(),
-        adres: _adresController.text.trim(),
-        telefon: _telefonController.text.trim(),
-        hayvanTuru: _hayvanTuru,
-        // Formda olmayan alanlar korunur; aksi halde her düzenlemede
-        // carinin notu silinir ve pasif durumu sıfırlanırdı.
-        aktif: widget.cari.aktif,
-        notMetni: widget.cari.notMetni,
-      );
-
-      final repo = await ref.read(cariRepositoryProvider.future);
-      await repo.update(guncellenenCari);
-      ref.veriDegisti();
-
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cari başarıyla güncellendi')),
-      );
-
-      Navigator.pop(context, true);
-    } catch (error) {
-      setState(() => _kaydediliyor = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $error')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cari Düzenle'),
-        actions: [
-          if (_kaydediliyor)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: CircularProgressIndicator(),
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _adController,
-                decoration: const InputDecoration(labelText: 'Ad'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Ad zorunludur';
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _soyadController,
-                decoration: const InputDecoration(labelText: 'Soyad'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Soyad zorunludur';
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _telefonController,
-                decoration: const InputDecoration(labelText: 'Telefon'),
-              ),
-              TextFormField(
-                controller: _adresController,
-                decoration: const InputDecoration(labelText: 'Adres'),
-                maxLines: 3,
-              ),
-              DropdownButtonFormField<String>(
-                value: _hayvanTuru,
-                items: ['İnek', 'Koyun', 'Tavuk'].map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (value) => setState(() => _hayvanTuru = value!),
-                decoration: const InputDecoration(labelText: 'Hayvan Türü'),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _kaydediliyor ? null : _cariGuncelle,
-                child: _kaydediliyor 
-                    ? const CircularProgressIndicator()
-                    : const Text('Güncelle'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

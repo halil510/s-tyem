@@ -42,7 +42,7 @@
 ## Testler
 
 ```bash
-flutter test          # 74 test — hepsi geçmeli
+flutter test          # 80 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -59,6 +59,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/data/app_database_test.dart` | Gerçek dosyada açılış: migration hatası veriyi silmez, bozuk dosya kenara alınır |
 | `test/features/aylik_ozet_test.dart` | Aylık özet: cari fiyatıyla, ekstreyle aynı, WhatsApp mesajı |
 | `test/utils/sifre_ozeti_test.dart` | PBKDF2 test vektörleri, yanlış şifre/kilitlenme, kaynakta açık şifre yok |
+| `test/services/toplu_mesaj_test.dart` | Telefon biçimi, toplu gönderim sayımı, haftalık süt toplamı, yem dökümü, rapor diyaloğu |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -169,6 +170,28 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - Supabase SQL: şema değişmedi.
 - Testler: 74/74 geçti; `flutter analyze` 0 error.
 
+### 2026-11-04 (6) — A5: büyük ekranlar bölündü + toplu WhatsApp hataları
+
+- Yeni dosyalar:
+  - `lib/ekranlar/cari/cari_duzenle.dart` (CariDuzenle)
+  - `lib/ekranlar/cari/cari_dialoglari.dart` — rapor tarih aralığı (eski iki ÖZDEŞ diyalog teke indi),
+    WhatsApp seçenekleri, özel mesaj, ödeme bildirimi. Hepsi sonucu `Navigator.pop` ile döndürür.
+  - `lib/services/toplu_mesaj_servisi.dart` — `TopluMesajServisi`, `sutRaporuToplamlari`,
+    `sutRaporuBaslangici`, `yemRaporuDetayi` (UI'sız, test edilebilir).
+  - `lib/ekranlar/detay/kayit_duzenle_dialoglari.dart` (SutDuzenleDialog, YemDuzenleDialog).
+  - `WhatsAppService.telefonNormalize` artık tek telefon biçimlendirici (3 kopya vardı).
+- **Düzeltilen hatalar (cari listesi):**
+  1. Excel rapor diyaloğunda "Oluştur" → diyalog kapanıyor, ardından `Navigator.pop` İKİNCİ kez
+     çağrılıp alttaki sayfayı kapatıyordu.
+  2. Yem raporu WhatsApp'ı temizlenmemiş telefona gidiyordu; gönderim başarısız olsa da
+     "gönderildi" sayılıyordu; B. Başlangıç / B. Büyütme yemleri mesajda yoktu.
+  3. Süt raporu "haftalık" toplamı yalnız ayın 1'inden itibaren sayıyordu (ayın 2'sinde 2 gün).
+  4. Hata metni 50 karakterden kısaysa `substring(0, 50)` çöküp tüm gönderim döngüsünü kesiyordu.
+  5. Ödeme bildirimi tutarı "1.250,50" kabul etmiyordu (`sayiCoz`).
+  6. Diyalog `TextEditingController`'ları hiç dispose edilmiyordu.
+- Supabase SQL: şema değişmedi.
+- Testler: 80/80 geçti; `flutter analyze` 0 error.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
@@ -190,7 +213,7 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - [x] A2. Kullanılmayan eski `terazi_baglanti_ekrani.dart` arşive alındı; tek ekran: `features/terazi/screens/terazi_baglanti_ekrani_pro.dart` (düşük seviye `services/terazi_service.dart` Pro servis tarafından kullanılıyor, kalmalı).
 - [x] A3. Aylık Rapor gerçek fiyatlarla hesaplanıyor; `fiyatlar` tablosu ekranı "Piyasa Fiyat Notları" oldu + "hesaplara girmez" bandı. Ayrıntı: oturum günlüğü (4).
 - [x] A4. Açık şifre koddan kaldırıldı (özet + isolate). **Kullanıcı yeni şifre belirlemeli** (tool/master_sifre_ozeti.dart). Ayrıntı: oturum günlüğü (5).
-- [ ] A5. `cari_listesi.dart` (1675 satır) ve `detay_ekrani.dart` (1094) parçalara böl.
+- [x] A5. cari_listesi 1675→823, detay_ekrani 1094→813 satır; toplu WhatsApp hataları düzeltildi. Ayrıntı: oturum günlüğü (6).
 
 **B. Yeni ekranlar**
 - [ ] B1. Toplama turu (sabah/akşam vardiya, üretici sırası/rota, gelmeyenler).
