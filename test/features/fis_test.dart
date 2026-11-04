@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sutyem_pro/features/fis/fis_servisi.dart';
 import 'package:sutyem_pro/features/fis/uretici_fisi.dart';
@@ -26,7 +27,7 @@ void main() {
   );
 
   group('fiş düzeni', () {
-    for (final g in [32, 48]) {
+    for (final g in [32, 40, 48]) {
       test('$g karakter: satırlar kâğıda sığar, bilgiler doğru', () {
         final satirlar = fis.satirlar(g);
         for (final s in satirlar) {
@@ -89,6 +90,25 @@ void main() {
       expect(duz[2], isNot(0x74), reason: 'kod sayfası komutu gönderilmez');
       expect(duz.every((x) => x >= 0 && x < 256), isTrue);
       expect(String.fromCharCodes(duz), contains('SUT TESLIM FISI'));
+    });
+  });
+
+  group('fiş ayarları', () {
+    test('varsayılan 80 mm (40 karakter); geçersiz değer varsayılana döner', () async {
+      SharedPreferences.setMockInitialValues({});
+      expect((await FisAyarlari.yukle()).genislik, 40);
+      SharedPreferences.setMockInitialValues({'fis_genislik': 48});
+      expect((await FisAyarlari.yukle()).genislik, 48);
+      SharedPreferences.setMockInitialValues({'fis_genislik': 99});
+      expect((await FisAyarlari.yukle()).genislik, 40);
+    });
+
+    test('kaydedilen ayar geri okunur', () async {
+      SharedPreferences.setMockInitialValues({});
+      await const FisAyarlari(yaziciAdres: 'AA', yaziciAdi: 'POS-80', genislik: 32, isletmeAdi: ' Kabatlı ')
+          .kaydet();
+      final a = await FisAyarlari.yukle();
+      expect((a.yaziciAdres, a.yaziciAdi, a.genislik, a.isletmeAdi), ('AA', 'POS-80', 32, 'Kabatlı'));
     });
   });
 

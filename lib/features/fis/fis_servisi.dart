@@ -13,7 +13,7 @@ class FisAyarlari {
   final String? yaziciAdres;
   final String? yaziciAdi;
 
-  /// Satırdaki karakter sayısı: 32 (58 mm) veya 48 (80 mm).
+  /// Satırdaki karakter sayısı: 32 (58 mm), 40 (80 mm — varsayılan) veya 48 (80 mm geniş).
   final int genislik;
   final String isletmeAdi;
   final bool turkceKodSayfasi;
@@ -21,10 +21,12 @@ class FisAyarlari {
   const FisAyarlari({
     this.yaziciAdres,
     this.yaziciAdi,
-    this.genislik = 32,
+    this.genislik = 40,
     this.isletmeAdi = '',
     this.turkceKodSayfasi = false,
   });
+
+  static const gecerliGenislikler = [32, 40, 48];
 
   bool get yaziciSecili => yaziciAdres != null && yaziciAdres!.isNotEmpty;
 
@@ -39,7 +41,7 @@ class FisAyarlari {
     return FisAyarlari(
       yaziciAdres: p.getString(_adres),
       yaziciAdi: p.getString(_ad),
-      genislik: p.getInt(_genislik) == 48 ? 48 : 32,
+      genislik: gecerliGenislikler.contains(p.getInt(_genislik)) ? p.getInt(_genislik)! : 40,
       isletmeAdi: p.getString(_isletme) ?? '',
       turkceKodSayfasi: p.getBool(_turkce) ?? false,
     );

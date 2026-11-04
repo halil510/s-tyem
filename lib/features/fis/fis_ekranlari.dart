@@ -337,10 +337,19 @@ class _FisYaziciAyarlariEkraniState extends State<FisYaziciAyarlariEkrani> {
               SegmentedButton<int>(
                 segments: const [
                   ButtonSegment(value: 32, label: Text('58 mm')),
-                  ButtonSegment(value: 48, label: Text('80 mm')),
+                  ButtonSegment(value: 40, label: Text('80 mm')),
+                  ButtonSegment(value: 48, label: Text('80 mm geniş')),
                 ],
                 selected: {a.genislik},
                 onSelectionChanged: (s) => _guncelle(a.kopyala(genislik: s.first)),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  '58 mm: satırda 32 karakter · 80 mm: 40 karakter (büyük, okunaklı) · '
+                  '80 mm geniş: 48 karakter. Satırlar taşıyorsa bir küçüğünü seçin.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ),
               const SizedBox(height: 16),
               TextField(

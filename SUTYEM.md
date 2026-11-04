@@ -237,12 +237,13 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
   `solSag`/`sar`, `EscPos` (başlat, hizalama, kalın, çift boy, ilerlet, kısmi kesim).
   Türkçe: varsayılan Latin harfine çevirme (ş→s, her yazıcıda çalışır); isteğe bağlı CP857.
   Önizleme, WhatsApp (``` blok) ve yazıcı AYNI satırlardan üretilir.
-- `fis_servisi.dart`: `FisAyarlari` (SharedPreferences: yazıcı, 58/80 mm, işletme adı, CP857),
+- `fis_servisi.dart`: `FisAyarlari` (SharedPreferences: yazıcı, genişlik 32/40/48 — varsayılan 40, işletme adı, CP857),
   `TermalYaziciServisi`, `sutFisiOlustur(db, cari, tarih)`.
 - `fis_ekranlari.dart`: fiş önizleme alt sayfası (Yazdır / WhatsApp), Menü → **Fiş Yazıcısı**
   (eşleşmiş cihaz seçimi, kâğıt genişliği, işletme adı, Türkçe karakter, deneme fişi).
 - Süt Ekle: **"KAYDET + FİŞ VER"** düğmesi (kaydeder → fiş → sayfa kapanır).
   Detay ekranı süt kaydı menüsü: **"Fiş Ver"** (geçmiş kaydın fişini yeniden bas).
+- Kullanıcının yazıcısı: **80 mm rulo, satırda 40 karakter** → varsayılan genişlik 40. Seçenekler: 32 (58 mm), 40 (80 mm), 48 (80 mm geniş).
 - Fişte para tutarı YOK (yalnız kg) — fiyatlar ay kapanana kadar değişebilir.
 - Supabase SQL: şema değişmedi (ayarlar cihazda).
 - Testler: 103/103; `flutter analyze` 0 error. **Gerçek bir termal yazıcıyla henüz denenmedi.**
