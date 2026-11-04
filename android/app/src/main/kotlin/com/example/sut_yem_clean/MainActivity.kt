@@ -70,6 +70,10 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Termal fiş yazıcısı — terazi bağlantısından bağımsız (bkz. TermalYazici.kt)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "termal_yazici")
+            .setMethodCallHandler(TermalYazici(this))
+
         // EventChannel for data streaming
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL).setStreamHandler(
             object : EventChannel.StreamHandler {

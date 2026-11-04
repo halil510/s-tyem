@@ -12,6 +12,9 @@ import '../data/repositories/yem_repository.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import 'detay/kayit_duzenle_dialoglari.dart';
+import '../core/providers/database_provider.dart';
+import '../features/fis/fis_ekranlari.dart';
+import '../features/fis/fis_servisi.dart';
 
 class DetayEkrani extends ConsumerStatefulWidget {
   final Cari cari;
@@ -237,6 +240,20 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
 
   double get _toplamSut => _sutKayitlari.fold(0, (sum, sut) => sum + sut.toplam);
   double get _toplamYem => _yemKayitlari.fold(0, (sum, yem) => sum + yem.toplam);
+
+  Future<void> _sutFisi(Sut sut) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final ayar = await FisAyarlari.yukle();
+      final fis = await sutFisiOlustur(db,
+          cari: widget.cari, tarih: sut.tarih.substring(0, 10), isletmeAdi: ayar.isletmeAdi);
+      if (fis == null || !mounted) return;
+      await fisGoster(context, fis: fis, telefon: widget.cari.telefon);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fiş hazırlanamadı: $e')));
+    }
+  }
 
   Future<void> _sutDuzenle(Sut sut) async {
     final result = await showDialog<bool>(
@@ -630,11 +647,14 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                 PopupMenuButton<String>(
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'duzenle', child: Text('Düzenle')),
+                    const PopupMenuItem(value: 'fis', child: Text('Fiş Ver')),
                     const PopupMenuItem(value: 'sil', child: Text('Sil', style: TextStyle(color: Colors.red))),
                   ],
                   onSelected: (value) {
                     if (value == 'duzenle') {
                       _sutDuzenle(sut);
+                    } else if (value == 'fis') {
+                      _sutFisi(sut);
                     } else if (value == 'sil') {
                       _sutSil(sut);
                     }

@@ -13,6 +13,7 @@ import 'hizli_sut_giris.dart';
 import '../ekranlar/yedekleme_ekrani.dart';
 import '../core/router/app_router.dart';
 import '../features/donem/donem_ekrani.dart';
+import '../features/fis/fis_ekranlari.dart';
 
 class AnaEkran extends StatefulWidget {
   const AnaEkran({super.key});
@@ -120,6 +121,11 @@ class _AnaEkranState extends State<AnaEkran> {
               const SizedBox(width: 10),
               const Text('Terazi Bağlantısı'),
             ])),
+            PopupMenuItem(value: 'fis_yazici', child: Row(children: [
+              Icon(Icons.print_outlined, color: Colors.teal[700], size: 18),
+              const SizedBox(width: 10),
+              const Text('Fiş Yazıcısı'),
+            ])),
             const PopupMenuDivider(),
             PopupMenuItem(value: 'yedekleme', child: Row(children: [
               Icon(Icons.backup_outlined, color: Colors.grey[700], size: 18),
@@ -136,6 +142,7 @@ class _AnaEkranState extends State<AnaEkran> {
             else if (value == 'aylik_hesaplama') Navigator.push(context, MaterialPageRoute(builder: (_) => const FiyatHesaplamaEkrani()));
             else if (value == 'donem') Navigator.push(context, MaterialPageRoute(builder: (_) => const DonemEkrani()));
             else if (value == 'terazi') context.push(AppRoutes.terazi);
+            else if (value == 'fis_yazici') Navigator.push(context, MaterialPageRoute(builder: (_) => const FisYaziciAyarlariEkrani()));
             else if (value == 'yedekleme') Navigator.push(context, MaterialPageRoute(builder: (_) => const YedeklemeEkrani()));
           },
         ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sutyem_pro/core/providers/database_provider.dart';
 import 'package:sutyem_pro/ekranlar/hizli_sut_giris.dart';
@@ -192,6 +193,28 @@ void main() {
 
       expect(find.text('Geçersiz miktar'), findsOneWidget);
       expect(await sutler(tester), isEmpty);
+    });
+
+    testWidgets('KAYDET + FİŞ VER: kaydeder ve günün fişini önizletir', (tester) async {
+      SharedPreferences.setMockInitialValues({'fis_isletme_adi': 'Test Süt'});
+      await hazirla(tester);
+      await tester.pumpWidget(_uygulama(db, SutGirisSayfasi(cari: cariNesnesi())));
+      await _bekle(tester, () => find.text('KAYDET + FİŞ VER').evaluate().isNotEmpty);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Sabah Sütü (kg)'), '20,5');
+      await tester.enterText(find.widgetWithText(TextField, 'Akşam Sütü (kg)'), '18');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.ensureVisible(find.text('KAYDET + FİŞ VER'));
+      await tester.pump();
+      await tester.tap(find.text('KAYDET + FİŞ VER'));
+      await _bekle(tester, () => find.text('Üretici Fişi').evaluate().isNotEmpty, aciklama: 'fiş açıldı');
+
+      expect((await sutler(tester)).single['toplam'], 38.5);
+      expect(find.textContaining('38,5 kg'), findsWidgets);
+      expect(find.textContaining('Ali Kaya'), findsWidgets);
+      expect(find.text('Test Süt'), findsOneWidget);
+      expect(find.text('Yazıcı Seç'), findsOneWidget, reason: 'yazıcı seçilmemiş');
+      expect(find.text('Telefon yok'), findsOneWidget);
     });
   });
 

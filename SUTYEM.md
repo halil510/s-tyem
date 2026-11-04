@@ -45,7 +45,7 @@
 ## Testler
 
 ```bash
-flutter test          # 90 test — hepsi geçmeli
+flutter test          # 103 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -65,6 +65,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/services/toplu_mesaj_test.dart` | Telefon biçimi, toplu gönderim sayımı, haftalık süt toplamı, yem dökümü, rapor diyaloğu |
 | `test/features/donem_test.dart` | Hakediş hesabı, kapatma kilidi (süt/yem/ödeme/fiyat/cari silme), fiyat sabitleme, yeniden açma, yedek |
 | `test/donem_ekrani_test.dart` | Dönem ekranı: kapat → kilitli → gerekçeyle yeniden aç |
+| `test/features/fis_test.dart` | Fiş düzeni (58/80 mm), ESC/POS baytları, Türkçe harf çevirisi/CP857, yazıcı kanalı, fiş verisi |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -224,6 +225,28 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
   Öneri: ayları sırayla kapatın.
 - Testler: 90/90 geçti; `flutter analyze` 0 error.
 
+### 2026-11-04 (8) — B8: Üretici fişi (termal yazıcı + WhatsApp)
+
+- Kullanıcı: B2 (süt kalitesi) istemedi → iptal.
+- **Android:** `TermalYazici.kt` + `termal_yazici` MethodChannel (`yazdir(address, bytes)`).
+  Terazinin tek soketinden (MainActivity `btSocket`) **bağımsız**: her fişte ayrı RFCOMM bağlanır,
+  512 baytlık parçalarla yazar, kapatır. Aynı anda iki yazdırma engellenir (`MESGUL`).
+  Eski `classic_bluetooth.sendData` kullanılmadı: teraziyi koparırdı ve metni UTF-8 gönderiyordu.
+- `lib/features/fis/uretici_fisi.dart`: `UreticiFisi` (işletme, fiş no = süt kaydı id, tarih,
+  basım zamanı, üretici, sabah, akşam, günlük toplam, bu ay toplam kg), `FisSatiri`,
+  `solSag`/`sar`, `EscPos` (başlat, hizalama, kalın, çift boy, ilerlet, kısmi kesim).
+  Türkçe: varsayılan Latin harfine çevirme (ş→s, her yazıcıda çalışır); isteğe bağlı CP857.
+  Önizleme, WhatsApp (``` blok) ve yazıcı AYNI satırlardan üretilir.
+- `fis_servisi.dart`: `FisAyarlari` (SharedPreferences: yazıcı, 58/80 mm, işletme adı, CP857),
+  `TermalYaziciServisi`, `sutFisiOlustur(db, cari, tarih)`.
+- `fis_ekranlari.dart`: fiş önizleme alt sayfası (Yazdır / WhatsApp), Menü → **Fiş Yazıcısı**
+  (eşleşmiş cihaz seçimi, kâğıt genişliği, işletme adı, Türkçe karakter, deneme fişi).
+- Süt Ekle: **"KAYDET + FİŞ VER"** düğmesi (kaydeder → fiş → sayfa kapanır).
+  Detay ekranı süt kaydı menüsü: **"Fiş Ver"** (geçmiş kaydın fişini yeniden bas).
+- Fişte para tutarı YOK (yalnız kg) — fiyatlar ay kapanana kadar değişebilir.
+- Supabase SQL: şema değişmedi (ayarlar cihazda).
+- Testler: 103/103; `flutter analyze` 0 error. **Gerçek bir termal yazıcıyla henüz denenmedi.**
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
@@ -255,7 +278,7 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 - [ ] B5. Kesintiler (stopaj vb. — oranlar ayarlanabilir) + müstahsil makbuzu çıktısı.
 - [ ] B6. Yem stok/depo (alış, tedarikçi, stok, kritik stok uyarısı).
 - [ ] B7. Raporlar merkezi (günlük, aylık üretici, bakiye listesi, yem satış; PDF/Excel/WhatsApp).
-- [ ] B8. Üretici fişi (Bluetooth termal yazıcı / WhatsApp).
+- [x] B8. Üretici fişi: Bluetooth termal yazıcı (ayrı kanal, teraziyi koparmaz) + WhatsApp. Ayrıntı: oturum günlüğü (8). **Gerçek yazıcıyla denenmedi.**
 - [ ] B9. İşlem geçmişi ekranı (denetim izi).
 - [ ] B10. Ayarlar (işletme bilgisi, şifre, dönem tipi, kesinti oranları, otomatik yedek).
 - [ ] B11. Bulut senkron (Supabase) — en son.

@@ -7,6 +7,9 @@ import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../utils/tarih_secici.dart';
 import '../features/donem/donem_kapali_bandi.dart';
+import '../core/providers/database_provider.dart';
+import '../features/fis/fis_ekranlari.dart';
+import '../features/fis/fis_servisi.dart';
 import '../utils/sayi_format.dart';
 import '../data/repositories/sut_repository.dart';
 import '../core/providers/veri_surumu_provider.dart';
@@ -254,7 +257,20 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
     }
   }
 
-  Future<void> _kaydet() async {
+  /// Kaydedilen günün fişini önizletir (yazdır / WhatsApp).
+  Future<void> _fisGoster() async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final ayar = await FisAyarlari.yukle();
+      final fis = await sutFisiOlustur(db, cari: widget.cari, tarih: _tarihStr, isletmeAdi: ayar.isletmeAdi);
+      if (fis == null || !mounted) return;
+      await fisGoster(context, fis: fis, telefon: widget.cari.telefon);
+    } catch (e) {
+      if (mounted) _snack('Fiş hazırlanamadı: $e', renk: Colors.red);
+    }
+  }
+
+  Future<void> _kaydet({bool fisVer = false}) async {
     final sabah = sayiCoz(_sabahCtrl.text);
     final aksam = sayiCoz(_aksamCtrl.text);
     setState(() {
@@ -290,6 +306,8 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
         SutKayitDurumu.degismedi => 'Değişiklik yok — kayıt aynı',
       };
       _snack(mesaj, renk: Colors.green[700]!);
+      if (fisVer && durum != SutKayitDurumu.silindi) await _fisGoster();
+      if (!mounted) return;
       Navigator.pop(context, true);
     } on SutKayitHatasi catch (e) {
       if (mounted) _snack(e.mesaj, renk: Colors.red);
@@ -486,6 +504,24 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                 label: Text(
                   _kaydediliyor ? 'Kaydediliyor...' : (_mevcutKayit != null ? 'GÜNCELLE' : 'KAYDET'),
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _kaydediliyor || _yukleniyor ? null : () => _kaydet(fisVer: true),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue[800],
+                  side: BorderSide(color: Colors.blue[700]!, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                icon: const Icon(Icons.receipt_long_rounded),
+                label: Text(
+                  _mevcutKayit != null ? 'GÜNCELLE + FİŞ VER' : 'KAYDET + FİŞ VER',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ),
