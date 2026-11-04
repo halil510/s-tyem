@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' show openAppSettings;
+import '../utils/permission_helper.dart';
 import 'ble_service.dart';
 import 'bluetooth_aktarim.dart';
 
@@ -38,25 +39,8 @@ class _BluetoothCihazSecmeEkraniState extends State<BluetoothCihazSecmeEkrani> {
 
   Future<bool> _checkPermissions() async {
     try {
-      if (Platform.isAndroid) {
-        final permissions = await [
-          Permission.location,
-          Permission.bluetooth,
-          Permission.bluetoothScan,
-          Permission.bluetoothConnect,
-          Permission.bluetoothAdvertise,
-        ].request();
-
-        return permissions[Permission.location]?.isGranted == true &&
-               permissions[Permission.bluetooth]?.isGranted == true &&
-               permissions[Permission.bluetoothScan]?.isGranted == true &&
-               permissions[Permission.bluetoothConnect]?.isGranted == true;
-      } else if (Platform.isIOS) {
-        final bluetoothStatus = await Permission.bluetooth.request();
-        return bluetoothStatus.isGranted;
-      }
-      
-      return false;
+      // Android sürümüne göre doğru izinler (bkz. PermissionHelper).
+      return await PermissionHelper.bluetoothIzinleri(yayin: true);
     } catch (e) {
       debugPrint("İzin kontrolü hatası: $e");
       return false;

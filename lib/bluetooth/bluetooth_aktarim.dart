@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../utils/permission_helper.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'bluetooth_utils.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'wifi_transfer_service.dart';
 import '../core/providers/veri_surumu_provider.dart';
 
@@ -121,14 +121,12 @@ class _BluetoothAktarimEkraniState extends State<BluetoothAktarimEkrani> {
     }
 
     // İzin kontrolü
-    if (Platform.isAndroid) {
-      final status = await Permission.location.request();
-      if (!status.isGranted) {
-        _updateStatus('Konum izni gerekli', isError: true);
-        _showMessage('Lütfen konum izni verin', isError: true);
-        setState(() => _connecting = false);
-        return;
-      }
+    if (!await PermissionHelper.bluetoothIzinleri()) {
+      if (!mounted) return;
+      _updateStatus('Bluetooth izni gerekli', isError: true);
+      _showMessage('Lütfen "Yakındaki cihazlar" / Bluetooth iznini verin', isError: true);
+      setState(() => _connecting = false);
+      return;
     }
 
     _updateStatus('BLE cihazına bağlanılıyor...', connecting: true);

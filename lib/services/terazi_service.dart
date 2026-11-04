@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../utils/permission_helper.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../bluetooth/classic_bluetooth_service.dart';
 
 class TeraziService {
@@ -50,18 +50,9 @@ class TeraziService {
   // ------------------------
   Future<bool> checkAndRequestPermissions() async {
     try {
-      final required = <Permission>[
-        Permission.bluetooth,
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-        Permission.locationWhenInUse,
-      ];
-
-      final statuses = await required.request();
-      for (var p in required) {
-        if (statuses[p] == null || !statuses[p]!.isGranted) return false;
-      }
-      return true;
+      // Android 12+ konum istemez; eskiden konum şart olduğundan terazi
+      // yeni telefonlarda Bluetooth ile hiç bağlanamıyordu.
+      return await PermissionHelper.bluetoothIzinleri();
     } catch (e) {
       if (kDebugMode) print("İzin kontrol hatası: $e");
       return false;

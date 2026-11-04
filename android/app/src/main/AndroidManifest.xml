@@ -21,7 +21,8 @@
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
 
-    <!-- Konum (BLE için) -->
+    <!-- Konum: YALNIZ Android 11 ve altında BLE taraması için. Android 12+ konum istemez
+         (BLUETOOTH_SCAN neverForLocation) — bkz. lib/utils/permission_helper.dart -->
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
@@ -45,22 +46,17 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
     
-    <!-- Android 13+ medya izinleri -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
-    <!-- Bildirim -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" 
-        tools:ignore="UnusedAttribute" />
+    <!-- Android 13+ medya ve bildirim izinleri KALDIRILDI (2026-11-04): uygulama fotoğraf,
+         video, ses okumuyor ve bildirim göndermiyor. Dosya seçimi sistem seçicisiyle (izinsiz). -->
 
     <!-- Bluetooth advertise -->
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" 
         tools:targetApi="31" />
 
     <!-- Donanım özellikleri -->
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
-    <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
+    <!-- Bluetooth isteğe bağlı: Wi-Fi terazi ile Bluetooth'suz cihazda da çalışır. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
 
     <!-- WhatsApp için queries -->

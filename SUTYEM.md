@@ -48,11 +48,14 @@
     `veriSurumuProvider` izleyen bir provider'dan almalı (ör. `aktifCarilerProvider`) ya da
     `ref.listen(veriSurumuProvider, …)` ile yenilenmeli. `build` içinde `FutureBuilder(future: repo…)` YASAK.
 12. **Arama** her yerde `aramaEslesir` (`lib/utils/turkce.dart`) — `toLowerCase()` Türkçe İ/ı'yı bozar.
+13. **Her dağıtılan APK'da `pubspec.yaml` sürümünün `+N` kısmı artırılır** (versionCode). Telefondaki
+    uygulamayla AYNI imza anahtarı kullanılır; yoksa "güncelle" yerine "yüklenmedi" çıkar ve veri kaybı olur.
+    Bluetooth izni yalnız `PermissionHelper.bluetoothIzinleri()` ile istenir.
 
 ## Testler
 
 ```bash
-flutter test          # 150 test — hepsi geçmeli
+flutter test          # 152 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -362,6 +365,32 @@ alıyordu → yeni eklenen / Excel'den alınan cari, uygulama yeniden açılana 
 - Testler: 150/150; `flutter analyze` 0 error.
 
 **Kullanıcıya önerilen ekran iyileştirmeleri (karar bekliyor)** — bkz. "Sıradaki işler".
+
+### 2026-11-04 (14) — Sürüm, imza, izinler, paketler
+
+- **Sürüm:** `1.0.0+1` hiç artırılmamıştı → `1.1.0+2`. `+N` = Android versionCode; "Güncelle"
+  için yeni APK'nın versionCode'u telefondakinden KÜÇÜK OLMAMALI (kural 13).
+- **İmza (Güncelle mi, "yüklenmedi" mi):** APK'lar bu bilgisayarın debug anahtarıyla imzalanıyor
+  (`~/.android/debug.keystore`, SHA-256 `CD:DB:9B:C2:…:7E:28`, release de bu anahtarla).
+  Telefondaki uygulama AYNI anahtarla imzalıysa → "Güncelle", veriler korunur. Başka anahtarla
+  (başka bilgisayar/eski APK) imzalıysa → "Uygulama yüklenmedi / paket çakışıyor"; eskisini silmek
+  gerekir ve VERİLER SİLİNİR → önce JSON yedek al. Kalıcı çözüm: ayrı release keystore (karar bekliyor).
+  `applicationId = com.example.sut_yem_clean` — değiştirilirse yeni uygulama sayılır (veriler taşınmaz); Play Store'a
+  çıkılacaksa değişmeli.
+- **KRİTİK izin hatası:** Bluetooth izinleri 4 yerde 4 farklı şekilde isteniyor ve hepsi KONUM iznini şart
+  koşuyordu. Manifest'te konum yalnız API ≤30 → Android 12+ telefonda istek anında reddediliyor, terazi
+  Bluetooth ile **hiç bağlanamıyordu** (Bluetooth aktarımı da). Tek kaynak: `lib/utils/permission_helper.dart`
+  (`PermissionHelper.bluetoothIzinleri`): API 31+ → BLUETOOTH_SCAN + CONNECT (+ADVERTISE aktarımda),
+  API ≤30 → konum. Terazi servisi, cihaz seçme, BLE aktarım, fiş yazıcısı bunu kullanıyor.
+  Test: `test/utils/permission_helper_test.dart`.
+- **Manifest:** kullanılmayan READ_MEDIA_IMAGES/VIDEO/AUDIO ve POST_NOTIFICATIONS kaldırıldı;
+  `bluetooth`/`bluetooth_le` uses-feature `required="false"` (Wi-Fi terazi ile Bluetooth'suz cihazda da kurulur).
+- **Paketler:** `flutter pub upgrade` (kısıtlar içinde): sqflite 2.4.5, path_provider 2.1.6,
+  shared_preferences 2.5.6 vb.; geri çekilmiş (retracted) path_provider_foundation 2.5.0 → 2.6.0.
+  Büyük sürüm atlamaları (riverpod 3, go_router 18, file_picker 13, flutter_blue_plus 2,
+  permission_handler 13, excel 4, share_plus 13) YAPILMADI — kırıcı değişiklik; ayrı iş.
+- Telefon bağlı değildi (`adb devices` boş) → canlı çalıştırma yapılamadı.
+- Testler: 152/152; `flutter analyze` 0 error.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 

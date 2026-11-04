@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
+import '../../utils/permission_helper.dart';
 
 import '../../services/whatsapp_service.dart';
 import 'fis_servisi.dart';
@@ -228,8 +228,9 @@ class _FisYaziciAyarlariEkraniState extends State<FisYaziciAyarlariEkrani> {
     });
     try {
       if (Platform.isAndroid) {
-        final izin = await Permission.bluetoothConnect.request();
-        if (!izin.isGranted) throw const YaziciHatasi('Bluetooth izni verilmedi.');
+        if (!await PermissionHelper.bluetoothIzinleri()) {
+          throw const YaziciHatasi('Bluetooth (Yakındaki cihazlar) izni verilmedi.');
+        }
       }
       final liste = await _btKanal.invokeMethod<List<dynamic>>('getPairedDevices') ?? [];
       _cihazlar = [
