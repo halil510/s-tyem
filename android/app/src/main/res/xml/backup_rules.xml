@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="file" path="." />
+    <exclude domain="file" path="databases/" />
+    <exclude domain="file" path="shared_prefs/" />
+    <exclude domain="file" path="app_flutter/" />
+</full-backup-content>

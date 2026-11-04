@@ -1,0 +1,70 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ── Sütyem'e özel ─────────────────────────────────────────────
+# Müşteri verisi içeren veritabanları ve yedekler — ASLA depoya girmemeli.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+yedek_*.json
+sut_yem_yedek_*.json
+
+# Elle alınmış zip yedekleri (büyük ve müşteri verisi içerebilir)
+*.zip
+
+# Visual Studio / Copilot önbellekleri
+.vs/
+**/.vs/
+
+# Kullanılmayan, arşivlenmiş eski kod (yerelde saklanıyor)
+_arsiv/
+
+# Android derleme çıktıları
+/android/build/
+/android/app/build/
+/android/.kotlin/

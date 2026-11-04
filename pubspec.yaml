@@ -1,0 +1,66 @@
+name: sutyem_pro
+description: "Sütyem Pro - Cari bazlı kayıt sistemi"
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  sqflite: ^2.3.0
+  path_provider: ^2.1.3
+  path: ^1.9.0
+  intl: ^0.20.2
+  excel: ^3.0.0
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.6.2
+  share_plus: ^10.1.4
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.3.2
+  flutter_blue_plus: ^1.36.8
+  permission_handler: ^11.3.1
+  cross_file: ^0.3.3
+  file_picker: ^8.0.0
+  device_info_plus: ^9.0.0
+  crypto: ^3.0.3
+  qr_flutter: ^4.0.0 
+  syncfusion_flutter_charts: ^32.2.3 
+
+  flutter_localizations:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.1   # <-- BURASI DÜZELTİLDİ
+  sqflite_common_ffi: ^2.4.5
+  flutter_lints: ^6.0.0
+
+flutter_launcher_icons:                   # <-- BURASI DA DÜZELTİLDİ
+  android: true
+  ios: false
+  image_path: "assets/images/logo.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/fonts/
+    - assets/templates/
+    - assets/sounds/bip.mp3
+    # assets/db/sut_yem.db kaldırıldı: kodda hiç okunmuyordu ve gerçek
+    # müşteri isimlerini her APK'nın içine gömüyordu (kişisel veri).
+    - assets/images/sut_sisesi.png
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700

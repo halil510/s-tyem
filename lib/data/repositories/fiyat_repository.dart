@@ -1,0 +1,121 @@
+import 'package:sqflite/sqflite.dart';
+import '../../models/fiyat_model.dart';
+import '../../models/cari_fiyat_model.dart';
+
+/// Eski / global (cariye bağlı olmayan) fiyat tanımları.
+class FiyatRepository {
+  final Database db;
+  const FiyatRepository(this.db);
+
+  Future<int> insert(Fiyat fiyat) => db.insert('fiyatlar', fiyat.toMap());
+
+  Future<List<Fiyat>> getByUrunTuru(String urunTuru) async {
+    final maps = await db.query(
+      'fiyatlar',
+      where: 'urun_turu = ?',
+      whereArgs: [urunTuru],
+      orderBy: 'tarih DESC, id DESC',
+    );
+    return maps.map(Fiyat.fromMap).toList();
+  }
+
+  Future<Fiyat?> getGuncel(String urunTuru) async {
+    final maps = await db.query(
+      'fiyatlar',
+      where: 'urun_turu = ?',
+      whereArgs: [urunTuru],
+      orderBy: 'tarih DESC, id DESC',
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Fiyat.fromMap(maps.first) : null;
+  }
+
+  Future<int> delete(int id) => db.delete('fiyatlar', where: 'id = ?', whereArgs: [id]);
+}
+
+/// Cari bazlı, aylık fiyat tanımları (her müşteri için farklı fiyat).
+class CariFiyatRepository {
+  final Database db;
+  const CariFiyatRepository(this.db);
+
+  Future<CariFiyat?> getirTekil(int cariId, String ay) async {
+    final maps = await db.query(
+      'cari_fiyatlar',
+      where: 'cari_id = ? AND ay = ?',
+      whereArgs: [cariId, ay],
+    );
+    return maps.isNotEmpty ? CariFiyat.fromMap(maps.first) : null;
+  }
+
+  Future<CariFiyat?> getirSonGecerli(int cariId, String ay) async {
+    final maps = await db.query(
+      'cari_fiyatlar',
+      where: 'cari_id = ? AND ay <= ?',
+      whereArgs: [cariId, ay],
+      orderBy: 'ay DESC',
+      limit: 1,
+    );
+    return maps.isNotEmpty ? CariFiyat.fromMap(maps.first) : null;
+  }
+
+  Future<void> kaydet(CariFiyat fiyat) async {
+    final mevcut = await getirTekil(fiyat.cariId, fiyat.ay);
+    if (mevcut != null) {
+      // ÖNEMLİ: `toMap()` içindeki `id` alanı UPDATE'e dahil edilmemeli.
+      // `id`, INTEGER PRIMARY KEY (rowid) olduğundan NULL yazılmaya
+      // çalışılması "datatype mismatch (code 20)" hatasına yol açar.
+      final guncellemeMap = fiyat.toMap()..remove('id');
+      await db.update('cari_fiyatlar', guncellemeMap,
+          where: 'cari_id = ? AND ay = ?', whereArgs: [fiyat.cariId, fiyat.ay]);
+    } else {
+      final eklemeMap = fiyat.toMap()..remove('id');
+      await db.insert('cari_fiyatlar', eklemeMap);
+    }
+  }
+
+  /// Bir ay için fiyat tanımlı değilse, bir önceki aydan devralır.
+  Future<CariFiyat> oncekiAydanDevral(int cariId, String ay) async {
+    final parts = ay.split('-');
+    final yil = int.parse(parts[0]);
+    final ayNo = int.parse(parts[1]);
+    final oncekiAy = ayNo == 1 ? '${yil - 1}-12' : '$yil-${(ayNo - 1).toString().padLeft(2, '0')}';
+
+    final onceki = await getirSonGecerli(cariId, oncekiAy);
+    if (onceki != null) {
+      return CariFiyat(
+        cariId: cariId,
+        ay: ay,
+        sutFiyat: onceki.sutFiyat,
+        sutYemiFiyat: onceki.sutYemiFiyat,
+        besiYemiFiyat: onceki.besiYemiFiyat,
+        bBaslangicFiyat: onceki.bBaslangicFiyat,
+        bBuyutmeFiyat: onceki.bBuyutmeFiyat,
+        kuzuYemiFiyat: onceki.kuzuYemiFiyat,
+        tavukYemiFiyat: onceki.tavukYemiFiyat,
+      );
+    }
+    return CariFiyat(cariId: cariId, ay: ay);
+  }
+
+  /// Bir cari için TÜM ay fiyatlarını tek sorguda getirir (N+1
+  /// sorgu sorununu önlemek için — canlı bakiye hesaplamasında
+  /// kullanılır, bkz. `CariFiyatLookup`).
+  Future<List<CariFiyat>> getTumFiyatlar({int? cariId}) async {
+    final maps = cariId != null
+        ? await db.query('cari_fiyatlar', where: 'cari_id = ?', whereArgs: [cariId])
+        : await db.query('cari_fiyatlar');
+    return maps.map(CariFiyat.fromMap).toList();
+  }
+
+  /// Bir listedeki tüm cariler için, belirtilen ayın fiyatını getirir.
+  /// O ay için tanımlı fiyat yoksa önceki aydan devralır (varsayılan).
+  Future<Map<int, CariFiyat>> getAyFiyatlariHepsi(List<int> cariIdleri, String ay) async {
+    final Map<int, CariFiyat> sonuc = {};
+    for (final cariId in cariIdleri) {
+      var fiyat = await getirTekil(cariId, ay);
+      fiyat ??= await oncekiAydanDevral(cariId, ay);
+      sonuc[cariId] = fiyat;
+    }
+    return sonuc;
+  }
+}

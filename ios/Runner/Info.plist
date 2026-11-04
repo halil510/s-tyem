@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleDisplayName</key>
+    <string>Süt Yem</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>sut_yem</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    
+    <!-- Bluetooth izinleri -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Bluetooth ile diğer cihazlardan veri almak ve yedeklemek için izin gereklidir.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Bluetooth terazilerine bağlanmak için izin gereklidir.</string>
+    
+    <!-- Konum izinleri (BLE için) -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Bluetooth cihazlarını taramak için konum bilgisi kullanılacak.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Bluetooth cihazlarını taramak için konum bilgisi kullanılacak.</string>
+    
+    <!-- Dosya paylaşımı -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Excel dosyalarını kaydetmek ve paylaşmak için izin gereklidir.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Excel dosyalarını kaydetmek için izin gereklidir.</string>
+    
+    <!-- UIBackgroundModes (BLE arka plan) -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>bluetooth-central</string>
+        <string>bluetooth-peripheral</string>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+    
+    <!-- WiFi/Local Network izinleri (iOS 14+) -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Wi-Fi terazilerine bağlanmak için yerel ağ erişimi gereklidir.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_http._tcp</string>
+        <string>_https._tcp</string>
+        <string>_socket._tcp</string>
+    </array>
+    
+    <!-- Uygulama özellikleri -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
+</dict>
+</plist>
