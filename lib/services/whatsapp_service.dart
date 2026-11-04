@@ -183,21 +183,30 @@ Teşekkür ederiz.
     required double sutFiyat,
     required double sutTutar,
     required double yemKg,
-    required double yemFiyat,
     required double yemTutar,
+    double odeme = 0,
+    double tahsilat = 0,
     required double kalanBorc,
   }) {
-    // Süt (alacak) ve yem (borç) TOPLANMAZ — birbirinden düşülür.
-    // Bkz. CariOdemeRepository doc yorumu: süt aldıkça işletme cariye
-    // borçlanır (cari alacaklı), yem verdikçe cari işletmeye borçlanır.
-    final buAyNet = sutTutar - yemTutar;
+    // Süt (alacak) ve yem (borç) TOPLANMAZ — birbirinden düşülür:
+    // ay net = (süt + tahsilat) − (yem + ödeme).
+    final buAyNet = (sutTutar + tahsilat) - (yemTutar + odeme);
+    final kapaliMi = kalanBorc.abs() < 0.005;
     final alacakliMi = kalanBorc > 0;
-    final kapaliMi = kalanBorc == 0;
     final durumSatiri = kapaliMi
         ? '✅ *Hesabınız kapalı, borç/alacak yok.*'
         : (alacakliMi
             ? '💰 *Alacaklısınız:* ${kalanBorc.abs().toStringAsFixed(2)} ₺ (tarafınıza ödenecek)'
             : '📌 *Borçlusunuz:* ${kalanBorc.abs().toStringAsFixed(2)} ₺ (sizden tahsil edilecek)');
+
+    final satirlar = <String>[
+      '🥛 *Süt (Alacak):* ${sutKg.toStringAsFixed(2)} kg × ${sutFiyat.toStringAsFixed(2)} ₺ = ${sutTutar.toStringAsFixed(2)} ₺',
+      if (yemKg > 0 || yemTutar > 0)
+        '🌾 *Yem (Borç):* ${yemKg.toStringAsFixed(2)} kg = ${yemTutar.toStringAsFixed(2)} ₺',
+      if (odeme > 0) '💵 *Size Ödenen:* ${odeme.toStringAsFixed(2)} ₺',
+      if (tahsilat > 0) '🧾 *Sizden Alınan:* ${tahsilat.toStringAsFixed(2)} ₺',
+      '📊 *Bu Ay Net:* ${buAyNet.toStringAsFixed(2)} ₺',
+    ];
 
     return '''
 *Hesap Özeti - $ayAdi*
@@ -206,9 +215,7 @@ Sayın $cariAd,
 
 $ayAdi dönemine ait hesap özetiniz aşağıdaki gibidir:
 
-🥛 *Süt (Alacak):* ${sutKg.toStringAsFixed(2)} kg × ${sutFiyat.toStringAsFixed(2)} ₺ = ${sutTutar.toStringAsFixed(2)} ₺
-🌾 *Yem (Borç):* ${yemKg.toStringAsFixed(2)} kg × ${yemFiyat.toStringAsFixed(2)} ₺ = ${yemTutar.toStringAsFixed(2)} ₺
-📊 *Bu Ay Net:* ${buAyNet.toStringAsFixed(2)} ₺
+${satirlar.join('\n')}
 
 $durumSatiri
 

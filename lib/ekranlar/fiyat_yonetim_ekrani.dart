@@ -197,7 +197,7 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
     return Scaffold(
       backgroundColor: C.arkaplan,
       appBar: AppBar(
-        title: const Text('Genel Fiyat Geçmişi'),
+        title: const Text('Piyasa Fiyat Notları'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(49),
           child: Column(children: [
@@ -218,13 +218,18 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
       ),
       body: _yukleniyor
           ? const Center(child: CircularProgressIndicator(color: C.mavi))
-          : TabBarView(
-              controller: _tab,
-              children: [
-                _sayfa('sut', _sutFiyatlari, _guncelSut),
-                _sayfa('yem', _yemFiyatlari, _guncelYem),
-              ],
-            ),
+          : Column(children: [
+              const _HesabaEtkiYokBandi(),
+              Expanded(
+                child: TabBarView(
+                  controller: _tab,
+                  children: [
+                    _sayfa('sut', _sutFiyatlari, _guncelSut),
+                    _sayfa('yem', _yemFiyatlari, _guncelYem),
+                  ],
+                ),
+              ),
+            ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _fiyatEkle(isSut ? 'sut' : 'yem'),
         backgroundColor: isSut ? C.mavi : C.yesil,
@@ -361,5 +366,37 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
         }),
       const SizedBox(height: 80),
     ]);
+  }
+}
+
+/// Bu ekrandaki fiyatlar hiçbir bakiye/ekstre/rapor hesabına girmez;
+/// kullanıcı buraya girdiği fiyatın uygulandığını sanmasın.
+class _HesabaEtkiYokBandi extends StatelessWidget {
+  const _HesabaEtkiYokBandi();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(children: [
+        Icon(Icons.info_outline_rounded, color: Colors.orange.shade800),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Bu ekran yalnızca not amaçlıdır; buradaki fiyatlar hesaplara '
+            'GİRMEZ. Carilerin süt/yem tutarları Menü → Süt Fiyatları ve '
+            'Yem Fiyatları ekranlarındaki aylık fiyatlarla hesaplanır.',
+            style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontFamily: 'Poppins'),
+          ),
+        ),
+      ]),
+    );
   }
 }

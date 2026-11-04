@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../models/yem_model.dart';
+import '../features/cari_hesap/providers/cari_hesap_providers.dart' show AylikCariOzet;
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
 
@@ -159,10 +160,7 @@ class ExcelExport {
 
   // 🧮 AYLIK HESAPLAMA RAPORU (fiyat_hesaplama_ekrani.dart için)
   static Future<File> exportHesaplamaRaporu({
-    required List<Cari> cariler,
-    required Map<int, Map<String, double>> hesaplar,
-    required double sutFiyat,
-    required double yemFiyat,
+    required List<({Cari cari, AylikCariOzet ozet})> satirlar,
     required String ayAdi,
   }) async {
     try {
@@ -187,86 +185,53 @@ class ExcelExport {
         horizontalAlign: HorizontalAlign.Center,
       );
 
-      final headers = [
+      // Bakiye işareti: + cari alacaklı (işletme ödeyecek), − cari borçlu.
+      const headers = [
         'İsim Soyisim',
         'Süt (kg)',
+        'Süt Fiyatı (₺/kg)',
         'Süt Tutarı (₺)',
         'Yem (kg)',
         'Yem Tutarı (₺)',
-        'Toplam Alacak (₺)',
-        'Toplam Borç (₺)',
-        'Net Bakiye (₺)',
+        'Ödenen (₺)',
+        'Tahsil Edilen (₺)',
+        'Bu Ay Net (₺)',
+        'Genel Bakiye (₺)',
       ];
-
       for (int i = 0; i < headers.length; i++) {
-        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
-        cell.value = headers[i];
-        cell.cellStyle = headerStyle;
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
+          ..value = headers[i]
+          ..cellStyle = headerStyle;
       }
 
+      final toplam = List<double>.filled(headers.length, 0);
       int row = 1;
-      double genelSutKg = 0, genelYemKg = 0, genelSutTutar = 0, genelYemTutar = 0;
-      double genelBorc = 0, genelOdenen = 0, genelKalan = 0;
-
-      for (final cari in cariler) {
-        if (cari.id == null) continue;
-        final h = hesaplar[cari.id!];
-        if (h == null) continue;
-
-        final sutKg = h['sutKg'] ?? 0;
-        final yemKg = h['yemKg'] ?? 0;
-        final sutTutar = h['sutTutar'] ?? 0;
-        final yemTutar = h['yemTutar'] ?? 0;
-        final toplamAlacak = h['toplamBorc'] ?? 0; // krediTop (süt+tahsilat) — bkz. fiyat_hesaplama_ekrani.dart
-        final toplamBorc = h['toplamOdenen'] ?? 0;  // borcTop (yem+ödeme)
-        final netBakiye = h['kalanBorc'] ?? 0;
-
-        final nameCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row));
-        nameCell.value = '${cari.ad} ${cari.soyad}';
-        nameCell.cellStyle = nameStyle;
-
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value = sutKg;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value = sutTutar;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value = yemKg;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value = yemTutar;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row)).value = toplamAlacak;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row)).value = toplamBorc;
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: row)).value = netBakiye;
-
-        genelSutKg += sutKg;
-        genelYemKg += yemKg;
-        genelSutTutar += sutTutar;
-        genelYemTutar += yemTutar;
-        genelBorc += toplamAlacak;
-        genelOdenen += toplamBorc;
-        genelKalan += netBakiye;
+      for (final s in satirlar) {
+        final o = s.ozet;
+        final degerler = <double>[
+          o.sutKg, o.sutFiyat, o.sutTutar, o.yemKg, o.yemTutar,
+          o.odeme, o.tahsilat, o.ayNet, o.genelBakiye,
+        ];
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = '${s.cari.ad} ${s.cari.soyad}'
+          ..cellStyle = nameStyle;
+        for (int i = 0; i < degerler.length; i++) {
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: i + 1, rowIndex: row)).value = degerler[i];
+          toplam[i + 1] += degerler[i];
+        }
         row++;
       }
 
       sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
         ..value = 'GENEL TOPLAM'
         ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
-        ..value = genelSutKg
-        ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row))
-        ..value = genelSutTutar
-        ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row))
-        ..value = genelYemKg
-        ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row))
-        ..value = genelYemTutar
-        ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row))
-        ..value = genelBorc
-        ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row))
-        ..value = genelOdenen
-        ..cellStyle = totalStyle;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: row))
-        ..value = genelKalan
-        ..cellStyle = totalStyle;
+      for (int i = 1; i < headers.length; i++) {
+        // Fiyat sütunu toplanmaz.
+        if (i == 2) continue;
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row))
+          ..value = double.parse(toplam[i].toStringAsFixed(2))
+          ..cellStyle = totalStyle;
+      }
 
       final dir = await getTemporaryDirectory();
       final path = '${dir.path}/Hesaplama_$ayAdi.xlsx';

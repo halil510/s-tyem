@@ -42,7 +42,7 @@
 ## Testler
 
 ```bash
-flutter test          # 63 test — hepsi geçmeli
+flutter test          # 68 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -57,6 +57,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/widget_test.dart` | Gerçek ekranlar: Hızlı Süt Girişi, Süt Ekle, terazi, ödeme formu |
 | `test/data/supabase_sema_test.dart` | Her SQLite tablo/sütunu Supabase SQL dosyasında var mı |
 | `test/data/app_database_test.dart` | Gerçek dosyada açılış: migration hatası veriyi silmez, bozuk dosya kenara alınır |
+| `test/features/aylik_ozet_test.dart` | Aylık özet: cari fiyatıyla, ekstreyle aynı, WhatsApp mesajı |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -131,6 +132,26 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - Supabase SQL: şema değişmedi, güncelleme gerekmedi.
 - Testler: 63/63 geçti; `flutter analyze` 0 error.
 
+### 2026-11-04 (4) — A2 + A3: tek terazi ekranı, Aylık Rapor düzeltmesi
+
+- **A2:** `lib/ekranlar/terazi_baglanti_ekrani.dart` hiçbir yerden çağrılmıyordu →
+  `_arsiv/terazi_baglanti_ekrani_eski.dart.txt`. Menü ve Süt ekranı `AppRoutes.terazi` → Pro ekran.
+- **A3 — KRİTİK HATA bulundu ve düzeltildi:** "Aylık Hesaplama & Rapor" ekranı carinin
+  gerçek fiyatını kullanmıyordu; **sabit 12 ₺ süt / 8 ₺ yem** (tüm yem türlerine tek fiyat)
+  ile hesaplayıp bu tutarları **müşteriye WhatsApp'tan** ve Excel'e gönderiyordu.
+  "Toplam" sütunu da süt (alacak) ile yemi (borç) topluyordu.
+  - Yeni `aylikOzetProvider(ay)` + `AylikCariOzet` (`cari_hesap_providers.dart`):
+    ekstreyle aynı `sutTutari`/`yemTutari`, o ayın fiyatı (önceki aydan devralma dahil),
+    ödeme/tahsilat, ay neti, genel bakiye, fiyat-eksik bayrağı.
+  - Ekran yeniden yazıldı: elle fiyat kutusu yok; fiyat eksik uyarısı; gelecek aya geçilmez;
+    pasif ama bakiyeli cariler de listede; "Tümüne WhatsApp" önce onay ister.
+  - WhatsApp mesajı: yem için uydurma birim fiyat yok (`kg = tutar`), ödenen/tahsil edilen satırları.
+  - Excel: Süt kg, Süt fiyatı, Süt tutarı, Yem kg, Yem tutarı, Ödenen, Tahsil edilen, Bu ay net, Genel bakiye.
+- `fiyatlar` tablosunu kullanan ekran → "Piyasa Fiyat Notları" + "bu fiyatlar hesaplara girmez" bandı.
+  (Veri silinmedi; tablo yedekte ve Supabase şemasında duruyor.)
+- Supabase SQL: şema değişmedi.
+- Testler: 68/68 geçti; `flutter analyze` 0 error.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Sabit ana şifre:** `lib/utils/app_locker.dart` içinde `_defaultMasterPassword`
@@ -149,8 +170,8 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 
 **A. Altyapı (önce)**
 - [x] A1. Migration hatasında veritabanı silinmiyor (2026-11-04). Ayrıntı: oturum günlüğü (3).
-- [ ] A2. İki terazi ekranını (`terazi_baglanti_ekrani` + `_pro`) teke indir.
-- [ ] A3. İki fiyat sistemi (`fiyatlar` genel / `cari_fiyatlar`) — "Genel Fiyat Geçmişi" bakiyeyi etkilemiyor; sadeleştir.
+- [x] A2. Kullanılmayan eski `terazi_baglanti_ekrani.dart` arşive alındı; tek ekran: `features/terazi/screens/terazi_baglanti_ekrani_pro.dart` (düşük seviye `services/terazi_service.dart` Pro servis tarafından kullanılıyor, kalmalı).
+- [x] A3. Aylık Rapor gerçek fiyatlarla hesaplanıyor; `fiyatlar` tablosu ekranı "Piyasa Fiyat Notları" oldu + "hesaplara girmez" bandı. Ayrıntı: oturum günlüğü (4).
 - [ ] A4. Sabit ana şifre → ilk kurulumda belirlenen şifre.
 - [ ] A5. `cari_listesi.dart` (1675 satır) ve `detay_ekrani.dart` (1094) parçalara böl.
 

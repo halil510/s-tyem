@@ -101,7 +101,7 @@ class _AnaEkranState extends State<AnaEkran> {
             PopupMenuItem(value: 'fiyat_gecmisi', child: Row(children: [
               Icon(Icons.trending_up_rounded, color: Colors.indigo[700], size: 18),
               const SizedBox(width: 10),
-              const Text('Genel Fiyat Geçmişi'),
+              const Text('Piyasa Fiyat Notları'),
             ])),
             PopupMenuItem(value: 'aylik_hesaplama', child: Row(children: [
               Icon(Icons.calculate_outlined, color: Colors.deepPurple[700], size: 18),

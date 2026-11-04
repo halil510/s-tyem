@@ -198,6 +198,109 @@ final tumKalanBorclarProvider = FutureProvider<Map<int, double>>((ref) async {
   return bakiyeler.map((id, b) => MapEntry(id, kurusaYuvarla(b)));
 });
 
+/// ─────────────────────────────────────────────────────────────
+/// AYLIK CARİ ÖZETİ (Aylık Hesaplama & Rapor, WhatsApp, Excel)
+/// ─────────────────────────────────────────────────────────────
+///
+/// Bir ayın süt/yem/ödeme/tahsilat toplamları, her carinin O AYKİ
+/// gerçek fiyatıyla ([sutTutari], [yemTutari]) — ekstre ve bakiyeyle
+/// kuruşu kuruşuna aynı. Ekranda elle fiyat girilmez.
+class AylikCariOzet {
+  final int cariId;
+  final double sutKg;
+  final double sutTutar;
+
+  /// O ay geçerli süt fiyatı (o ay tanımlı değilse önceki aydan devralınan).
+  final double sutFiyat;
+  final double yemKg;
+  final double yemTutar;
+  final double odeme;
+  final double tahsilat;
+
+  /// Tüm zamanların canlı bakiyesi (bkz. [tumKalanBorclarProvider]).
+  final double genelBakiye;
+
+  /// Miktar var ama fiyat tanımlı değil → tutar 0 hesaplandı.
+  final bool fiyatEksik;
+
+  const AylikCariOzet({
+    required this.cariId,
+    this.sutKg = 0,
+    this.sutTutar = 0,
+    this.sutFiyat = 0,
+    this.yemKg = 0,
+    this.yemTutar = 0,
+    this.odeme = 0,
+    this.tahsilat = 0,
+    this.genelBakiye = 0,
+    this.fiyatEksik = false,
+  });
+
+  /// Bu ayın net etkisi: (süt + tahsilat) − (yem + ödeme).
+  double get ayNet => kurusaYuvarla((sutTutar + tahsilat) - (yemTutar + odeme));
+
+  bool get hareketVar => sutKg > 0 || yemKg > 0 || odeme > 0 || tahsilat > 0;
+}
+
+/// [ay]: 'yyyy-MM'. Dönen haritada yalnızca o ay hareketi olan ya da
+/// genel bakiyesi sıfırdan farklı cariler bulunur.
+final aylikOzetProvider = FutureProvider.autoDispose
+    .family<Map<int, AylikCariOzet>, String>((ref, ay) async {
+  ref.watch(veriSurumuProvider);
+  final sutRepo = await ref.watch(sutRepositoryProvider.future);
+  final yemRepo = await ref.watch(yemRepositoryProvider.future);
+  final fiyatRepo = await ref.watch(cariFiyatRepositoryProvider.future);
+  final odemeRepo = await ref.watch(cariOdemeRepositoryProvider.future);
+  final bakiyeler = await ref.watch(tumKalanBorclarProvider.future);
+
+  final bas = '$ay-01';
+  final bit = '$ay-31';
+  final lookup = CariFiyatLookup(await fiyatRepo.getTumFiyatlar());
+
+  final sutKg = <int, double>{}, sutTl = <int, double>{};
+  final yemKg = <int, double>{}, yemTl = <int, double>{};
+  final odeme = <int, double>{}, tahsilat = <int, double>{};
+  final eksik = <int>{};
+  void ekle(Map<int, double> m, int id, double v) => m[id] = (m[id] ?? 0) + v;
+
+  for (final s in await sutRepo.getAllInRange(bas, bit)) {
+    final tutar = sutTutari(s, lookup.fiyatIcin(s.cariId, ay));
+    if (s.toplam > 0 && tutar <= 0) eksik.add(s.cariId);
+    ekle(sutKg, s.cariId, s.toplam);
+    ekle(sutTl, s.cariId, tutar);
+  }
+  for (final y in await yemRepo.getAllInRange(bas, bit)) {
+    final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, ay));
+    if (y.toplam > 0 && tutar <= 0) eksik.add(y.cariId);
+    ekle(yemKg, y.cariId, y.toplam);
+    ekle(yemTl, y.cariId, tutar);
+  }
+  for (final o in await odemeRepo.getTumOdemeTahsilatlar()) {
+    if (!o.tarih.startsWith(ay)) continue;
+    ekle(o.islemTuru == 'tahsilat' ? tahsilat : odeme, o.cariId, kurusaYuvarla(o.toplamTutar));
+  }
+
+  final idler = {
+    ...sutKg.keys, ...yemKg.keys, ...odeme.keys, ...tahsilat.keys,
+    ...bakiyeler.entries.where((e) => e.value.abs() >= 0.005).map((e) => e.key),
+  };
+  return {
+    for (final id in idler)
+      id: AylikCariOzet(
+        cariId: id,
+        sutKg: sutKg[id] ?? 0,
+        sutTutar: kurusaYuvarla(sutTl[id] ?? 0),
+        sutFiyat: lookup.fiyatIcin(id, ay).sutFiyat,
+        yemKg: yemKg[id] ?? 0,
+        yemTutar: kurusaYuvarla(yemTl[id] ?? 0),
+        odeme: kurusaYuvarla(odeme[id] ?? 0),
+        tahsilat: kurusaYuvarla(tahsilat[id] ?? 0),
+        genelBakiye: bakiyeler[id] ?? 0,
+        fiyatEksik: eksik.contains(id),
+      ),
+  };
+});
+
 /// Bir kaydın denetim (değişiklik) geçmişi.
 final cariOdemeGecmisiProvider =
     FutureProvider.family<List<Map<String, Object?>>, int>((ref, kayitId) async {
