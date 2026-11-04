@@ -45,7 +45,7 @@
 ## Testler
 
 ```bash
-flutter test          # 103 test — hepsi geçmeli
+flutter test          # 112 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -66,6 +66,8 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/donem_test.dart` | Hakediş hesabı, kapatma kilidi (süt/yem/ödeme/fiyat/cari silme), fiyat sabitleme, yeniden açma, yedek |
 | `test/donem_ekrani_test.dart` | Dönem ekranı: kapat → kilitli → gerekçeyle yeniden aç |
 | `test/features/fis_test.dart` | Fiş düzeni (58/80 mm), ESC/POS baytları, Türkçe harf çevirisi/CP857, yazıcı kanalı, fiş verisi |
+| `test/features/dashboard_test.dart` | Gelmeyen üreticiler kuralı, bugün sabah/akşam/dün, buzağı yemi dilimi, dönem hatırlatması |
+| `test/dashboard_ekrani_test.dart` | Özet ekranı 360 px genişlikte taşmadan çizilir |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -248,6 +250,22 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 - Supabase SQL: şema değişmedi (ayarlar cihazda).
 - Testler: 103/103; `flutter analyze` 0 error. **Gerçek bir termal yazıcıyla henüz denenmedi.**
 
+### 2026-11-04 (9) — C1: Özet ekranı
+
+- `dashboardDataProvider` yeni alanlar: `bugunSabah`, `bugunAksam`, `dunToplamSut`,
+  `bugunGelenSayisi`, `gelmeyenler`, `kapanmamisGecenAy`.
+- `gelmeyenUreticiler(...)` (saf fonksiyon): aktif + son 14 günde (bugün hariç) süt getirmiş +
+  bugün kaydı olmayan (ya da 0 kg) üreticiler, ada göre.
+- Ekran: banner "Bugün N üretici · X kg / Dün Y kg"; "Bugün Süt" kartında sabah/akşam;
+  **BUGÜN GELMEYENLER** listesi (ilk 6 + tümünü göster; dokununca o üreticinin Süt Ekle sayfası);
+  geçen ay hareketi olup dönemi kapatılmamışsa turuncu hatırlatma → Dönem ekranı.
+- Hata düzeltmeleri: yem dağılımında B. Başlangıç/B. Büyütme "Besi" sayılıyordu → ayrı "Buzağı" dilimi.
+  KPI kartları sabit en-boy oranlı ızgarada dar ekran/büyük yazıda **taşıyordu** (360 px testinde
+  yakalandı) → içerik yüksekliğinde ikişerli satırlar; `KpiKarti` ve `BolumBasligi` taşmaya dayanıklı.
+- Fiş: kullanıcının yazıcısı 80 mm / 40 karakter → varsayılan genişlik 40.
+- Supabase SQL: şema değişmedi.
+- Testler: 112/112; `flutter analyze` 0 error.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
@@ -285,7 +303,7 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 - [ ] B11. Bulut senkron (Supabase) — en son.
 
 **C. Mevcut ekranların yenilenmesi**
-- [ ] C1. Özet: bugün sabah/akşam kg, bu ay, gelmeyen üreticiler, bakiye özeti.
+- [x] C1. Özet: bugün sabah/akşam, dün, gelen üretici sayısı, bugün gelmeyenler (dokununca süt girişi), dönem kapatma hatırlatması. Ayrıntı: oturum günlüğü (9).
 - [ ] C2. Ortak tema/bileşenler (kart, boş durum, hata, yükleniyor) tüm ekranlarda aynı.
 
 - [x] GitHub: https://github.com/halil510/s-tyem (dal: **main**). 2026-11-04 itibarıyla depo **PUBLIC** — Settings → Danger Zone → Change visibility → Private yapılmalı.

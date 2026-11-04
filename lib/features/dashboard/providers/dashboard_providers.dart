@@ -2,9 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/database_provider.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/veri_surumu_provider.dart';
-import '../../cari_hesap/providers/cari_hesap_providers.dart' show tumKalanBorclarProvider;
+import '../../../models/cari_model.dart';
+import '../../../models/sut_model.dart';
+import '../../cari_hesap/providers/cari_hesap_providers.dart'
+    show tumKalanBorclarProvider;
 
 /// Bir günün toplam süt miktarı (haftalık grafik için).
 @immutable
@@ -36,6 +40,18 @@ class YemTuruVerisi {
 class DashboardData {
   final int toplamCari;
   final double bugunToplamSut;
+  final double bugunSabah;
+  final double bugunAksam;
+  final double dunToplamSut;
+
+  /// Bugün kaydı olan üretici sayısı.
+  final int bugunGelenSayisi;
+
+  /// Düzenli getirip bugün henüz gelmeyenler (bkz. [gelmeyenUreticiler]).
+  final List<Cari> gelmeyenler;
+
+  /// Geçen ay hareket var ama dönem kapatılmamışsa o ay ('yyyy-MM').
+  final String? kapanmamisGecenAy;
   final double bugunToplamYem;
   final double aylikToplamSut;
   final double aylikToplamYem;
@@ -48,6 +64,12 @@ class DashboardData {
   const DashboardData({
     required this.toplamCari,
     required this.bugunToplamSut,
+    this.bugunSabah = 0,
+    this.bugunAksam = 0,
+    this.dunToplamSut = 0,
+    this.bugunGelenSayisi = 0,
+    this.gelmeyenler = const [],
+    this.kapanmamisGecenAy,
     required this.bugunToplamYem,
     required this.aylikToplamSut,
     required this.aylikToplamYem,
@@ -57,6 +79,39 @@ class DashboardData {
     required this.enCokSutVerenCariler,
     required this.yemDagilimi,
   });
+}
+
+/// Bugün süt getirmesi beklenen ama henüz kaydı olmayan üreticiler.
+///
+/// "Düzenli üretici": aktif ve son [gunSayisi] günde (bugün hariç) en az bir
+/// kez süt getirmiş cari. Bugün kaydı olan (sabah ya da akşam) listeye girmez.
+/// Ada göre sıralı döner.
+List<Cari> gelmeyenUreticiler({
+  required List<Cari> aktifCariler,
+  required List<Sut> sonSutler,
+  required DateTime bugun,
+  int gunSayisi = 14,
+}) {
+  final f = DateFormat('yyyy-MM-dd');
+  final bugunStr = f.format(bugun);
+  final basStr =
+      f.format(DateTime(bugun.year, bugun.month, bugun.day - gunSayisi));
+  final duzenli = <int>{};
+  final bugunGelen = <int>{};
+  for (final s in sonSutler) {
+    if (s.toplam <= 0) continue;
+    if (s.tarih == bugunStr) {
+      bugunGelen.add(s.cariId);
+    } else if (s.tarih.compareTo(basStr) >= 0 &&
+        s.tarih.compareTo(bugunStr) < 0) {
+      duzenli.add(s.cariId);
+    }
+  }
+  return aktifCariler
+      .where((c) =>
+          c.id != null && duzenli.contains(c.id) && !bugunGelen.contains(c.id))
+      .toList()
+    ..sort((a, b) => a.tamAd.toLowerCase().compareTo(b.tamAd.toLowerCase()));
 }
 
 /// Dashboard'un tüm verilerini tek seferde, verimli sorgularla hesaplayan
@@ -82,7 +137,12 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
   final ayBitis = DateTime(bugun.year, bugun.month + 1, 0);
   final ayBasStr = DateFormat('yyyy-MM-dd').format(ayBaslangic);
   final ayBitStr = DateFormat('yyyy-MM-dd').format(ayBitis);
-  final haftaBasStr = DateFormat('yyyy-MM-dd').format(bugun.subtract(const Duration(days: 6)));
+  final haftaBasStr =
+      DateFormat('yyyy-MM-dd').format(bugun.subtract(const Duration(days: 6)));
+  final dunStr = DateFormat('yyyy-MM-dd')
+      .format(DateTime(bugun.year, bugun.month, bugun.day - 1));
+  final sonIkiHaftaStr = DateFormat('yyyy-MM-dd')
+      .format(DateTime(bugun.year, bugun.month, bugun.day - 14));
 
   final cariler = await cariRepo.getAll(sadeceAktif: true);
   final cariAdMap = {for (final c in cariler) c.id!: c.tamAd};
@@ -92,6 +152,35 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
   final aylikSutler = await sutRepo.getAllInRange(ayBasStr, ayBitStr);
   final aylikYemler = await yemRepo.getAllInRange(ayBasStr, ayBitStr);
   final haftalikSutler = await sutRepo.getAllInRange(haftaBasStr, bugunStr);
+  final sonSutler = await sutRepo.getAllInRange(sonIkiHaftaStr, bugunStr);
+  final bugunSutler = sonSutler.where((s) => s.tarih == bugunStr).toList();
+  final bugunSabah = bugunSutler.fold(0.0, (t, s) => t + s.sabah);
+  final bugunAksam = bugunSutler.fold(0.0, (t, s) => t + s.aksam);
+  final dunToplamSut = sonSutler
+      .where((s) => s.tarih == dunStr)
+      .fold(0.0, (t, s) => t + s.toplam);
+  final bugunGelenSayisi = bugunSutler
+      .where((s) => s.toplam > 0)
+      .map((s) => s.cariId)
+      .toSet()
+      .length;
+  final gelmeyenler = gelmeyenUreticiler(
+      aktifCariler: cariler, sonSutler: sonSutler, bugun: bugun);
+
+  // Geçen ayın dönemi kapatılmamışsa hatırlat.
+  final db = await ref.watch(databaseProvider.future);
+  final gecenAy =
+      DateFormat('yyyy-MM').format(DateTime(bugun.year, bugun.month - 1));
+  final gecenAyHareket = await db.rawQuery(
+    'SELECT 1 FROM sutler WHERE tarih BETWEEN ? AND ? LIMIT 1',
+    ['$gecenAy-01', '$gecenAy-31'],
+  );
+  final gecenAyKapali = await db.rawQuery(
+    "SELECT 1 FROM donemler WHERE ay = ? AND durum = 'kapali'",
+    [gecenAy],
+  );
+  final kapanmamisGecenAy =
+      gecenAyHareket.isNotEmpty && gecenAyKapali.isEmpty ? gecenAy : null;
 
   final bugunToplamSut = aylikSutler
       .where((s) => s.tarih == bugunStr)
@@ -110,13 +199,15 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
     final toplam = haftalikSutler
         .where((s) => s.tarih == gunStr)
         .fold(0.0, (sum, s) => sum + s.toplam);
-    haftalikSutGrafik.add(GunlukSutVerisi(DateFormat('E', 'tr_TR').format(gun), toplam));
+    haftalikSutGrafik
+        .add(GunlukSutVerisi(DateFormat('E', 'tr_TR').format(gun), toplam));
   }
 
   // En çok süt veren 5 cari (bu ay) — bellekte grupla.
   final cariBazliSutToplam = <int, double>{};
   for (final s in aylikSutler) {
-    cariBazliSutToplam[s.cariId] = (cariBazliSutToplam[s.cariId] ?? 0) + s.toplam;
+    cariBazliSutToplam[s.cariId] =
+        (cariBazliSutToplam[s.cariId] ?? 0) + s.toplam;
   }
   final enCokSutVerenCariler = cariBazliSutToplam.entries
       .where((e) => e.value > 0 && cariAdMap.containsKey(e.key))
@@ -126,16 +217,22 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
   final ilkBes = enCokSutVerenCariler.take(5).toList();
 
   // Yem dağılımı (bu ay).
-  double sutYemiTop = 0, besiYemiTop = 0, kuzuYemiTop = 0, tavukYemiTop = 0;
+  double sutYemiTop = 0,
+      besiYemiTop = 0,
+      buzagiTop = 0,
+      kuzuYemiTop = 0,
+      tavukYemiTop = 0;
   for (final y in aylikYemler) {
     sutYemiTop += y.sutYemi;
-    besiYemiTop += y.besiYemi + y.bBaslangic + y.bBuyutme;
+    besiYemiTop += y.besiYemi;
+    buzagiTop += y.bBaslangic + y.bBuyutme;
     kuzuYemiTop += y.kuzuYemi;
     tavukYemiTop += y.tavukYemi;
   }
   final yemDagilimi = <YemTuruVerisi>[
     if (sutYemiTop > 0) YemTuruVerisi('Süt', sutYemiTop),
     if (besiYemiTop > 0) YemTuruVerisi('Besi', besiYemiTop),
+    if (buzagiTop > 0) YemTuruVerisi('Buzağı', buzagiTop),
     if (kuzuYemiTop > 0) YemTuruVerisi('Kuzu', kuzuYemiTop),
     if (tavukYemiTop > 0) YemTuruVerisi('Tavuk', tavukYemiTop),
   ];
@@ -145,13 +242,22 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
   // Pozitif bakiye = cari alacaklı (işletme ÖDEYECEK).
   // Negatif bakiye = cari borçlu (işletme TAHSİL EDECEK).
   final kalanBorclar = await ref.watch(tumKalanBorclarProvider.future);
-  const epsilon = 0.005; // Bakiyeler kuruşa yuvarlı; Ödemeler sekmesiyle aynı eşik
-  final odenecekTutar = kalanBorclar.values.fold(0.0, (sum, v) => sum + (v > epsilon ? v : 0));
-  final tahsilEdilecekTutar = kalanBorclar.values.fold(0.0, (sum, v) => sum + (v < -epsilon ? -v : 0));
+  const epsilon =
+      0.005; // Bakiyeler kuruşa yuvarlı; Ödemeler sekmesiyle aynı eşik
+  final odenecekTutar =
+      kalanBorclar.values.fold(0.0, (sum, v) => sum + (v > epsilon ? v : 0));
+  final tahsilEdilecekTutar =
+      kalanBorclar.values.fold(0.0, (sum, v) => sum + (v < -epsilon ? -v : 0));
 
   return DashboardData(
     toplamCari: cariler.length,
     bugunToplamSut: bugunToplamSut,
+    bugunSabah: bugunSabah,
+    bugunAksam: bugunAksam,
+    dunToplamSut: dunToplamSut,
+    bugunGelenSayisi: bugunGelenSayisi,
+    gelmeyenler: gelmeyenler,
+    kapanmamisGecenAy: kapanmamisGecenAy,
     bugunToplamYem: bugunToplamYem,
     aylikToplamSut: aylikToplamSut,
     aylikToplamYem: aylikToplamYem,

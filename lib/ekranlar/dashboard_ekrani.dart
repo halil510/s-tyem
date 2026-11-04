@@ -6,6 +6,9 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../theme/app_theme.dart';
 import '../widgetlar/ortak_widgetlar.dart';
 import '../features/dashboard/providers/dashboard_providers.dart';
+import '../features/donem/donem_ekrani.dart';
+import '../models/cari_model.dart';
+import 'sut_ekrani.dart';
 
 /// Ana KPI / özet ekranı (dashboard).
 ///
@@ -19,6 +22,7 @@ class DashboardEkrani extends ConsumerWidget {
   static const _yemRenkleri = {
     'Süt': AppColors.primary,
     'Besi': AppColors.accent,
+    'Buzağı': AppColors.primaryLight,
     'Kuzu': AppColors.info,
     'Tavuk': AppColors.warning,
   };
@@ -39,9 +43,20 @@ class DashboardEkrani extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
               _buildBanner(ay, data),
+              if (data.kapanmamisGecenAy != null) ...[
+                const SizedBox(height: 12),
+                _DonemHatirlatma(ay: data.kapanmamisGecenAy!),
+              ],
               const SizedBox(height: 20),
               _buildKpiGrid(data),
               const SizedBox(height: 24),
+              if (data.gelmeyenler.isNotEmpty) ...[
+                BolumBasligi(
+                    baslik: 'BUGÜN GELMEYENLER (${data.gelmeyenler.length})'),
+                const SizedBox(height: 8),
+                _GelmeyenlerListesi(gelmeyenler: data.gelmeyenler),
+                const SizedBox(height: 24),
+              ],
               const BolumBasligi(baslik: 'SON 7 GÜNLÜK SÜT (KG)'),
               const SizedBox(height: 8),
               _buildSutGrafik(context, data),
@@ -77,73 +92,102 @@ class DashboardEkrani extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(ay, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.8), fontFamily: 'Poppins')),
+                Text(ay,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.8),
+                        fontFamily: 'Poppins')),
                 const SizedBox(height: 4),
-                const Text('Merhaba 👋', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white, fontFamily: 'Poppins')),
+                const Text('Merhaba 👋',
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        fontFamily: 'Poppins')),
                 const SizedBox(height: 6),
                 Text(
-                  '${data.toplamCari} aktif cari · Bugün ${data.bugunToplamSut.toStringAsFixed(1)} kg süt',
-                  style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.85), fontFamily: 'Poppins'),
+                  'Bugün ${data.bugunGelenSayisi} üretici · ${_kg(data.bugunToplamSut)}\n'
+                  'Dün ${_kg(data.dunToplamSut)} · ${data.toplamCari} aktif cari',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.85),
+                      fontFamily: 'Poppins'),
                 ),
               ],
             ),
           ),
           Container(
-            width: 56, height: 56,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-            child: const Icon(Icons.water_drop_rounded, color: Colors.white, size: 28),
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+            child: const Icon(Icons.water_drop_rounded,
+                color: Colors.white, size: 28),
           ),
         ],
       ),
     );
   }
 
+  /// İkişerli satırlar; kart yüksekliği içerikten gelir (dar ekranda ya da
+  /// büyük sistem yazı boyutunda taşmaz — sabit en-boy oranı taşıyordu).
   Widget _buildKpiGrid(DashboardData data) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.4,
-      children: [
-        KpiKarti(
-          baslik: 'Bugün Süt',
-          deger: '${data.bugunToplamSut.toStringAsFixed(1)} kg',
-          altyazi: 'Tüm cariler toplamı',
-          ikon: Icons.water_drop_rounded,
-          renk: AppColors.primary,
-        ),
-        KpiKarti(
-          baslik: 'Bugün Yem',
-          deger: '${data.bugunToplamYem.toStringAsFixed(1)} kg',
-          altyazi: 'Tüm çeşitler toplamı',
-          ikon: Icons.grass_rounded,
-          renk: AppColors.accent,
-        ),
-        KpiKarti(
-          baslik: 'Aylık Süt',
-          deger: '${(data.aylikToplamSut / 1000).toStringAsFixed(2)} ton',
-          altyazi: 'Bu ay toplam',
-          ikon: Icons.calendar_month_rounded,
-          renk: AppColors.info,
-        ),
-        KpiKarti(
-          baslik: 'Ödenecek (Alacaklı)',
-          deger: '₺${data.odenecekTutar.toStringAsFixed(0)}',
-          altyazi: data.odenecekTutar > 0 ? 'Carilere ödenecek' : 'Borç yok ✓',
-          ikon: Icons.arrow_upward_rounded,
-          renk: data.odenecekTutar > 0 ? AppColors.info : AppColors.success,
-        ),
-        KpiKarti(
-          baslik: 'Tahsil Edilecek (Borçlu)',
-          deger: '₺${data.tahsilEdilecekTutar.toStringAsFixed(0)}',
-          altyazi: data.tahsilEdilecekTutar > 0 ? 'Carilerden tahsil edilecek' : 'Alacak yok ✓',
-          ikon: Icons.arrow_downward_rounded,
-          renk: data.tahsilEdilecekTutar > 0 ? AppColors.warning : AppColors.success,
+    final kartlar = <Widget>[
+      KpiKarti(
+        baslik: 'Bugün Süt',
+        deger: '${data.bugunToplamSut.toStringAsFixed(1)} kg',
+        altyazi:
+            'Sabah ${_kg(data.bugunSabah)} · Akşam ${_kg(data.bugunAksam)}',
+        ikon: Icons.water_drop_rounded,
+        renk: AppColors.primary,
+      ),
+      KpiKarti(
+        baslik: 'Bugün Yem',
+        deger: '${data.bugunToplamYem.toStringAsFixed(1)} kg',
+        altyazi: 'Tüm çeşitler toplamı',
+        ikon: Icons.grass_rounded,
+        renk: AppColors.accent,
+      ),
+      KpiKarti(
+        baslik: 'Aylık Süt',
+        deger: '${(data.aylikToplamSut / 1000).toStringAsFixed(2)} ton',
+        altyazi: 'Bu ay toplam',
+        ikon: Icons.calendar_month_rounded,
+        renk: AppColors.info,
+      ),
+      KpiKarti(
+        baslik: 'Ödenecek (Alacaklı)',
+        deger: '₺${data.odenecekTutar.toStringAsFixed(0)}',
+        altyazi: data.odenecekTutar > 0 ? 'Carilere ödenecek' : 'Borç yok ✓',
+        ikon: Icons.arrow_upward_rounded,
+        renk: data.odenecekTutar > 0 ? AppColors.info : AppColors.success,
+      ),
+      KpiKarti(
+        baslik: 'Tahsil Edilecek (Borçlu)',
+        deger: '₺${data.tahsilEdilecekTutar.toStringAsFixed(0)}',
+        altyazi: data.tahsilEdilecekTutar > 0
+            ? 'Carilerden tahsil edilecek'
+            : 'Alacak yok ✓',
+        ikon: Icons.arrow_downward_rounded,
+        renk: data.tahsilEdilecekTutar > 0
+            ? AppColors.warning
+            : AppColors.success,
+      ),
+    ];
+    return Column(children: [
+      for (var i = 0; i < kartlar.length; i += 2) ...[
+        if (i > 0) const SizedBox(height: 12),
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(child: kartlar[i]),
+            const SizedBox(width: 12),
+            Expanded(
+                child:
+                    i + 1 < kartlar.length ? kartlar[i + 1] : const SizedBox()),
+          ]),
         ),
       ],
-    );
+    ]);
   }
 
   Widget _buildSutGrafik(BuildContext context, DashboardData data) {
@@ -163,7 +207,10 @@ class DashboardEkrani extends ConsumerWidget {
         primaryXAxis: const CategoryAxis(
           majorGridLines: MajorGridLines(width: 0),
           axisLine: AxisLine(width: 0),
-          labelStyle: TextStyle(fontSize: 11, fontFamily: 'Poppins', color: AppColors.textSecondary),
+          labelStyle: TextStyle(
+              fontSize: 11,
+              fontFamily: 'Poppins',
+              color: AppColors.textSecondary),
         ),
         primaryYAxis: const NumericAxis(isVisible: false, minimum: 0),
         series: <CartesianSeries>[
@@ -177,7 +224,10 @@ class DashboardEkrani extends ConsumerWidget {
             splineType: SplineType.natural,
             dataLabelSettings: const DataLabelSettings(
               isVisible: true,
-              textStyle: TextStyle(fontSize: 10, fontFamily: 'Poppins', color: AppColors.textSecondary),
+              textStyle: TextStyle(
+                  fontSize: 10,
+                  fontFamily: 'Poppins',
+                  color: AppColors.textSecondary),
             ),
           ),
         ],
@@ -188,7 +238,13 @@ class DashboardEkrani extends ConsumerWidget {
   Widget _buildEnCokSutListesi(BuildContext context, DashboardData data) {
     final liste = data.enCokSutVerenCariler;
     final max = liste.isEmpty ? 1.0 : liste.first.miktar;
-    final renkler = [AppColors.primary, AppColors.primaryLight, AppColors.accent, AppColors.info, AppColors.warning];
+    final renkler = [
+      AppColors.primary,
+      AppColors.primaryLight,
+      AppColors.accent,
+      AppColors.info,
+      AppColors.warning
+    ];
 
     return Container(
       decoration: BoxDecoration(
@@ -212,19 +268,41 @@ class DashboardEkrani extends ConsumerWidget {
               Row(
                 children: [
                   Container(
-                    width: 24, height: 24,
-                    decoration: BoxDecoration(color: renk.withOpacity(0.15), shape: BoxShape.circle),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                        color: renk.withOpacity(0.15), shape: BoxShape.circle),
                     child: Center(
-                      child: Text('${i + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: renk, fontFamily: 'Poppins')),
+                      child: Text('${i + 1}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: renk,
+                              fontFamily: 'Poppins')),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(item.cariAdi, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, fontFamily: 'Poppins'))),
-                  Text('${item.miktar.toStringAsFixed(1)} kg', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: renk, fontFamily: 'Poppins')),
+                  Expanded(
+                      child: Text(item.cariAdi,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Poppins'))),
+                  Text('${item.miktar.toStringAsFixed(1)} kg',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: renk,
+                          fontFamily: 'Poppins')),
                 ],
               ),
               const SizedBox(height: 8),
-              LinearProgressIndicator(value: oran, backgroundColor: AppColors.border, color: renk, borderRadius: BorderRadius.circular(4), minHeight: 6),
+              LinearProgressIndicator(
+                  value: oran,
+                  backgroundColor: AppColors.border,
+                  color: renk,
+                  borderRadius: BorderRadius.circular(4),
+                  minHeight: 6),
             ],
           );
         },
@@ -252,7 +330,8 @@ class DashboardEkrani extends ConsumerWidget {
                   dataSource: data.yemDagilimi,
                   xValueMapper: (d, _) => d.tur,
                   yValueMapper: (d, _) => d.miktar,
-                  pointColorMapper: (d, _) => _yemRenkleri[d.tur] ?? AppColors.textHint,
+                  pointColorMapper: (d, _) =>
+                      _yemRenkleri[d.tur] ?? AppColors.textHint,
                   innerRadius: '55%',
                   dataLabelSettings: const DataLabelSettings(isVisible: false),
                 ),
@@ -265,15 +344,25 @@ class DashboardEkrani extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: data.yemDagilimi.map((p) {
-                final oran = toplam > 0 ? (p.miktar / toplam * 100).toStringAsFixed(0) : '0';
+                final oran = toplam > 0
+                    ? (p.miktar / toplam * 100).toStringAsFixed(0)
+                    : '0';
                 final renk = _yemRenkleri[p.tur] ?? AppColors.textHint;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      Container(width: 10, height: 10, decoration: BoxDecoration(color: renk, shape: BoxShape.circle)),
+                      Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                              color: renk, shape: BoxShape.circle)),
                       const SizedBox(width: 6),
-                      Text('${p.tur} $oran%', style: const TextStyle(fontSize: 12, fontFamily: 'Poppins', color: AppColors.textSecondary)),
+                      Text('${p.tur} $oran%',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontFamily: 'Poppins',
+                              color: AppColors.textSecondary)),
                     ],
                   ),
                 );
@@ -282,6 +371,116 @@ class DashboardEkrani extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+final _kgFormat = NumberFormat('#,##0.#', 'tr_TR');
+String _kg(double v) => '${_kgFormat.format(v)} kg';
+
+/// Geçen ayın dönemi kapatılmamışsa hatırlatır.
+class _DonemHatirlatma extends StatelessWidget {
+  final String ay; // yyyy-MM
+  const _DonemHatirlatma({required this.ay});
+
+  @override
+  Widget build(BuildContext context) {
+    final ayAdi = DateFormat('MMMM yyyy', 'tr_TR')
+        .format(DateFormat('yyyy-MM').parse(ay));
+    return Material(
+      color: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.orange.shade200),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.push(
+            context, MaterialPageRoute(builder: (_) => const DonemEkrani())),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(children: [
+            Icon(Icons.lock_clock_outlined, color: Colors.orange.shade800),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$ayAdi dönemi henüz kapatılmadı. Hakedişleri kontrol edip dönemi kapatın.',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.orange.shade900,
+                    fontFamily: 'Poppins'),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Colors.orange.shade800),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Düzenli süt getirip bugün henüz kaydı olmayan üreticiler; dokununca
+/// o üreticinin süt girişi açılır.
+class _GelmeyenlerListesi extends StatefulWidget {
+  final List<Cari> gelmeyenler;
+  const _GelmeyenlerListesi({required this.gelmeyenler});
+
+  @override
+  State<_GelmeyenlerListesi> createState() => _GelmeyenlerListesiState();
+}
+
+class _GelmeyenlerListesiState extends State<_GelmeyenlerListesi> {
+  static const _ilkGosterilen = 6;
+  bool _hepsi = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final liste = widget.gelmeyenler;
+    final gosterilen = _hepsi ? liste : liste.take(_ilkGosterilen).toList();
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(children: [
+        for (final c in gosterilen)
+          ListTile(
+            dense: true,
+            leading: const CircleAvatar(
+              radius: 16,
+              backgroundColor: Color(0xFFFFF3E0),
+              child: Icon(Icons.schedule_rounded,
+                  size: 18, color: AppColors.warning),
+            ),
+            title: Text(c.tamAd,
+                style: const TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w500)),
+            subtitle: c.telefon != null && c.telefon!.isNotEmpty
+                ? Text(c.telefon!)
+                : null,
+            trailing: const Icon(Icons.add_circle_outline_rounded,
+                color: AppColors.primary),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => SutGirisSayfasi(cari: c)),
+            ),
+          ),
+        if (liste.length > _ilkGosterilen)
+          TextButton(
+            onPressed: () => setState(() => _hepsi = !_hepsi),
+            child: Text(
+                _hepsi ? 'Daha az göster' : 'Tümünü göster (${liste.length})'),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Text(
+            'Son 14 günde süt getirip bugün kaydı olmayan aktif üreticiler.',
+            style: TextStyle(
+                fontSize: 11, color: Colors.grey[600], fontFamily: 'Poppins'),
+          ),
+        ),
+      ]),
     );
   }
 }

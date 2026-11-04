@@ -33,6 +33,7 @@ class KpiKarti extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
@@ -46,22 +47,30 @@ class KpiKarti extends StatelessWidget {
                 ),
                 const Spacer(),
                 if (onTap != null)
-                  Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textHint),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 16, color: AppColors.textHint),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              deger,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).textTheme.titleLarge?.color,
-                fontFamily: 'Poppins',
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                deger,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).textTheme.titleLarge?.color,
+                  fontFamily: 'Poppins',
+                ),
               ),
             ),
             const SizedBox(height: 2),
             Text(
               baslik,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
@@ -70,13 +79,18 @@ class KpiKarti extends StatelessWidget {
             ),
             if (altyazi != null) ...[
               const SizedBox(height: 4),
-              Text(
-                altyazi!,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: renk,
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w500,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  altyazi!,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: renk,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -106,17 +120,20 @@ class BolumBasligi extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
         children: [
-          Text(
-            baslik,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-              fontFamily: 'Poppins',
-              letterSpacing: 0.5,
+          Expanded(
+            child: Text(
+              baslik,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                fontFamily: 'Poppins',
+                letterSpacing: 0.5,
+              ),
             ),
           ),
-          const Spacer(),
           if (eylem != null)
             GestureDetector(
               onTap: onEylem,
@@ -167,7 +184,8 @@ class BosEkran extends StatelessWidget {
                 color: AppColors.primary.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(ikon, size: 48, color: AppColors.primary.withOpacity(0.5)),
+              child: Icon(ikon,
+                  size: 48, color: AppColors.primary.withOpacity(0.5)),
             ),
             const SizedBox(height: 20),
             Text(
@@ -305,7 +323,8 @@ class AramaCubugu extends StatelessWidget {
             color: AppColors.textHint,
             fontSize: 14,
           ),
-          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textSecondary, size: 20),
+          prefixIcon: const Icon(Icons.search_rounded,
+              color: AppColors.textSecondary, size: 20),
           suffixIcon: controller.text.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18),
@@ -319,7 +338,8 @@ class AramaCubugu extends StatelessWidget {
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
       ),
     );
