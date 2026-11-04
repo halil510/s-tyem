@@ -110,7 +110,7 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 
 ## Sıradaki işler (öneri sırası)
 
-- [ ] GitHub deposunu **private** oluştur, `git push -u origin master`.
+- [x] GitHub: https://github.com/halil510/s-tyem (dal: **main**). 2026-11-04 itibarıyla depo **PUBLIC** — Settings → Danger Zone → Change visibility → Private yapılmalı.
 - [ ] Sabit ana şifre konusunu çöz (bkz. Açık riskler 1).
 - [ ] Yem girişi için de "aynı gün" uyarısı / düzenleme (yem çoklu teslimata izin veriyor, bilinçli).
 - [ ] Cari ekstre ekranında denetim geçmişini (kim ne değiştirdi) gösteren bir sekme.
