@@ -54,6 +54,12 @@
 13. **Her dağıtılan APK'da `pubspec.yaml` sürümünün `+N` kısmı artırılır** (versionCode). Telefondaki
     uygulamayla AYNI imza anahtarı kullanılır; yoksa "güncelle" yerine "yüklenmedi" çıkar ve veri kaybı olur.
     Bluetooth izni yalnız `PermissionHelper.bluetoothIzinleri()` ile istenir.
+14. **İmza anahtarı (2026-11-04'ten itibaren):** paket adı `com.sutyem.pro` (DEĞİŞTİRME). Tüm APK'lar (debug +
+    release) `~/.sutyem/sutyem-release.jks` ile imzalanır; şifreler `~/.sutyem/key.properties` içinde
+    (ya da `android/key.properties`). **Depo HERKESE AÇIK → bu iki dosya ASLA git'e girmez** (`.gitignore`).
+    Her bilgisayarda (ev + işyeri) `C:\Users\<kullanıcı>\.sutyem\` klasörü aynı olmalı; klasör yoksa
+    derleme bilerek durur. Anahtar kaybolursa telefondaki uygulamalar bir daha GÜNCELLENEMEZ →
+    klasörün en az iki yedeği tutulur (USB + bulut). Sertifika: `CN=SUTYEM PRO, O=SUTYEM, C=TR`.
 
 ## Testler
 
@@ -448,6 +454,18 @@ Kaynak: `bakılacaklar/` klasöründeki telefon ekran görüntüleri (AHMET ALMA
   Kart listenin başında, birlikte kayar (klavye açıkken dar ekranda taşma olmasın).
 - Testler: 176/176 (geri tuşu: değişiklik yok / Vazgeç / Kaydetmeden Çık / Kaydet; toplu yem fiyatı);
   `flutter analyze` 0 error.
+
+### 2026-11-04 (18) — Kalıcı imza anahtarı + paket adı (sürüm 1.1.4+6)
+
+- Kullanıcı ev ve işyeri bilgisayarında GitHub'dan çekip derliyor → iki bilgisayarın debug anahtarı FARKLI,
+  biri diğerinin APK'sını güncelleyemezdi. Uygulama ileride başka kişilere de verilecek.
+- `~/.sutyem/sutyem-release.jks` + `key.properties` oluşturuldu (depo dışında; depo herkese açık).
+  `android/app/build.gradle.kts`: debug + release bu anahtarla; anahtar yoksa APK üretimi durur.
+- Paket adı `com.example.sut_yem_clean` → **`com.sutyem.pro`** (Play Store `com.example` kabul etmez).
+  Telefondaki eski deneme uygulaması bir kez silinip yenisi kurulur (deneme verisi; gerekirse JSON yedekle taşınır).
+- `pubspec.yaml`'daki `assets/templates/` kaldırıldı: boş klasör git'e girmediği için GitHub'dan indirilen
+  bilgisayarda `flutter build apk` "unable to find directory entry" ile duruyordu; kodda kullanılmıyordu.
+- Doğrulandı: `app-release.apk` → `com.sutyem.pro`, versionCode 6, sertifika SHA-256 `9E:B0:EA:…:52:8D` = anahtar.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 
