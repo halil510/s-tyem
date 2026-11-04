@@ -47,6 +47,13 @@ class MigrationRunner {
     MigrationV8SutGunlukTekil(),
   ]..sort((a, b) => a.version.compareTo(b.version));
 
+  /// Bu örneğin uygulayacağı migration listesi. Uygulamada daima [_all];
+  /// testlerde hatalı bir migration enjekte etmek için değiştirilebilir.
+  final List<Migration> _liste;
+
+  MigrationRunner({@visibleForTesting List<Migration>? migrations})
+      : _liste = migrations ?? _all;
+
   /// Şu anki en güncel şema versiyonu (uygulamanın "hedef" versiyonu).
   static int get targetVersion =>
       _all.isEmpty ? 0 : _all.map((m) => m.version).reduce((a, b) => a > b ? a : b);
@@ -62,7 +69,7 @@ class MigrationRunner {
     await _ensureMigrationLogTable(db);
 
     final current = await currentVersion(db);
-    final pending = _all.where((m) => m.version > current).toList()
+    final pending = _liste.where((m) => m.version > current).toList()
       ..sort((a, b) => a.version.compareTo(b.version));
 
     if (pending.isEmpty) {

@@ -27,6 +27,8 @@ class _SplashVeGuvenlikState extends State<SplashVeGuvenlik>
   String _durum = 'Veritabanı hazırlanıyor...';
   bool _hataVar = false;
   String _hataMetni = '';
+  String _hataBaslik = '';
+  String _hataAciklama = '';
   bool _animasyonBasladi = false;
 
   @override
@@ -49,12 +51,37 @@ class _SplashVeGuvenlikState extends State<SplashVeGuvenlik>
       setState(() => _durum = 'Veritabanı açılıyor...');
       await AppDatabase.instance.database;
       setState(() => _durum = 'Hazır');
-    } catch (e, stack) {
-      setState(() {
-        _hataVar = true;
-        _hataMetni = 'Veritabanı hatası:\n$e\n\n$stack';
-      });
+    } on VeritabaniGuncellemeHatasi catch (e) {
+      _hataGoster(
+        baslik: 'Veritabanı Güncellenemedi',
+        aciklama: 'Verileriniz SİLİNMEDİ, olduğu gibi duruyor.\n'
+            'Uygulamayı kapatıp tekrar açın. Sorun sürerse aşağıdaki '
+            'mesajı kopyalayıp geliştiriciye iletin.',
+        detay: '$e\n\n${e.yigin ?? ''}',
+      );
       return;
+    } on VeritabaniAcilisHatasi catch (e) {
+      _hataGoster(
+        baslik: 'Veritabanı Açılamadı',
+        aciklama: 'Verilerinize dokunulmadı. Telefonda yer kalmamış olabilir '
+            'ya da dosya başka bir işlem tarafından kullanılıyor olabilir. '
+            '"Tekrar Dene"ye basın.',
+        detay: '$e\n\n${e.yigin ?? ''}',
+      );
+      return;
+    } catch (e, stack) {
+      _hataGoster(
+        baslik: 'Uygulama Başlatılamadı',
+        aciklama: 'Aşağıdaki hata mesajını geliştiriciye iletiniz.',
+        detay: 'Veritabanı hatası:\n$e\n\n$stack',
+      );
+      return;
+    }
+
+    final kurtarma = AppDatabase.instance.kurtarmaYedegi;
+    if (kurtarma != null && mounted) {
+      await _kurtarmaBildir(kurtarma);
+      AppDatabase.instance.kurtarmaBildirildi();
     }
 
     await Future.delayed(const Duration(milliseconds: 800));
@@ -84,6 +111,64 @@ class _SplashVeGuvenlikState extends State<SplashVeGuvenlik>
     if (mounted) context.go(AppRoutes.main);
   }
 
+  void _hataGoster({
+    required String baslik,
+    required String aciklama,
+    required String detay,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _hataVar = true;
+      _hataBaslik = baslik;
+      _hataAciklama = aciklama;
+      _hataMetni = detay;
+    });
+  }
+
+  void _tekrarDene() {
+    setState(() {
+      _hataVar = false;
+      _durum = 'Veritabanı hazırlanıyor...';
+    });
+    _baslat();
+  }
+
+  /// Bozuk veritabanı kenara alınıp yenisi kurulduysa kullanıcı mutlaka
+  /// bilmeli: aksi halde verilerinin "kaybolduğunu" sanar.
+  Future<void> _kurtarmaBildir(String eskiDosya) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 40),
+        title: const Text('Veritabanı Bozuk Bulundu'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Telefondaki veritabanı dosyası okunamadı. Eski dosya SİLİNMEDİ, '
+                'kenara alındı ve uygulama boş bir veritabanıyla açılıyor.\n\n'
+                'Verilerinizi geri getirmek için Menü → Yedekleme ekranından '
+                'son yedeğinizi geri yükleyin.',
+              ),
+              const SizedBox(height: 12),
+              const Text('Eski dosya:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SelectableText(eskiDosya, style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Anladım'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
@@ -93,7 +178,12 @@ class _SplashVeGuvenlikState extends State<SplashVeGuvenlik>
   @override
   Widget build(BuildContext context) {
     if (_hataVar) {
-      return HataSayfasi(hataMesaji: _hataMetni);
+      return HataSayfasi(
+        baslik: _hataBaslik,
+        aciklama: _hataAciklama,
+        hataMesaji: _hataMetni,
+        onTekrarDene: _tekrarDene,
+      );
     }
 
     return Scaffold(

@@ -3,7 +3,19 @@ import 'package:flutter/services.dart';
 
 class HataSayfasi extends StatelessWidget {
   final String hataMesaji;
-  const HataSayfasi({super.key, required this.hataMesaji});
+  final String baslik;
+  final String aciklama;
+
+  /// Verilirse "Kapat" yerine "Tekrar Dene" düğmesi gösterilir.
+  final VoidCallback? onTekrarDene;
+
+  const HataSayfasi({
+    super.key,
+    required this.hataMesaji,
+    this.baslik = 'Uygulama Başlatılamadı',
+    this.aciklama = 'Aşağıdaki hata mesajını geliştiriciye iletiniz.',
+    this.onTekrarDene,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -24,15 +36,16 @@ class HataSayfasi extends StatelessWidget {
                 child: const Icon(Icons.error_outline, size: 56, color: Colors.red),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Uygulama Başlatılamadı',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
+              Text(
+                baslik,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Aşağıdaki hata mesajını geliştiriciye iletiniz.',
+              Text(
+                aciklama,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 13),
+                style: const TextStyle(color: Colors.black87, fontSize: 14),
               ),
               const SizedBox(height: 20),
 
@@ -74,16 +87,13 @@ class HataSayfasi extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        // Uygulamayı yeniden başlat
-                        SystemNavigator.pop();
-                      },
+                      onPressed: onTekrarDene ?? () => SystemNavigator.pop(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
                       ),
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Kapat'),
+                      icon: Icon(onTekrarDene == null ? Icons.close : Icons.refresh, size: 16),
+                      label: Text(onTekrarDene == null ? 'Kapat' : 'Tekrar Dene'),
                     ),
                   ),
                 ],

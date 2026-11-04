@@ -42,7 +42,7 @@
 ## Testler
 
 ```bash
-flutter test          # 57 test — hepsi geçmeli
+flutter test          # 63 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -56,6 +56,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/cari_hesap_test.dart` | Bakiye/ekstre hesabı, fiyat devralma, önbellek yenileme |
 | `test/widget_test.dart` | Gerçek ekranlar: Hızlı Süt Girişi, Süt Ekle, terazi, ödeme formu |
 | `test/data/supabase_sema_test.dart` | Her SQLite tablo/sütunu Supabase SQL dosyasında var mı |
+| `test/data/app_database_test.dart` | Gerçek dosyada açılış: migration hatası veriyi silmez, bozuk dosya kenara alınır |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -112,6 +113,24 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
   bir migration hata verirse canlı veritabanı yedeklenip SİLİNİYOR, uygulama boş açılıyor
   (yedek dosyası `sut_yem_backup_*.db`, kullanıcıya söylenmiyor). Plan madde A1.
 
+### 2026-11-04 (3) — A1: veritabanı açılışı güvenli hale getirildi
+
+- `AppDatabase` yeniden yazıldı (`lib/core/database/app_database.dart`):
+  - Migration hatası → `VeritabaniGuncellemeHatasi`; dosyaya dokunulmaz, veri yerinde.
+  - Kilit / disk dolu / izin hatası → `VeritabaniAcilisHatasi`; dosyaya dokunulmaz.
+  - Yalnız gerçek bozulma (SQLite "malformed"/"not a database", `PRAGMA quick_check` ≠ ok)
+    → dosya **silinmez**, `sut_yem_bozuk_<zaman>.db` adıyla kenara alınır (-wal/-shm dahil),
+    yeni boş DB kurulur, `kurtarmaYedegi` dolar. Kenara alma başarısızsa yeni DB kurulmaz.
+  - Aynı anda gelen `database` çağrıları tek açılışı paylaşır; hata sonrası yeniden denenebilir.
+  - Test için `AppDatabase.test(factory:, klasor:, migrationRunner:)`;
+    `MigrationRunner(migrations: [...])` ile hatalı migration enjekte edilebilir.
+- Açılış ekranı: hata türüne göre anlaşılır Türkçe mesaj + "Tekrar Dene";
+  bozuk dosya kenara alındıysa "Veritabanı Bozuk Bulundu" diyaloğu (eski dosya yolu, yedekten geri yükle önerisi).
+- `HataSayfasi`: `baslik`, `aciklama`, `onTekrarDene` parametreleri.
+- `.db` dosyasından geri yüklemede eski `-wal/-shm/-journal` dosyaları temizleniyor.
+- Supabase SQL: şema değişmedi, güncelleme gerekmedi.
+- Testler: 63/63 geçti; `flutter analyze` 0 error.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Sabit ana şifre:** `lib/utils/app_locker.dart` içinde `_defaultMasterPassword`
@@ -129,7 +148,7 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 ### Profesyonelleşme planı (kullanıcı onayı bekleniyor)
 
 **A. Altyapı (önce)**
-- [ ] A1. Migration hatasında veritabanını silme; yalnız gerçek bozulmada sıfırla, kullanıcıya hata ekranı göster.
+- [x] A1. Migration hatasında veritabanı silinmiyor (2026-11-04). Ayrıntı: oturum günlüğü (3).
 - [ ] A2. İki terazi ekranını (`terazi_baglanti_ekrani` + `_pro`) teke indir.
 - [ ] A3. İki fiyat sistemi (`fiyatlar` genel / `cari_fiyatlar`) — "Genel Fiyat Geçmişi" bakiyeyi etkilemiyor; sadeleştir.
 - [ ] A4. Sabit ana şifre → ilk kurulumda belirlenen şifre.

@@ -307,6 +307,12 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     if (await mevcutDb.exists()) {
       await mevcutDb.delete();
     }
+    // Eski veritabanına ait günlük dosyaları yeni dosyaya uygulanırsa
+    // onu bozar; geri yüklemeden önce temizlenir.
+    for (final ek in const ['-wal', '-shm', '-journal']) {
+      final f = File('${mevcutDb.path}$ek');
+      if (await f.exists()) await f.delete();
+    }
 
     await dbFile.copy(mevcutDb.path);
     _showSnack('✅ Veritabanı başarıyla geri yüklendi');
