@@ -18,7 +18,6 @@ import 'package:intl/intl.dart';
 import '../services/toplu_mesaj_servisi.dart';
 import 'cari/cari_dialoglari.dart';
 import 'cari/cari_duzenle.dart';
-import '../features/cari/cari_excel_ekrani.dart';
 
 class CariListesi extends ConsumerStatefulWidget {
   const CariListesi({super.key});
@@ -264,24 +263,11 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Excel'),
+        // Excel'den cari içeri alma üst sağdaki ⋮ menüsüne taşındı.
+        title: const Text('Excel\'e Aktar'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: Icon(Icons.upload_file_rounded, color: Colors.green[700]),
-              title: const Text('Excel\'den Cari İçeri Al'),
-              subtitle: const Text('İsim listesinden cari oluştur'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final eklendi = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CariExcelIceAktarmaEkrani()),
-                );
-                if (eklendi == true) await _verileriYukle();
-              },
-            ),
-            const Divider(height: 8),
             ListTile(
               leading: const Icon(Icons.download),
               title: const Text('Süt Raporu'),

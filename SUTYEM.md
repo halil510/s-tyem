@@ -55,7 +55,7 @@
 ## Testler
 
 ```bash
-flutter test          # 152 test — hepsi geçmeli
+flutter test          # 161 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -82,6 +82,8 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/cari_excel_test.dart` | Excel'den cari: rapor biçimi, ayrı Ad/Soyad/Telefon, "Cari Kodu" tuzağı, başlıksız, tekrar, Türkçe İ/ı, ekran akışı |
 | `test/akis_test.dart` | UYGULAMA AKIŞI (AnaEkran): Süt sekmesinde girilen süt → Cariler listesi + detay; yeni/içe alınan cari tüm açık sekmelere düşer; Türkçe arama; Ödemelerde pasif alacaklı |
 | `test/ekran_tarama_test.dart` | TÜM EKRANLAR 360 px'de gerçekçi veriyle açılır (taşma/hata yok); alt panel yazıları; boş veritabanı |
+| `test/features/yazici_fiyat_menu_test.dart` | Wi-Fi (TCP) fiş yazdırma, ulaşılamayan yazıcı, kayıtlı yazıcı kilidi, tümüne aynı süt fiyatı, ⋮ menüsü |
+| `test/data/fiyat_toplu_test.dart` | Toplu ay fiyatı (tek sorgu) = eski cari-başına yöntem |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -391,6 +393,26 @@ alıyordu → yeni eklenen / Excel'den alınan cari, uygulama yeniden açılana 
   permission_handler 13, excel 4, share_plus 13) YAPILMADI — kırıcı değişiklik; ayrı iş.
 - Telefon bağlı değildi (`adb devices` boş) → canlı çalıştırma yapılamadı.
 - Testler: 152/152; `flutter analyze` 0 error.
+
+### 2026-11-04 (15) — Wi-Fi fiş yazıcısı, tümüne aynı süt fiyatı, menü düzeni (sürüm 1.1.1+3)
+
+- **Wi-Fi / ağ fiş yazıcısı:** `FisAyarlari.baglanti` (bluetooth | wifi), `wifiAdres`, `wifiPort` (9100).
+  `TermalYaziciServisi` ağda doğrudan TCP (ESC/POS) ile basar; `wifiTest` kâğıt harcamadan bağlantıyı dener.
+  Ulaşılamayan yazıcıda anlaşılır Türkçe hata ("aynı Wi-Fi ağında mı, IP doğru mu"); aynı anda tek fiş.
+  ("Bulut" yazıcı yok — yazıcı aynı yerel ağda olmalı. Yazıcıya modemden sabit IP verilmesi önerilir.)
+- **Kayıtlı yazıcı KİLİTLİ:** ayar ekranında kayıtlıysa yeşil "Kayıtlı ✓" kartı; değiştirmek için "Değiştir" + onay.
+  Wi-Fi'de "Test Et ve Kaydet": test geçmezse kaydedilmez. Ekran tekrar açılınca yazıcı aynen durur.
+- **Süt Fiyatları → "Tüm carilere aynı fiyat"**: tek fiyat girilir, "Tümüne Uygula" tüm alanları doldurur;
+  veritabanına ancak "Kaydet" ile yazılır (yanlışlıkla toplu fiyat kaydı olmasın). Bildirimde KAYDET kısayolu.
+- **Excel'den cari içeri alma** Cariler ekranındaki Excel diyalogundan kaldırıldı → üst sağ **⋮ menüsü**.
+- **Taşma hataları:** ⋮ menüsündeki uzun yazılar (Dönem Kapanışı & Hakediş, Aylık Hesaplama & Rapor…)
+  dar ekranda/büyük yazıda taşıyordu → tüm menü öğeleri `_menuOgesi` ile; yazıcı ayar düğmeleri `OverflowBar`.
+  Ekran taramasına "⋮ menüsü dar ekranda açılır" eklendi.
+- **Performans:** `getAyFiyatlariHepsi` cari başına 2 sorgu yapıyordu (100 cari = 200) → TEK sorgu;
+  eski yöntemle birebir aynı sonuç testi (`test/data/fiyat_toplu_test.dart`).
+- Süt fiyat ekranında yükleme sonrası `mounted` kontrolü.
+- Testler: 161/161 (`test/features/yazici_fiyat_menu_test.dart`: gerçek TCP soketiyle Wi-Fi yazdırma,
+  ulaşılamayan yazıcı, kilitli yazıcı akışı, tümüne aynı fiyat, menü yeri); `flutter analyze` 0 error.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 

@@ -27,6 +27,8 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
 
   // Düzenleme için controller'lar
   final Map<int, TextEditingController> _controllers = {};
+  final _topluCtrl = TextEditingController();
+  String? _topluHata;
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     for (final c in _controllers.values) {
       c.dispose();
     }
+    _topluCtrl.dispose();
     super.dispose();
   }
 
@@ -68,6 +71,7 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
       );
     }
 
+    if (!mounted) return;
     setState(() => _yukleniyor = false);
   }
 
@@ -193,6 +197,8 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
                   ),
                 ),
 
+                if (_cariler.isNotEmpty) _topluFiyatKarti(),
+
                 // Cari listesi
                 Expanded(
                   child: _cariler.isEmpty
@@ -205,6 +211,66 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
                 ),
               ],
             ),
+    );
+  }
+
+  /// Tek fiyatı tüm carilerin alanına yazar. KAYDETMEZ: kullanıcı listeyi
+  /// görüp (gerekirse tek tek değiştirip) "Kaydet"e basar.
+  void _tumuneUygula() {
+    final fiyat = sayiCoz(_topluCtrl.text);
+    if (fiyat == null || fiyat <= 0) {
+      setState(() => _topluHata = 'Geçerli bir fiyat girin (ör. 18,50)');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _topluHata = null;
+      for (final c in _controllers.values) {
+        c.text = fiyat.toStringAsFixed(2);
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('${_cariler.length} cariye ${fiyat.toStringAsFixed(2)} ₺ yazıldı. Kaydetmeyi unutmayın.'),
+      duration: const Duration(seconds: 6),
+      action: SnackBarAction(label: 'KAYDET', onPressed: _kaydet),
+    ));
+  }
+
+  Widget _topluFiyatKarti() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[200]!),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextField(
+              key: const ValueKey('topluSutFiyati'),
+              controller: _topluCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onSubmitted: (_) => _tumuneUygula(),
+              decoration: InputDecoration(
+                labelText: 'Tüm carilere aynı fiyat',
+                suffixText: '₺/kg',
+                isDense: true,
+                errorText: _topluHata,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _kaydediliyor ? null : _tumuneUygula,
+            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)),
+            child: const Text('Tümüne\nUygula', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 

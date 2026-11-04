@@ -125,13 +125,34 @@ class CariFiyatRepository {
 
   /// Bir listedeki tüm cariler için, belirtilen ayın fiyatını getirir.
   /// O ay için tanımlı fiyat yoksa önceki aydan devralır (varsayılan).
+  /// Her cari için [ay]'ın geçerli fiyatı: o ay tanımlıysa kendisi (id'li),
+  /// değilse en son önceki ayın fiyatı bu aya taşınmış olarak (id'siz), hiç
+  /// yoksa sıfır fiyat. TEK sorgu (eskiden cari başına 2 sorgu — 100 cari = 200).
   Future<Map<int, CariFiyat>> getAyFiyatlariHepsi(List<int> cariIdleri, String ay) async {
-    final Map<int, CariFiyat> sonuc = {};
-    for (final cariId in cariIdleri) {
-      var fiyat = await getirTekil(cariId, ay);
-      fiyat ??= await oncekiAydanDevral(cariId, ay);
-      sonuc[cariId] = fiyat;
+    final istenen = cariIdleri.toSet();
+    final sonGecerli = <int, CariFiyat>{};
+    final satirlar = await db.query('cari_fiyatlar', where: 'ay <= ?', whereArgs: [ay], orderBy: 'cari_id, ay');
+    for (final m in satirlar) {
+      final f = CariFiyat.fromMap(m);
+      if (istenen.contains(f.cariId)) sonGecerli[f.cariId] = f; // ay sıralı: sonuncusu en yeni
     }
-    return sonuc;
+    return {
+      for (final id in cariIdleri)
+        id: switch (sonGecerli[id]) {
+          null => CariFiyat(cariId: id, ay: ay),
+          final f when f.ay == ay => f,
+          final f => CariFiyat(
+              cariId: id,
+              ay: ay,
+              sutFiyat: f.sutFiyat,
+              sutYemiFiyat: f.sutYemiFiyat,
+              besiYemiFiyat: f.besiYemiFiyat,
+              bBaslangicFiyat: f.bBaslangicFiyat,
+              bBuyutmeFiyat: f.bBuyutmeFiyat,
+              kuzuYemiFiyat: f.kuzuYemiFiyat,
+              tavukYemiFiyat: f.tavukYemiFiyat,
+            ),
+        },
+    };
   }
 }

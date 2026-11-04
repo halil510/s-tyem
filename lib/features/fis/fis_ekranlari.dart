@@ -129,7 +129,7 @@ class _FisOnizlemeState extends State<_FisOnizleme> {
                 if (ayar.yaziciSecili)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text('Yazıcı: ${ayar.yaziciAdi}',
+                    child: Text('Yazıcı: ${ayar.yaziciEtiketi}',
                         textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   ),
               ]),
@@ -201,6 +201,15 @@ class _FisYaziciAyarlariEkraniState extends State<FisYaziciAyarlariEkrani> {
   String? _cihazHata;
   bool _deneniyor = false;
 
+  /// Kayıtlı yazıcı varken seçim alanı KİLİTLİ; "Değiştir" ile açılır.
+  bool _degistiriliyor = false;
+  YaziciBaglantisi _taslakBaglanti = YaziciBaglantisi.bluetooth;
+  ({String ad, String adres})? _taslakBt;
+  final _ipCtrl = TextEditingController();
+  final _portCtrl = TextEditingController(text: '${FisAyarlari.varsayilanPort}');
+  String? _ipHata;
+  bool _test = false;
+
   @override
   void initState() {
     super.initState();
@@ -210,15 +219,86 @@ class _FisYaziciAyarlariEkraniState extends State<FisYaziciAyarlariEkrani> {
   @override
   void dispose() {
     _isletmeCtrl.dispose();
+    _ipCtrl.dispose();
+    _portCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _yukle() async {
     final a = await FisAyarlari.yukle();
     if (!mounted) return;
-    setState(() => _ayar = a);
+    setState(() {
+      _ayar = a;
+      _degistiriliyor = !a.yaziciSecili; // kayıtlı yazıcı yoksa seçim açık
+      _taslakBaglanti = a.baglanti;
+    });
     _isletmeCtrl.text = a.isletmeAdi;
-    await _cihazlariGetir();
+    _ipCtrl.text = a.wifiAdres ?? '';
+    _portCtrl.text = '${a.wifiPort}';
+    if (_degistiriliyor && _taslakBaglanti == YaziciBaglantisi.bluetooth) await _cihazlariGetir();
+  }
+
+  Future<void> _degistirBaslat() async {
+    final onay = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yazıcı değiştirilsin mi?'),
+        content: Text('Kayıtlı yazıcı: ${_ayar!.yaziciEtiketi}\n\n'
+            'Yeni yazıcıyı kaydedene kadar fişler bu yazıcıdan basılmaya devam eder.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Değiştir')),
+        ],
+      ),
+    );
+    if (onay != true || !mounted) return;
+    setState(() {
+      _degistiriliyor = true;
+      _taslakBt = null;
+    });
+    if (_taslakBaglanti == YaziciBaglantisi.bluetooth) await _cihazlariGetir();
+  }
+
+  int? get _port {
+    final p = int.tryParse(_portCtrl.text.trim());
+    return p != null && p > 0 && p <= 65535 ? p : null;
+  }
+
+  /// Wi-Fi: önce bağlantı denenir; ulaşılamayan yazıcı KAYDEDİLMEZ.
+  /// Bluetooth: listeden seçilen eşleşmiş yazıcı kaydedilir.
+  Future<void> _yaziciKaydet() async {
+    final a = _ayar!;
+    if (_taslakBaglanti == YaziciBaglantisi.wifi) {
+      final ip = _ipCtrl.text.trim();
+      final port = _port;
+      if (!FisAyarlari.gecerliAgAdresi(ip) || port == null) {
+        setState(() => _ipHata = 'Geçerli bir IP adresi ve port girin (ör. 192.168.1.50 : 9100)');
+        return;
+      }
+      setState(() {
+        _ipHata = null;
+        _test = true;
+      });
+      try {
+        await TermalYaziciServisi.wifiTest(ip, port);
+      } catch (e) {
+        if (mounted) setState(() => _ipHata = '$e');
+        return;
+      } finally {
+        if (mounted) setState(() => _test = false);
+      }
+      await _guncelle(a.kopyala(baglanti: YaziciBaglantisi.wifi, wifiAdres: ip, wifiPort: port));
+    } else {
+      final bt = _taslakBt;
+      if (bt == null) {
+        _mesaj('Listeden bir yazıcı seçin.', hata: true);
+        return;
+      }
+      await _guncelle(a.kopyala(baglanti: YaziciBaglantisi.bluetooth, yaziciAdres: bt.adres, yaziciAdi: bt.ad));
+    }
+    if (!mounted) return;
+    setState(() => _degistiriliyor = false);
+    _mesaj('Yazıcı kaydedildi: ${_ayar!.yaziciEtiketi}. Siz değiştirmedikçe bu yazıcı kullanılır.');
   }
 
   Future<void> _cihazlariGetir() async {
@@ -266,6 +346,127 @@ class _FisYaziciAyarlariEkraniState extends State<FisYaziciAyarlariEkrani> {
     }
   }
 
+  Widget _kayitliYaziciKarti(FisAyarlari a) => Card(
+        color: Colors.green[50],
+        child: ListTile(
+          key: const ValueKey('kayitliYazici'),
+          leading: Icon(a.baglanti == YaziciBaglantisi.wifi ? Icons.wifi_rounded : Icons.bluetooth_rounded,
+              color: Colors.green[800]),
+          title: Text(a.yaziciEtiketi, style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: const Text('Kayıtlı ✓ — siz değiştirmedikçe fişler bu yazıcıdan basılır.'),
+          trailing: TextButton(onPressed: _degistirBaslat, child: const Text('Değiştir')),
+        ),
+      );
+
+  Widget _yaziciSecimi() {
+    final wifi = _taslakBaglanti == YaziciBaglantisi.wifi;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SegmentedButton<YaziciBaglantisi>(
+            segments: const [
+              ButtonSegment(
+                  value: YaziciBaglantisi.wifi, icon: Icon(Icons.wifi_rounded), label: Text('Wi-Fi / Ağ')),
+              ButtonSegment(
+                  value: YaziciBaglantisi.bluetooth,
+                  icon: Icon(Icons.bluetooth_rounded),
+                  label: Text('Bluetooth')),
+            ],
+            selected: {_taslakBaglanti},
+            onSelectionChanged: (s) {
+              setState(() => _taslakBaglanti = s.first);
+              if (s.first == YaziciBaglantisi.bluetooth && _cihazlar.isEmpty) _cihazlariGetir();
+            },
+          ),
+          const SizedBox(height: 12),
+          if (wifi) ...[
+            const Text(
+              'Yazıcının IP adresini yazıcının ayar fişinden (genelde düğmeye basılı tutarak açılınca basılır) '
+              'ya da modem ekranından öğrenin. Telefon ve yazıcı aynı Wi-Fi ağında olmalı. '
+              'Yazıcıya modemden sabit IP verirseniz adres hiç değişmez.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  key: const ValueKey('yaziciIp'),
+                  controller: _ipCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'IP adresi', hintText: '192.168.1.50', border: OutlineInputBorder(), isDense: true),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('yaziciPort'),
+                  controller: _portCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder(), isDense: true),
+                ),
+              ),
+            ]),
+            if (_ipHata != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(_ipHata!, style: TextStyle(color: Colors.red[700], fontSize: 12)),
+              ),
+          ] else ...[
+            const Text(
+              'Yazıcıyı önce telefonun Bluetooth ayarlarından eşleştirin, sonra listeden seçin. '
+              'Fiş yazdırmak teraziyi koparmaz.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            if (_cihazlarYukleniyor)
+              const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+            else if (_cihazHata != null)
+              ListTile(leading: const Icon(Icons.error_outline, color: Colors.red), title: Text(_cihazHata!))
+            else if (_cihazlar.isEmpty)
+              const ListTile(leading: Icon(Icons.bluetooth_disabled), title: Text('Eşleştirilmiş cihaz yok'))
+            else
+              for (final c in _cihazlar)
+                RadioListTile<String>(
+                  value: c.adres,
+                  groupValue: _taslakBt?.adres,
+                  title: Text(c.ad),
+                  subtitle: Text(c.adres),
+                  secondary: const Icon(Icons.print_outlined),
+                  onChanged: (_) => setState(() => _taslakBt = c),
+                ),
+            TextButton.icon(
+              onPressed: _cihazlarYukleniyor ? null : _cihazlariGetir,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Listeyi yenile'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          // Dar ekranda düğmeler sığmazsa alt alta geçer (taşmaz).
+          OverflowBar(alignment: MainAxisAlignment.end, spacing: 8, overflowAlignment: OverflowBarAlignment.end, children: [
+            if (_ayar!.yaziciSecili)
+              TextButton(
+                onPressed: () => setState(() {
+                  _degistiriliyor = false;
+                  _ipHata = null;
+                }),
+                child: const Text('Vazgeç'),
+              ),
+            FilledButton.icon(
+              key: const ValueKey('yaziciKaydet'),
+              onPressed: _test ? null : _yaziciKaydet,
+              icon: _test
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check_rounded),
+              label: Text(wifi ? 'Test Et ve Kaydet' : 'Kaydet'),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
   UreticiFisi _denemeFisi(FisAyarlari a) => UreticiFisi(
         isletmeAdi: a.isletmeAdi,
         fisNo: 0,
@@ -294,44 +495,11 @@ class _FisYaziciAyarlariEkraniState extends State<FisYaziciAyarlariEkrani> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.all(16), children: [
               Text('Yazıcı', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 4),
-              const Text(
-                'Termal yazıcıyı önce telefonun Bluetooth ayarlarından eşleştirin; '
-                'sonra burada seçin. Fiş yazdırmak teraziyi koparmaz.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
               const SizedBox(height: 8),
-              Card(
-                child: Column(children: [
-                  if (_cihazlarYukleniyor)
-                    const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
-                  else if (_cihazHata != null)
-                    ListTile(
-                      leading: const Icon(Icons.error_outline, color: Colors.red),
-                      title: Text(_cihazHata!),
-                    )
-                  else if (_cihazlar.isEmpty)
-                    const ListTile(
-                      leading: Icon(Icons.bluetooth_disabled),
-                      title: Text('Eşleştirilmiş cihaz yok'),
-                    )
-                  else
-                    for (final c in _cihazlar)
-                      RadioListTile<String>(
-                        value: c.adres,
-                        groupValue: a.yaziciAdres,
-                        title: Text(c.ad),
-                        subtitle: Text(c.adres),
-                        secondary: const Icon(Icons.print_outlined),
-                        onChanged: (_) => _guncelle(a.kopyala(yaziciAdres: c.adres, yaziciAdi: c.ad)),
-                      ),
-                  TextButton.icon(
-                    onPressed: _cihazlarYukleniyor ? null : _cihazlariGetir,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Listeyi yenile'),
-                  ),
-                ]),
-              ),
+              if (!_degistiriliyor && a.yaziciSecili)
+                _kayitliYaziciKarti(a)
+              else
+                _yaziciSecimi(),
               const SizedBox(height: 16),
               Text('Kâğıt genişliği', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),

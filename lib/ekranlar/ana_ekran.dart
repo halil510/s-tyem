@@ -14,6 +14,7 @@ import '../ekranlar/yedekleme_ekrani.dart';
 import '../core/router/app_router.dart';
 import '../features/donem/donem_ekrani.dart';
 import '../features/fis/fis_ekranlari.dart';
+import '../features/cari/cari_excel_ekrani.dart';
 
 class AnaEkran extends StatefulWidget {
   const AnaEkran({super.key});
@@ -84,58 +85,26 @@ class _AnaEkranState extends State<AnaEkran> {
           icon: const Icon(Icons.more_vert),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           itemBuilder: (ctx) => [
-            PopupMenuItem(value: 'hizli_sut', child: Row(children: [
-              Icon(Icons.speed_rounded, color: Colors.blue[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Hızlı Süt Girişi'),
-            ])),
+            _menuOgesi('hizli_sut', Icons.speed_rounded, Colors.blue[700], 'Hızlı Süt Girişi'),
+            _menuOgesi('excel_cari', Icons.upload_file_rounded, Colors.green[700], "Excel'den Cari İçeri Al"),
             const PopupMenuDivider(),
-            PopupMenuItem(value: 'sut_fiyat', child: Row(children: [
-              Icon(Icons.water_drop, color: Colors.blue[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Süt Fiyatları'),
-            ])),
-            PopupMenuItem(value: 'yem_fiyat', child: Row(children: [
-              Icon(Icons.grass, color: Colors.green[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Yem Fiyatları'),
-            ])),
-            PopupMenuItem(value: 'fiyat_gecmisi', child: Row(children: [
-              Icon(Icons.trending_up_rounded, color: Colors.indigo[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Piyasa Fiyat Notları'),
-            ])),
-            PopupMenuItem(value: 'aylik_hesaplama', child: Row(children: [
-              Icon(Icons.calculate_outlined, color: Colors.deepPurple[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Aylık Hesaplama & Rapor'),
-            ])),
-            PopupMenuItem(value: 'donem', child: Row(children: [
-              Icon(Icons.lock_clock_outlined, color: Colors.brown[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Dönem Kapanışı & Hakediş'),
-            ])),
+            _menuOgesi('sut_fiyat', Icons.water_drop, Colors.blue[700], 'Süt Fiyatları'),
+            _menuOgesi('yem_fiyat', Icons.grass, Colors.green[700], 'Yem Fiyatları'),
+            _menuOgesi('fiyat_gecmisi', Icons.trending_up_rounded, Colors.indigo[700], 'Piyasa Fiyat Notları'),
+            _menuOgesi('aylik_hesaplama', Icons.calculate_outlined, Colors.deepPurple[700], 'Aylık Hesaplama & Rapor'),
+            _menuOgesi('donem', Icons.lock_clock_outlined, Colors.brown[700], 'Dönem Kapanışı & Hakediş'),
             const PopupMenuDivider(),
-            PopupMenuItem(value: 'terazi', child: Row(children: [
-              Icon(Icons.scale_outlined, color: Colors.teal[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Terazi Bağlantısı'),
-            ])),
-            PopupMenuItem(value: 'fis_yazici', child: Row(children: [
-              Icon(Icons.print_outlined, color: Colors.teal[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Fiş Yazıcısı'),
-            ])),
+            _menuOgesi('terazi', Icons.scale_outlined, Colors.teal[700], 'Terazi Bağlantısı'),
+            _menuOgesi('fis_yazici', Icons.print_outlined, Colors.teal[700], 'Fiş Yazıcısı'),
             const PopupMenuDivider(),
-            PopupMenuItem(value: 'yedekleme', child: Row(children: [
-              Icon(Icons.backup_outlined, color: Colors.grey[700], size: 18),
-              const SizedBox(width: 10),
-              const Text('Yedekleme'),
-            ])),
+            _menuOgesi('yedekleme', Icons.backup_outlined, Colors.grey[700], 'Yedekleme'),
           ],
           onSelected: (value) {
             if (value == 'hizli_sut') {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const HizliSutGiris()));
+            } else if (value == 'excel_cari') {
+              // İçe alınca veriDegisti → Cariler, Süt, Yem sekmeleri kendiliğinden yenilenir.
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CariExcelIceAktarmaEkrani()));
             } else if (value == 'sut_fiyat') Navigator.push(context, MaterialPageRoute(builder: (_) => const SutFiyatEkrani()));
             else if (value == 'yem_fiyat') Navigator.push(context, MaterialPageRoute(builder: (_) => const YemFiyatEkrani()));
             else if (value == 'fiyat_gecmisi') Navigator.push(context, MaterialPageRoute(builder: (_) => const FiyatYonetimEkrani()));
@@ -221,3 +190,14 @@ class _NavItem {
   final Color renk;
   const _NavItem({required this.label, required this.icon, required this.activeIcon, required this.renk});
 }
+
+/// ⋮ menü öğesi: uzun yazı (ör. "Dönem Kapanışı & Hakediş") dar ekranda ya da
+/// büyük yazı boyutunda taşmaz, kısalır.
+PopupMenuItem<String> _menuOgesi(String deger, IconData ikon, Color? renk, String yazi) => PopupMenuItem(
+      value: deger,
+      child: Row(children: [
+        Icon(ikon, color: renk, size: 18),
+        const SizedBox(width: 10),
+        Expanded(child: Text(yazi, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      ]),
+    );

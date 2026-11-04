@@ -179,6 +179,25 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
   });
 
+  testWidgets('⋮ menüsü dar ekranda taşmadan açılır', (tester) async {
+    await telefon(tester);
+    await tester.pumpWidget(uygulama(const AnaEkran()));
+    for (var i = 0; i < 30; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 15)));
+      await tester.pump();
+    }
+    await tester.tap(find.byIcon(Icons.more_vert));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    for (final oge in ['Hızlı Süt Girişi', "Excel'den Cari İçeri Al", 'Süt Fiyatları', 'Dönem Kapanışı & Hakediş', 'Fiş Yazıcısı', 'Yedekleme']) {
+      expect(find.text(oge), findsOneWidget, reason: oge);
+    }
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   testWidgets('boş veritabanında (ilk kurulum) ana ekran ve sekmeler', (tester) async {
     await telefon(tester);
     final dolu = db;
