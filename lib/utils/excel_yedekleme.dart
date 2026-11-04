@@ -5,7 +5,10 @@ import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../db/db_helper.dart';
+import '../core/database/app_database.dart';
+import '../data/repositories/cari_repository.dart';
+import '../data/repositories/sut_repository.dart';
+import '../data/repositories/yem_repository.dart';
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../models/yem_model.dart';
@@ -263,8 +266,8 @@ class _YedeklemeDialogState extends State<_YedeklemeDialog> {
   Future<void> _yedekle() async {
     setState(() => _loading = true);
 
-    final db = DBHelper();
-    final cariler = await db.getCariler();
+    final db = await AppDatabase.instance.database;
+    final cariler = await CariRepository(db).getAll();
 
     final now = DateTime.now();
     DateTime start, end;
@@ -277,12 +280,12 @@ class _YedeklemeDialogState extends State<_YedeklemeDialog> {
       end = DateTime(now.year, 12, 31);
     }
 
-    final sutler = await db.getTumSutler(
+    final sutler = await SutRepository(db).getAllInRange(
       DateFormat('yyyy-MM-dd').format(start),
       DateFormat('yyyy-MM-dd').format(end),
     );
 
-    final yemler = await db.getTumYemler(
+    final yemler = await YemRepository(db).getAllInRange(
       DateFormat('yyyy-MM-dd').format(start),
       DateFormat('yyyy-MM-dd').format(end),
     );

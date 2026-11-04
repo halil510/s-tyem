@@ -28,6 +28,9 @@
 4. Süt / yem / ödeme / fiyat / cari değiştiren her işlemden sonra
    `ref.veriDegisti()` (Riverpod ekran) ya da `veriDegistiBildir(context)`
    (düz StatefulWidget) çağır → bakiyeler, ekstre ve ana sayfa yenilenir.
+10. **Ekranlar ve provider'lar SQL yazmaz.** Veriye yalnızca `lib/data/repositories/` üzerinden
+   erişilir (istisna: kendi tablolarının sahibi `DonemServisi`). `DBHelper` kaldırıldı — geri getirme.
+   Yeni sorgu = ilgili repository'ye metot. Tarih aralığı sorgusu yazınca indeks kullandığını kontrol et.
 9. **Kapalı dönem kilidi veritabanındadır** (migration v9 tetikleyicileri). Yeni bir tarihli
    tablo eklenirse ona da tetikleyici yazılmalı. Repository yazmaları `donemKilidiyle` / `_yaz`
    ile sarılır; ekranlar `DonemKapaliHatasi` mesajını gösterir.
@@ -45,7 +48,7 @@
 ## Testler
 
 ```bash
-flutter test          # 112 test — hepsi geçmeli
+flutter test          # 122 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -68,6 +71,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/fis_test.dart` | Fiş düzeni (58/80 mm), ESC/POS baytları, Türkçe harf çevirisi/CP857, yazıcı kanalı, fiş verisi |
 | `test/features/dashboard_test.dart` | Gelmeyen üreticiler kuralı, bugün sabah/akşam/dün, buzağı yemi dilimi, dönem hatırlatması |
 | `test/dashboard_ekrani_test.dart` | Özet ekranı 360 px genişlikte taşmadan çizilir |
+| `test/data/veri_yonetimi_test.dart` | Veri yönetimi repo (sayılar, temizlik + dönem kilidi, .db doğrulama), toplu fiyat (ya hep ya hiç), tarih indeksleri sorgu planında |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -266,8 +270,30 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 - Supabase SQL: şema değişmedi.
 - Testler: 112/112; `flutter analyze` 0 error.
 
-## ⚠️ Açık riskler / karar bekleyenler
+### 2026-11-04 (10) — A6: Repository katmanı + performans
 
+- **DBHelper kaldırıldı** (`_arsiv/db_helper.dart.txt`). Kullanan 7 dosya repository'lere taşındı.
+- Yeni `VeriYonetimiRepository` (`kayitSayilari`, `yedekJson`, `yedekYukle`, `sutVeYemSil`,
+  `dbDosyasiniDogrula`) + `veriYonetimiRepositoryProvider`. Yedekleme ekranı, Bluetooth aktarımı,
+  Excel yedeği artık SQL yazmıyor.
+- `SutRepository.toplamCari`, `kayitVarMi`; `CariFiyatRepository.topluKaydet` (tek transaction).
+- Fiş (`sutFisiOlustur(SutRepository, …)`) ve Özet (dönem hatırlatması) doğrudan SQL'den kurtuldu.
+- **Migration v10:** `idx_sutler_tarih`, `idx_yemler_tarih`, `idx_odemeler_tarih`
+  (v4 indeksleri `cari_id` ile başladığından tarih-yalnız sorgular tabloyu tarıyordu). Supabase SQL güncel.
+- **Performans** (PC, 110.000 süt kaydı; telefonda kazanç daha belirgin):
+  günün kayıtları 7,64→0,65 ms (~12×), aylık cari toplamları 9,87→1,45 ms (~7×),
+  "ayda kayıt var mı" 5,69→0,27 ms (~21×); cari listesi 100 sorgu (25 ms) → 1 sorgu (~17×).
+  Fiyat ekranları: cari başına ayrı yazım (her biri ayrı disk yazımı, yarıda kalabilir) → tek transaction.
+- **Düzeltilen hatalar:**
+  1. Wi-Fi aktarımı yedek dosyasını HİÇ oluşturmuyordu (`// TODO`), karşı taraf "Dosya bulunamadı" alıyordu.
+  2. "Süt ve yem kayıtlarını temizle" kapalı dönem varken ham veritabanı hatası veriyordu; artık hiçbir şey
+     silinmez + anlaşılır mesaj; silinen satır sayısı denetim kaydına yazılır.
+  3. Cari listesi: ekrandan çıkarken yükleme bitince `setState` hatası (mounted kontrolü yoktu).
+- Testler: 122/122; `flutter analyze` 0 error.
+
+. **Wi-Fi aktarımı** yedeği yerel ağda 8080 portundan ŞİFRESİZ sunuyor: aynı Wi-Fi'daki herkes
+   `/download` adresinden tüm müşteri verisini indirebilir (aktarım ekranı açıkken). Rastgele
+   tek kullanımlık adres + aktarım bitince sunucuyu kapatma eklenmeli.
 1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
    açık şifre GitHub'daki eski commit'lerde duruyor ve depo hâlâ PUBLIC → şifre ifşa olmuş
    sayılmalı. Yapılacak: (a) depoyu private yap, (b) `dart run tool/master_sifre_ozeti.dart`
@@ -288,6 +314,7 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 - [x] A3. Aylık Rapor gerçek fiyatlarla hesaplanıyor; `fiyatlar` tablosu ekranı "Piyasa Fiyat Notları" oldu + "hesaplara girmez" bandı. Ayrıntı: oturum günlüğü (4).
 - [x] A4. Açık şifre koddan kaldırıldı (özet + isolate). **Kullanıcı yeni şifre belirlemeli** (tool/master_sifre_ozeti.dart). Ayrıntı: oturum günlüğü (5).
 - [x] A5. cari_listesi 1675→823, detay_ekrani 1094→813 satır; toplu WhatsApp hataları düzeltildi. Ayrıntı: oturum günlüğü (6).
+- [x] A6. Repository katmanı tamamlandı, DBHelper kaldırıldı, tarih indeksleri (v10), N+1 ve toplu fiyat yazımı. Ayrıntı: oturum günlüğü (10).
 
 **B. Yeni ekranlar**
 - [ ] B1. Toplama turu (sabah/akşam vardiya, üretici sırası/rota, gelmeyenler).

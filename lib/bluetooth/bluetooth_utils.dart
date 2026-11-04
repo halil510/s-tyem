@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import '../db/db_helper.dart';
+import '../core/database/app_database.dart';
+import '../data/repositories/veri_yonetimi_repository.dart';
 import '../data/yedek/yedek_servisi.dart';
 
 /// Bluetooth / Wi-Fi aktarımı için yedek dosyası oluşturma ve uygulama.
@@ -15,8 +16,8 @@ class BluetoothUtils {
   static const maksimumYedekBayt = 25 * 1024 * 1024;
 
   static Future<String> createBackupJsonFile() async {
-    final db = await DBHelper().db;
-    final bytes = utf8.encode(await YedekServisi.disaAktarJson(db));
+    final repo = VeriYonetimiRepository(await AppDatabase.instance.database);
+    final bytes = utf8.encode(await repo.yedekJson());
 
     if (bytes.length > maksimumYedekBayt) {
       throw Exception('Yedek dosyası çok büyük (${formatBytes(bytes.length)}).');
@@ -35,8 +36,8 @@ class BluetoothUtils {
   /// [YedekHatasi] fırlatır ve hiçbir şeyi silmez.
   static Future<YedekOzeti> applyBackupJsonFile(String path) async {
     final veri = YedekServisi.coz(await File(path).readAsString());
-    final db = await DBHelper().db;
-    return YedekServisi.iceAktar(db, veri, tamamenDegistir: true);
+    final repo = VeriYonetimiRepository(await AppDatabase.instance.database);
+    return repo.yedekYukle(veri, tamamenDegistir: true);
   }
 
   static bool validateBackupData(String jsonString) {

@@ -2,13 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/providers/database_provider.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/veri_surumu_provider.dart';
 import '../../../models/cari_model.dart';
 import '../../../models/sut_model.dart';
 import '../../cari_hesap/providers/cari_hesap_providers.dart'
     show tumKalanBorclarProvider;
+import '../../donem/donem_providers.dart';
 
 /// Bir günün toplam süt miktarı (haftalık grafik için).
 @immutable
@@ -168,19 +168,14 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
       aktifCariler: cariler, sonSutler: sonSutler, bugun: bugun);
 
   // Geçen ayın dönemi kapatılmamışsa hatırlat.
-  final db = await ref.watch(databaseProvider.future);
   final gecenAy =
       DateFormat('yyyy-MM').format(DateTime(bugun.year, bugun.month - 1));
-  final gecenAyHareket = await db.rawQuery(
-    'SELECT 1 FROM sutler WHERE tarih BETWEEN ? AND ? LIMIT 1',
-    ['$gecenAy-01', '$gecenAy-31'],
-  );
-  final gecenAyKapali = await db.rawQuery(
-    "SELECT 1 FROM donemler WHERE ay = ? AND durum = 'kapali'",
-    [gecenAy],
-  );
+  final donemServisi = await ref.watch(donemServisiProvider.future);
   final kapanmamisGecenAy =
-      gecenAyHareket.isNotEmpty && gecenAyKapali.isEmpty ? gecenAy : null;
+      await sutRepo.kayitVarMi('$gecenAy-01', '$gecenAy-31') &&
+              !await donemServisi.kapaliMi(gecenAy)
+          ? gecenAy
+          : null;
 
   final bugunToplamSut = aylikSutler
       .where((s) => s.tarih == bugunStr)

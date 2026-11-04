@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sutyem_pro/data/repositories/sut_repository.dart';
 import 'package:sutyem_pro/features/fis/fis_servisi.dart';
 import 'package:sutyem_pro/features/fis/uretici_fisi.dart';
 import 'package:sutyem_pro/models/cari_model.dart';
@@ -163,7 +164,7 @@ void main() {
     tearDown(() => db.close());
 
     test('o günün kaydı ve ay başından o güne toplam', () async {
-      final f = await sutFisiOlustur(db, cari: ali, tarih: '2026-11-03', isletmeAdi: 'X');
+      final f = await sutFisiOlustur(SutRepository(db), cari: ali, tarih: '2026-11-03', isletmeAdi: 'X');
       expect(f!.sabah, 20);
       expect(f.aksam, 18.5);
       expect(f.toplam, 38.5);
@@ -173,7 +174,7 @@ void main() {
     });
 
     test('kayıt yoksa null', () async {
-      expect(await sutFisiOlustur(db, cari: ali, tarih: '2026-11-02', isletmeAdi: 'X'), isNull);
+      expect(await sutFisiOlustur(SutRepository(db), cari: ali, tarih: '2026-11-02', isletmeAdi: 'X'), isNull);
     });
   });
 }

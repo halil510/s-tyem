@@ -140,9 +140,10 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
     }
     setState(() => _kaydediliyor = true);
     try {
+      final kaydedilecek = <CariFiyat>[];
       for (final cari in _cariler) {
         final mevcut = _fiyatlar[cari.id!]!;
-        await _fiyatRepo.kaydet(CariFiyat(
+        kaydedilecek.add(CariFiyat(
           cariId: cari.id!,
           ay: _ayStr,
           sutFiyat: mevcut.sutFiyat,
@@ -154,6 +155,8 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
           tavukYemiFiyat: _oku(cari.id!, 'tavukYemiFiyat', mevcut.tavukYemiFiyat),
         ));
       }
+      // Tek transaction: ya hepsi ya hiçbiri.
+      await _fiyatRepo.topluKaydet(kaydedilecek);
       ref.veriDegisti();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -61,6 +61,19 @@ class CariFiyatRepository {
 
   Future<void> kaydet(CariFiyat fiyat) => donemKilidiyle(() => _kaydet(fiyat));
 
+  /// Birçok carinin fiyatını TEK transaction'da yazar: ya hepsi ya hiçbiri
+  /// (fiyat ekranında 100 cari = tek disk yazımı; eskiden cari başına ayrı).
+  Future<void> topluKaydet(List<CariFiyat> fiyatlar) => donemKilidiyle(
+        () => db.transaction((txn) async {
+          for (final f in fiyatlar) {
+            final map = f.toMap()..remove('id');
+            final guncellenen = await txn.update('cari_fiyatlar', map,
+                where: 'cari_id = ? AND ay = ?', whereArgs: [f.cariId, f.ay]);
+            if (guncellenen == 0) await txn.insert('cari_fiyatlar', map);
+          }
+        }),
+      );
+
   Future<void> _kaydet(CariFiyat fiyat) async {
     final mevcut = await getirTekil(fiyat.cariId, fiyat.ay);
     if (mevcut != null) {

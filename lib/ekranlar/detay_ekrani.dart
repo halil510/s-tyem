@@ -12,7 +12,6 @@ import '../data/repositories/yem_repository.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import 'detay/kayit_duzenle_dialoglari.dart';
-import '../core/providers/database_provider.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/fis/fis_servisi.dart';
 
@@ -243,9 +242,9 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
 
   Future<void> _sutFisi(Sut sut) async {
     try {
-      final db = await ref.read(databaseProvider.future);
+      final repo = await ref.read(sutRepositoryProvider.future);
       final ayar = await FisAyarlari.yukle();
-      final fis = await sutFisiOlustur(db,
+      final fis = await sutFisiOlustur(repo,
           cari: widget.cari, tarih: sut.tarih.substring(0, 10), isletmeAdi: ayar.isletmeAdi);
       if (fis == null || !mounted) return;
       await fisGoster(context, fis: fis, telefon: widget.cari.telefon);

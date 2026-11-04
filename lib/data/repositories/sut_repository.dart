@@ -121,6 +121,24 @@ class SutRepository {
     };
   }
 
+  /// Bir carinin bir aralıktaki toplam sütü (tek SUM sorgusu).
+  Future<double> toplamCari(int cariId, String start, String end) async {
+    final r = await db.rawQuery(
+      'SELECT COALESCE(SUM(toplam), 0) AS t FROM $_tablo WHERE cari_id = ? AND tarih BETWEEN ? AND ?',
+      [cariId, start, end],
+    );
+    return (r.first['t'] as num? ?? 0).toDouble();
+  }
+
+  /// Aralıkta en az bir süt kaydı var mı? (tarih indeksiyle, ilk satırda durur)
+  Future<bool> kayitVarMi(String start, String end) async {
+    final r = await db.rawQuery(
+      'SELECT 1 FROM $_tablo WHERE tarih BETWEEN ? AND ? LIMIT 1',
+      [start, end],
+    );
+    return r.isNotEmpty;
+  }
+
   // ──────────────────────────────────────────
   // YAZMA
   // ──────────────────────────────────────────

@@ -2,8 +2,9 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
+import 'bluetooth_utils.dart';
 
 class WiFiTransferService {
   static HttpServer? _server;
@@ -226,13 +227,11 @@ class WiFiTransferService {
       // Önceki sunucuyu durdur
       _stopServer();
       
-      final dir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final backupPath = '${dir.path}/sut_yem_yedek_$timestamp.json';
-      
-      // Veritabanı yedeğini al
-      // TODO: DBHelper üzerinden yedek al
-      
+      // Tam yedek (tüm iş tabloları). Eskiden burada yedek HİÇ
+      // oluşturulmuyordu; olmayan bir dosya paylaşılıp karşı taraf
+      // "Dosya bulunamadı" alıyordu.
+      final backupPath = await BluetoothUtils.createBackupJsonFile();
+      if (!context.mounted) return;
       await showWiFiTransferDialog(context, backupPath);
     } catch (e) {
       _showError(context, 'Wi-Fi transfer hatası: $e');

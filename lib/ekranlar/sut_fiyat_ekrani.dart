@@ -100,6 +100,7 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     }
     setState(() => _kaydediliyor = true);
     try {
+      final kaydedilecek = <CariFiyat>[];
       for (final cari in _cariler) {
         final ctrl = _controllers[cari.id!]!;
         // KRİTİK: Alan boşsa bu cari için HİÇBİR KAYIT YAZMA. Aksi
@@ -112,7 +113,7 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
         final fiyat = sayiCoz(ctrl.text)!;
         if (fiyat <= 0) continue;
         final mevcut = _fiyatlar[cari.id!]!;
-        await _fiyatRepo.kaydet(CariFiyat(
+        kaydedilecek.add(CariFiyat(
           cariId: cari.id!,
           ay: _ayStr,
           sutFiyat: fiyat,
@@ -124,6 +125,8 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
           tavukYemiFiyat: mevcut.tavukYemiFiyat,
         ));
       }
+      // Tek transaction: ya hepsi ya hiçbiri.
+      await _fiyatRepo.topluKaydet(kaydedilecek);
       ref.veriDegisti();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

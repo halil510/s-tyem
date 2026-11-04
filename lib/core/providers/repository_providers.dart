@@ -7,6 +7,7 @@ import '../../data/repositories/yem_repository.dart';
 import '../../data/repositories/cari_odeme_repository.dart';
 import '../../data/repositories/fiyat_repository.dart';
 import '../../data/repositories/terazi_cihaz_repository.dart';
+import '../../data/repositories/veri_yonetimi_repository.dart';
 
 /// ─────────────────────────────────────────────────────────────
 /// REPOSITORY PROVIDER'LARI
@@ -51,4 +52,9 @@ final cariFiyatRepositoryProvider = FutureProvider<CariFiyatRepository>((ref) as
 final teraziCihazRepositoryProvider = FutureProvider<TeraziCihazRepository>((ref) async {
   final db = await ref.watch(databaseProvider.future);
   return TeraziCihazRepository(db);
+});
+
+final veriYonetimiRepositoryProvider = FutureProvider<VeriYonetimiRepository>((ref) async {
+  final db = await ref.watch(databaseProvider.future);
+  return VeriYonetimiRepository(db);
 });

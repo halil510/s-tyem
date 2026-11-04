@@ -7,7 +7,9 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../utils/excel_yedekleme.dart';
-import '../db/db_helper.dart';
+import '../core/database/app_database.dart';
+import '../data/repositories/donem_kilidi.dart';
+import '../data/repositories/veri_yonetimi_repository.dart';
 import '../bluetooth/bluetooth_cihaz_secme.dart';
 import '../bluetooth/wifi_transfer_service.dart';
 import '../utils/app_locker.dart';
@@ -68,24 +70,14 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     );
   }
 
+  /// Toplu veri işlemleri repository üzerinden (ekran SQL yazmaz).
+  Future<VeriYonetimiRepository> get _veriRepo async =>
+      VeriYonetimiRepository(await AppDatabase.instance.database);
+
   Future<Map<String, int>> _getStatistics() async {
     try {
-      final db = await DBHelper().db;
-      final sutCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM sutler')
-      ) ?? 0;
-      final yemCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM yemler')
-      ) ?? 0;
-      final cariCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM cariler')
-      ) ?? 0;
-      
-      return {
-        'sut': sutCount,
-        'yem': yemCount,
-        'cari': cariCount,
-      };
+      final s = await (await _veriRepo).kayitSayilari();
+      return {'sut': s.sut, 'yem': s.yem, 'cari': s.cari};
     } catch (e) {
       return {'sut': 0, 'yem': 0, 'cari': 0};
     }
@@ -276,7 +268,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     }
 
     _showSnack('Veritabanına uygulanıyor...');
-    final ozet = await YedekServisi.iceAktar(await DBHelper().db, veri);
+    final ozet = await (await _veriRepo).yedekYukle(veri);
     if (mounted) veriDegistiBildir(context);
     _showSnack('✅ Yedek geri yüklendi: ${ozet.toplam} kayıt');
   }
@@ -290,9 +282,9 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     // uygulamanın veritabanı olduğunu doğrula. Aksi halde yanlış bir .db
     // seçildiğinde uygulama açılışta onu "bozuk" sayıp boş veritabanıyla
     // başlar ve kullanıcı tüm verilerinin gittiğini sanır.
-    await _dbDosyasiniDogrula(dbFile);
+    await VeriYonetimiRepository.dbDosyasiniDogrula(dbFile.path);
 
-    await DBHelper().closeDatabase();
+    await AppDatabase.instance.close();
 
     final dbPath = await getDatabasesPath();
     final mevcutDb = File(p.join(dbPath, 'sut_yem.db'));
@@ -317,28 +309,6 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     await dbFile.copy(mevcutDb.path);
     _showSnack('✅ Veritabanı başarıyla geri yüklendi');
     _showRestartDialog();
-  }
-
-  Future<void> _dbDosyasiniDogrula(File dbFile) async {
-    Database? aday;
-    try {
-      aday = await openDatabase(dbFile.path, readOnly: true, singleInstance: false);
-      final tablolar = (await aday.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'"))
-          .map((r) => r['name'] as String)
-          .toSet();
-      final eksik = ['cariler', 'sutler', 'yemler'].where((t) => !tablolar.contains(t));
-      if (eksik.isNotEmpty) {
-        throw Exception('Seçilen dosya bir Süt-Yem veritabanı değil (eksik tablo: ${eksik.join(', ')})');
-      }
-      final butunluk = await aday.rawQuery('PRAGMA quick_check');
-      if (butunluk.isEmpty || butunluk.first.values.first != 'ok') {
-        throw Exception('Seçilen veritabanı dosyası bozuk');
-      }
-    } on DatabaseException {
-      throw Exception('Seçilen dosya okunamadı; geçerli bir veritabanı değil');
-    } finally {
-      await aday?.close();
-    }
   }
 
   Future<bool> _checkImportPermission() async {
@@ -468,17 +438,16 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   Future<void> _temizlemeIslemi() async {
     setState(() => _isProcessing = true);
     try {
-      final dbClient = await DBHelper().db;
-      await dbClient.transaction((txn) async {
-        await txn.delete('sutler');
-        await txn.delete('yemler');
-      });
+      final silinen = await (await _veriRepo).sutVeYemSil();
       if (mounted) veriDegistiBildir(context);
-      _showSnack('✅ Süt ve Yem kayıtları başarıyla temizlendi\n(Cariler korundu)');
+      _showSnack('✅ ${silinen.sut} süt ve ${silinen.yem} yem kaydı temizlendi\n(Cariler korundu)');
+    } on DonemKapaliHatasi {
+      _showSnack('❌ Kapatılmış dönemlerde kayıt var; hiçbir kayıt silinmedi. '
+          'Önce ilgili dönemleri yeniden açmanız gerekir.');
     } catch (e) {
       _showSnack('❌ Hata oluştu: $e');
     }
-    setState(() => _isProcessing = false);
+    if (mounted) setState(() => _isProcessing = false);
   }
 
   Future<void> _sifreDegistir() async {

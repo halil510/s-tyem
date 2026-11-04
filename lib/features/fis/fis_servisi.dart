@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite/sqflite.dart';
 
+import '../../data/repositories/sut_repository.dart';
 import '../../models/cari_model.dart';
 import 'uretici_fisi.dart';
 
@@ -112,29 +112,23 @@ class TermalYaziciServisi {
 
 /// Bir carinin bir günlük süt kaydından fiş üretir; o gün kayıt yoksa null.
 Future<UreticiFisi?> sutFisiOlustur(
-  DatabaseExecutor db, {
+  SutRepository repo, {
   required Cari cari,
   required String tarih, // yyyy-MM-dd
   required String isletmeAdi,
   DateTime? simdi,
 }) async {
-  final kayit = await db.query('sutler',
-      where: 'cari_id = ? AND tarih = ?', whereArgs: [cari.id, tarih], limit: 1);
-  if (kayit.isEmpty) return null;
-  final ayBasi = '${tarih.substring(0, 7)}-01';
-  final ay = await db.rawQuery(
-    'SELECT COALESCE(SUM(toplam), 0) AS t FROM sutler WHERE cari_id = ? AND tarih BETWEEN ? AND ?',
-    [cari.id, ayBasi, tarih],
-  );
-  final k = kayit.first;
+  final kayit = await repo.getGunluk(cari.id!, tarih);
+  if (kayit == null) return null;
+  final buAy = await repo.toplamCari(cari.id!, '${tarih.substring(0, 7)}-01', tarih);
   return UreticiFisi(
     isletmeAdi: isletmeAdi,
-    fisNo: k['id'] as int?,
+    fisNo: kayit.id,
     tarih: DateFormat('yyyy-MM-dd').parse(tarih),
     basimZamani: simdi ?? DateTime.now(),
     ureticiAdi: '${cari.ad} ${cari.soyad}',
-    sabah: (k['sabah'] as num?)?.toDouble() ?? 0,
-    aksam: (k['aksam'] as num?)?.toDouble() ?? 0,
-    buAyKg: (ay.first['t'] as num?)?.toDouble() ?? 0,
+    sabah: kayit.sabah,
+    aksam: kayit.aksam,
+    buAyKg: buAy,
   );
 }

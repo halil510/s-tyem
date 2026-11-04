@@ -7,7 +7,6 @@ import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../utils/tarih_secici.dart';
 import '../features/donem/donem_kapali_bandi.dart';
-import '../core/providers/database_provider.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/fis/fis_servisi.dart';
 import '../utils/sayi_format.dart';
@@ -260,9 +259,9 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
   /// Kaydedilen günün fişini önizletir (yazdır / WhatsApp).
   Future<void> _fisGoster() async {
     try {
-      final db = await ref.read(databaseProvider.future);
+      final repo = await ref.read(sutRepositoryProvider.future);
       final ayar = await FisAyarlari.yukle();
-      final fis = await sutFisiOlustur(db, cari: widget.cari, tarih: _tarihStr, isletmeAdi: ayar.isletmeAdi);
+      final fis = await sutFisiOlustur(repo, cari: widget.cari, tarih: _tarihStr, isletmeAdi: ayar.isletmeAdi);
       if (fis == null || !mounted) return;
       await fisGoster(context, fis: fis, telefon: widget.cari.telefon);
     } catch (e) {

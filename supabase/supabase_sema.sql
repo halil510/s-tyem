@@ -1,8 +1,8 @@
 -- =====================================================================
 -- SÜTYEM PRO — Supabase (PostgreSQL) şeması
 -- =====================================================================
--- Kaynak: lib/core/database/migrations/ (SQLite, şu an v9)
--- Bu dosyanın karşılık geldiği yerel şema sürümü: v9
+-- Kaynak: lib/core/database/migrations/ (SQLite, şu an v10)
+-- Bu dosyanın karşılık geldiği yerel şema sürümü: v10
 --
 -- GENEL KURAL: Uygulamaya yeni tablo / sütun / index eklendiğinde
 -- (yeni migration yazıldığında) bu dosya AYNI commit'te güncellenir.
@@ -99,6 +99,7 @@ create table if not exists public.yemler (
   foreign key (kullanici_id, cari_id) references public.cariler (kullanici_id, id) on delete cascade
 );
 create index if not exists idx_yemler_cari_tarih on public.yemler (kullanici_id, cari_id, tarih);
+create index if not exists idx_yemler_tarih on public.yemler (kullanici_id, tarih);
 
 -- ---------------------------------------------------------------------
 -- fiyatlar  (v1) — eski, cariye bağlı olmayan genel fiyat geçmişi
@@ -142,6 +143,7 @@ create table if not exists public.cari_odemeler (
 );
 create index if not exists idx_odemeler_cari_tarih  on public.cari_odemeler (kullanici_id, cari_id, tarih);
 create index if not exists idx_odemeler_islem_turu  on public.cari_odemeler (kullanici_id, islem_turu);
+create index if not exists idx_odemeler_tarih       on public.cari_odemeler (kullanici_id, tarih);
 
 -- ---------------------------------------------------------------------
 -- cari_fiyatlar  (v3) — cari bazlı aylık fiyat; o ay yoksa önceki ay geçerli
@@ -360,6 +362,7 @@ end $$;
 -- v7  cariler.aktif, cariler.not_metni, cari_odemeler.vade_tarihi
 -- v8  sutler UNIQUE (cari_id, tarih); tarihler yyyy-MM-dd
 -- v9  donemler, donem_hakedisleri, kapalı dönem kilidi (DONEM_KAPALI)
+-- v10 tarih indeksleri: sutler(tarih) [zaten vardı], yemler(tarih), cari_odemeler(tarih)
 -- 2026-11-04  Dosya ilk kez oluşturuldu (yerel şema v8).
 -- 2026-11-04  v9 eklendi (dönem kapanışı / hakediş).
 -- =====================================================================

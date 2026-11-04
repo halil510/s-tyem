@@ -73,7 +73,11 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       // Carileri getir
       final liste = await _cariRepo.getAll(sadeceAktif: true);
       
-      // Her cari için bu ayki süt toplamını hesapla
+      // Bu ayki süt toplamları: TEK gruplu sorgu (eskiden cari başına ayrı sorgu).
+      final aylik = await _sutRepo.toplamByCariInRange(
+        DateFormat('yyyy-MM-dd').format(_ayBaslangic),
+        DateFormat('yyyy-MM-dd').format(_ayBitis),
+      );
       _aylikSutToplamlari = {};
       _hayvanTuruneGoreToplamSut = {
         'İnek': 0.0,
@@ -85,15 +89,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
         double toplamSut = 0.0;
         
         if (cari.id != null) {
-          // Bu ayki süt kayıtlarını getir
-          final sutler = await _sutRepo.getByCari(
-            cari.id!,
-            DateFormat('yyyy-MM-dd').format(_ayBaslangic),
-            DateFormat('yyyy-MM-dd').format(_ayBitis)
-          );
-          
-          // Toplamı hesapla
-          toplamSut = sutler.fold(0.0, (sum, sut) => sum + sut.toplam);
+          toplamSut = aylik[cari.id!] ?? 0.0;
           
           // Hayvan türüne göre toplamı güncelle
           final hayvanTuru = cari.hayvanTuru ?? '';
@@ -106,6 +102,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
         _aylikSutToplamlari[cari.id!] = toplamSut;
       }
       
+      if (!mounted) return;
       setState(() {
         _cariler = liste;
         _filtrelenen = liste;
@@ -113,8 +110,8 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       });
       
     } catch (e) {
-      print('Veri yükleme hatası: $e');
-      setState(() => _yukleniyor = false);
+      debugPrint('Veri yükleme hatası: $e');
+      if (mounted) setState(() => _yukleniyor = false);
     }
   }
 
