@@ -34,7 +34,8 @@ class FiyatRepository {
   Future<int> delete(int id) => db.delete('fiyatlar', where: 'id = ?', whereArgs: [id]);
 }
 
-/// Cari bazlı, aylık fiyat tanımları (her müşteri için farklı fiyat).
+/// Cari bazlı fiyat tanımları (her müşteri için farklı fiyat). Anahtar
+/// `ay`: `'yyyy-MM'` (ay başından) ya da `'yyyy-MM-dd'` (o günden itibaren).
 class CariFiyatRepository {
   final Database db;
   const CariFiyatRepository(this.db);
@@ -63,13 +64,34 @@ class CariFiyatRepository {
 
   /// Birçok carinin fiyatını TEK transaction'da yazar: ya hepsi ya hiçbiri
   /// (fiyat ekranında 100 cari = tek disk yazımı; eskiden cari başına ayrı).
-  Future<void> topluKaydet(List<CariFiyat> fiyatlar) => donemKilidiyle(
+  ///
+  /// [yemFiyatiniAyaYay]: Yem fiyatları AYLIK girilir. Ay ortasından geçerli
+  /// süt fiyatı satırları (`'yyyy-MM-dd'`) da yem fiyatı taşır; aylık yem
+  /// fiyatı kaydedilince aynı ayın bu gün satırlarının yem fiyatları da
+  /// güncellenir — yoksa ayın kalanı eski yem fiyatıyla hesaplanırdı.
+  Future<void> topluKaydet(List<CariFiyat> fiyatlar, {bool yemFiyatiniAyaYay = false}) =>
+      donemKilidiyle(
         () => db.transaction((txn) async {
           for (final f in fiyatlar) {
             final map = f.toMap()..remove('id');
             final guncellenen = await txn.update('cari_fiyatlar', map,
                 where: 'cari_id = ? AND ay = ?', whereArgs: [f.cariId, f.ay]);
             if (guncellenen == 0) await txn.insert('cari_fiyatlar', map);
+            if (yemFiyatiniAyaYay && f.ay.length == 7) {
+              await txn.update(
+                'cari_fiyatlar',
+                {
+                  'sut_yemi_fiyat': f.sutYemiFiyat,
+                  'besi_yemi_fiyat': f.besiYemiFiyat,
+                  'b_baslangic_fiyat': f.bBaslangicFiyat,
+                  'b_buyutme_fiyat': f.bBuyutmeFiyat,
+                  'kuzu_yemi_fiyat': f.kuzuYemiFiyat,
+                  'tavuk_yemi_fiyat': f.tavukYemiFiyat,
+                },
+                where: 'cari_id = ? AND ay LIKE ?',
+                whereArgs: [f.cariId, '${f.ay}-%'],
+              );
+            }
           }
         }),
       );

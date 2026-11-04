@@ -180,6 +180,92 @@ void main() {
       await agirlik.close();
     });
 
+    /// Süt Ekle'yi bir "Aç" düğmesinin üstüne itilmiş sayfa olarak açar
+    /// (geri tuşunun gerçekten bir önceki ekrana dönmesi için).
+    Future<void> sayfaAc(WidgetTester tester) async {
+      await tester.pumpWidget(_uygulama(
+        db,
+        Builder(
+          builder: (ctx) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => Navigator.of(ctx).push(
+                    MaterialPageRoute(builder: (_) => SutGirisSayfasi(cari: cariNesnesi()))),
+                child: const Text('Aç'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Aç'));
+      await _bekle(tester, () => find.text('KAYDET').evaluate().isNotEmpty);
+    }
+
+    Future<void> geriTusu(WidgetTester tester) async {
+      await tester.binding.handlePopRoute(); // cihazın geri tuşu
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('geri tuşu: giriş yoksa doğrudan çıkar', (tester) async {
+      await hazirla(tester);
+      await sayfaAc(tester);
+      await geriTusu(tester);
+      expect(find.text('Süt kaydedilmedi'), findsNothing);
+      expect(find.text('Aç'), findsOneWidget);
+    });
+
+    testWidgets('geri tuşu: kaydedilmemiş süt varsa sorar; "Vazgeç" ekranda tutar, '
+        '"Kaydetmeden Çık" kaydetmeden çıkar', (tester) async {
+      await hazirla(tester);
+      await sayfaAc(tester);
+      await tester.enterText(find.widgetWithText(TextField, 'Sabah Sütü (kg)'), '25');
+      await tester.pump();
+
+      await geriTusu(tester);
+      expect(find.text('Süt kaydedilmedi'), findsOneWidget);
+      await tester.tap(find.text('Vazgeç'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Sabah Sütü (kg)'), findsOneWidget, reason: 'ekranda kaldı');
+      expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Sabah Sütü (kg)')).controller!.text, '25');
+
+      await geriTusu(tester);
+      await tester.tap(find.text('Kaydetmeden Çık'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Aç'), findsOneWidget);
+      expect(await sutler(tester), isEmpty);
+    });
+
+    testWidgets('geri tuşu: "Kaydet" seçilirse kaydedip çıkar', (tester) async {
+      await hazirla(tester);
+      await sayfaAc(tester);
+      await tester.enterText(find.widgetWithText(TextField, 'Akşam Sütü (kg)'), '18,5');
+      await tester.pump();
+
+      await geriTusu(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Kaydet'));
+      await _bekle(tester, () => find.text('Aç').evaluate().isNotEmpty, aciklama: 'kaydedip döndü');
+      expect((await sutler(tester)).single['aksam'], 18.5);
+    });
+
+    testWidgets('terazi kartı en altta: miktar alanları ve KAYDET onun üstünde', (tester) async {
+      await hazirla(tester);
+      await tester.pumpWidget(_uygulama(db, SutGirisSayfasi(cari: cariNesnesi())));
+      await _bekle(tester, () => find.text('KAYDET').evaluate().isNotEmpty);
+
+      final terazi = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_CanliTeraziKarti');
+      expect(terazi, findsOneWidget);
+      final aksam = find.widgetWithText(TextField, 'Akşam Sütü (kg)');
+      final kaydet = find.text('KAYDET');
+      final fis = find.text('KAYDET + FİŞ VER');
+      expect(tester.getTopLeft(aksam).dy, lessThan(tester.getTopLeft(kaydet).dy));
+      expect(tester.getTopLeft(kaydet).dy, lessThan(tester.getTopLeft(fis).dy));
+      expect(tester.getTopLeft(fis).dy, lessThan(tester.getTopLeft(terazi).dy),
+          reason: 'klavye açıkken KAYDET görünsün diye terazi en alta alındı');
+      // Alana odaklanınca KAYDET düğmeleri de klavyenin üstüne kayar.
+      expect(tester.widget<TextField>(aksam).scrollPadding.bottom, greaterThanOrEqualTo(150));
+    });
+
     testWidgets('hatalı miktar kaydedilmez, alan hata gösterir', (tester) async {
       await hazirla(tester);
       await tester.pumpWidget(_uygulama(db, SutGirisSayfasi(cari: cariNesnesi())));

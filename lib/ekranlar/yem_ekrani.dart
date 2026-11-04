@@ -11,6 +11,7 @@ import '../utils/tarih_secici.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import '../utils/sayi_format.dart';
+import '../widgetlar/kaydedilmemis_koruma.dart';
 
 /// Yem girişi sekmesi — cari listesi + arama.
 ///
@@ -237,8 +238,23 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
     );
   }
 
+  late final _alanDinleyici = Listenable.merge(_alanlar);
+
+  /// Bir alana miktar yazılmış (ya da hatalı yazılmış) ama kaydedilmemiş.
+  bool get _kaydedilmemisVar => !_kaydediliyor && _alanlar.any((c) => sayiCoz(c.text) != 0);
+
   @override
   Widget build(BuildContext context) {
+    return KaydedilmemisKoruma(
+      dinle: _alanDinleyici,
+      degisiklikVar: () => _kaydedilmemisVar,
+      kaydet: _kaydet,
+      baslik: 'Yem kaydedilmedi',
+      child: _ekran(context),
+    );
+  }
+
+  Widget _ekran(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FFF8),
       appBar: AppBar(
@@ -294,7 +310,7 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
-                        child: Text('Toplam: ${_toplam.toStringAsFixed(1)} kg', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 13)),
+                        child: Text('Toplam: ${sayiGoster(_toplam)} kg', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 13)),
                       ),
                   ]),
                   const SizedBox(height: 16),

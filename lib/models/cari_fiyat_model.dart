@@ -1,7 +1,11 @@
 class CariFiyat {
   int? id;
   int cariId;
-  String ay; // 'yyyy-MM' formatı, örn: '2026-06'
+
+  /// Fiyatın GEÇERLİ OLDUĞU İLK GÜN: `'yyyy-MM'` (ayın 1'inden itibaren) ya da
+  /// `'yyyy-MM-dd'` (o günden itibaren; ay ortası fiyat değişikliği).
+  /// Bkz. `CariFiyatLookup`, [anahtar].
+  String ay;
   double sutFiyat;
   double sutYemiFiyat;
   double besiYemiFiyat;
@@ -22,6 +26,18 @@ class CariFiyat {
     this.kuzuYemiFiyat = 0,
     this.tavukYemiFiyat = 0,
   });
+
+  /// [gun]'den itibaren geçerli fiyatın anahtarı. Ayın 1'i → `'yyyy-MM'`
+  /// (eski aylık kayıtlarla aynı anahtar, mükerrer satır oluşmaz); diğer
+  /// günler → `'yyyy-MM-dd'`.
+  static String anahtar(DateTime gun) {
+    final ay = '${gun.year.toString().padLeft(4, '0')}-${gun.month.toString().padLeft(2, '0')}';
+    return gun.day == 1 ? ay : '$ay-${gun.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Anahtarın geçerlilik başlangıç günü.
+  static DateTime anahtarGunu(String anahtar) =>
+      DateTime.parse(anahtar.length == 7 ? '$anahtar-01' : anahtar);
 
   factory CariFiyat.fromMap(Map<String, dynamic> m) => CariFiyat(
     id: m['id'] as int?,

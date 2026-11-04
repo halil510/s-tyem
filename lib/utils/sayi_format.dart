@@ -46,9 +46,12 @@ double kurusaYuvarla(double tutar) {
 
 /// Miktarı gereksiz sıfırlar olmadan gösterir: `12` · `12.5` · `12.25`.
 /// (`12.340000000000001` gibi kayan nokta artıklarını gizler.)
+/// Toplamlar tek haneye YUVARLANMAZ: 47.8 + 30.54 = `78.34` (eskiden 78.3).
 String sayiGoster(double deger) {
-  if (deger == deger.roundToDouble()) return deger.toStringAsFixed(0);
   var metin = deger.toStringAsFixed(2);
-  if (metin.endsWith('0')) metin = metin.substring(0, metin.length - 1);
-  return metin;
+  if (metin.contains('.')) {
+    metin = metin.replaceFirst(RegExp(r'0+$'), '');
+    if (metin.endsWith('.')) metin = metin.substring(0, metin.length - 1);
+  }
+  return metin == '-0' ? '0' : metin;
 }

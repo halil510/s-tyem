@@ -23,7 +23,11 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
   Map<int, CariFiyat> _fiyatlar = {};
   bool _yukleniyor = true;
   bool _kaydediliyor = false;
-  DateTime _seciliAy = DateTime.now();
+
+  /// Fiyatın GEÇERLİ OLACAĞI İLK GÜN. Varsayılan bugün: "süt bugünden
+  /// itibaren 27 ₺" → önceki günler eski fiyatla kalır. Ayın 1'i seçilirse
+  /// fiyat tüm aya uygulanır (eski aylık davranış).
+  DateTime _seciliGun = DateUtils.dateOnly(DateTime.now());
 
   // Düzenleme için controller'lar
   final Map<int, TextEditingController> _controllers = {};
@@ -45,8 +49,10 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     super.dispose();
   }
 
-  String get _ayStr => DateFormat('yyyy-MM').format(_seciliAy);
-  String get _ayGoster => DateFormat('MMMM yyyy', 'tr_TR').format(_seciliAy);
+  /// `cari_fiyatlar.ay` anahtarı: ayın 1'i → 'yyyy-MM', diğer günler → 'yyyy-MM-dd'.
+  String get _anahtar => CariFiyat.anahtar(_seciliGun);
+  bool get _ayBasi => _seciliGun.day == 1;
+  String get _gunGoster => DateFormat('d MMMM yyyy', 'tr_TR').format(_seciliGun);
 
   Future<void> _verileriYukle() async {
     setState(() => _yukleniyor = true);
@@ -60,8 +66,8 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     }
     _controllers.clear();
 
-    // Her cari için fiyat yükle (yoksa önceki aydan kopyala)
-    _fiyatlar = await _fiyatRepo.getAyFiyatlariHepsi(_cariler.map((c) => c.id!).toList(), _ayStr);
+    // Her cari için seçilen günde geçerli fiyat (yoksa öncekinden devralınır)
+    _fiyatlar = await _fiyatRepo.getAyFiyatlariHepsi(_cariler.map((c) => c.id!).toList(), _anahtar);
 
     // Controller'ları oluştur
     for (final cari in _cariler) {
@@ -75,20 +81,22 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     setState(() => _yukleniyor = false);
   }
 
-  Future<void> _aySec() async {
+  Future<void> _gunSec() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _seciliAy,
+      initialDate: _seciliGun,
       firstDate: DateTime(2020),
-      lastDate: DateTime(now.year + 1, 12),
+      lastDate: DateTime(now.year + 1, 12, 31),
       initialEntryMode: DatePickerEntryMode.calendarOnly,
-      helpText: 'Ay Seçin',
+      helpText: 'Fiyat hangi günden itibaren geçerli?',
     );
-    if (picked != null) {
-      setState(() => _seciliAy = DateTime(picked.year, picked.month, 1));
-      await _verileriYukle();
-    }
+    if (picked != null) await _gunuDegistir(picked);
+  }
+
+  Future<void> _gunuDegistir(DateTime gun) async {
+    setState(() => _seciliGun = DateUtils.dateOnly(gun));
+    await _verileriYukle();
   }
 
   Future<void> _kaydet() async {
@@ -117,9 +125,14 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
         final fiyat = sayiCoz(ctrl.text)!;
         if (fiyat <= 0) continue;
         final mevcut = _fiyatlar[cari.id!]!;
+        // Fiyatı DEĞİŞMEYEN cari için seçilen güne yeni satır açma (hesap
+        // zaten aynı; 44 caride 44 gereksiz "fiyat değişikliği" oluşmasın).
+        if (mevcut.ay != _anahtar && kurusaYuvarla(fiyat) == kurusaYuvarla(mevcut.sutFiyat)) {
+          continue;
+        }
         kaydedilecek.add(CariFiyat(
           cariId: cari.id!,
-          ay: _ayStr,
+          ay: _anahtar,
           sutFiyat: fiyat,
           sutYemiFiyat: mevcut.sutYemiFiyat,
           besiYemiFiyat: mevcut.besiYemiFiyat,
@@ -132,9 +145,12 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
       // Tek transaction: ya hepsi ya hiçbiri.
       await _fiyatRepo.topluKaydet(kaydedilecek);
       ref.veriDegisti();
+      await _verileriYukle();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Süt fiyatları kaydedildi'),
+          content: Text(kaydedilecek.isEmpty
+              ? 'Değişen fiyat yok'
+              : '${kaydedilecek.length} carinin süt fiyatı $_gunGoster tarihinden itibaren kaydedildi'),
           backgroundColor: Colors.blue[700],
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -143,7 +159,7 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
     }
-    setState(() => _kaydediliyor = false);
+    if (mounted) setState(() => _kaydediliyor = false);
   }
 
   @override
@@ -171,8 +187,8 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Ay seçici
-                _aySeciciWidget(),
+                // Geçerlilik başlangıç günü seçici
+                _gunSeciciWidget(),
 
                 // Bilgi notu
                 Container(
@@ -189,7 +205,11 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Boş bırakılan cariler için önceki ayın fiyatı kullanılır.',
+                          _ayBasi
+                              ? 'Fiyat ${DateFormat('MMMM', 'tr_TR').format(_seciliGun)} ayının tamamına uygulanır '
+                                  '(ay içinde sonradan girilen fiyat değişiklikleri kendi gününden itibaren geçerli kalır).'
+                              : 'Yeni fiyat $_gunGoster ve sonrasındaki sütlere uygulanır. '
+                                  'Önceki günler eski fiyatla hesaplanır. Tüm ayı değiştirmek için ayın 1\'ini seçin.',
                           style: TextStyle(color: Colors.blue[800], fontSize: 12),
                         ),
                       ),
@@ -274,11 +294,42 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
     );
   }
 
-  Widget _aySeciciWidget() {
+  Widget _gunSeciciWidget() {
+    final bugun = DateUtils.dateOnly(DateTime.now());
+    final ayBasi = DateTime(_seciliGun.year, _seciliGun.month, 1);
+    return Column(
+      children: [
+        _gunKarti(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('fiyatBugunden'),
+                label: const Text('Bugünden itibaren'),
+                selected: _seciliGun == bugun,
+                onSelected: (_) => _gunuDegistir(bugun),
+              ),
+              ChoiceChip(
+                key: const ValueKey('fiyatAyBasindan'),
+                label: Text('Ayın başından (1 ${DateFormat('MMMM', 'tr_TR').format(ayBasi)})'),
+                selected: _ayBasi,
+                onSelected: (_) => _gunuDegistir(ayBasi),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _gunKarti() {
     return InkWell(
-      onTap: _aySec,
+      onTap: _gunSec,
       child: Container(
-        margin: const EdgeInsets.all(16),
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
@@ -301,8 +352,8 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Süt Fiyatı Dönemi', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  Text(_ayGoster, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('Fiyat şu günden itibaren geçerli', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(_gunGoster, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),

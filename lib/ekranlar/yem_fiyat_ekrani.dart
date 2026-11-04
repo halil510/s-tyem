@@ -68,6 +68,11 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
   // Her cari için her yem türü için controller: _controllers[cariId][alan]
   final Map<int, Map<String, TextEditingController>> _controllers = {};
 
+  // "Tüm carilere aynı yem fiyatı" kartı
+  final _topluCtrl = TextEditingController();
+  String _topluAlan = kYemTurleri.first['alan'] as String;
+  String? _topluHata;
+
   @override
   void initState() {
     super.initState();
@@ -81,6 +86,7 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
         c.dispose();
       }
     }
+    _topluCtrl.dispose();
     super.dispose();
   }
 
@@ -196,8 +202,9 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
               _oku(cari.id!, 'tavukYemiFiyat', mevcut.tavukYemiFiyat),
         ));
       }
-      // Tek transaction: ya hepsi ya hiçbiri.
-      await _fiyatRepo.topluKaydet(kaydedilecek);
+      // Tek transaction: ya hepsi ya hiçbiri. Ay ortasından geçerli süt
+      // fiyatı satırlarının yem fiyatları da bu ayın yem fiyatına çekilir.
+      await _fiyatRepo.topluKaydet(kaydedilecek, yemFiyatiniAyaYay: true);
       ref.veriDegisti();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -326,20 +333,121 @@ class _YemFiyatEkraniState extends ConsumerState<YemFiyatEkrani> {
 
                 const SizedBox(height: 8),
 
-                // Cari listesi
+                // Cari listesi (toplu fiyat kartı listenin başında; klavye
+                // açıkken dar ekranda taşmasın diye birlikte kayar)
                 Expanded(
                   child: _cariler.isEmpty
                       ? Center(
                           child: Text('Henüz cari yok',
                               style: TextStyle(color: Colors.grey[500])))
                       : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                          itemCount: _cariler.length,
-                          itemBuilder: (ctx, i) => _cariFiyatKarti(_cariler[i]),
+                          padding: const EdgeInsets.fromLTRB(0, 4, 0, 16),
+                          itemCount: _cariler.length + 1,
+                          itemBuilder: (ctx, i) => i == 0
+                              ? _topluFiyatKarti()
+                              : Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: _cariFiyatKarti(_cariler[i - 1]),
+                                ),
                         ),
                 ),
               ],
             ),
+    );
+  }
+
+  /// Seçilen yem türünün fiyatını TÜM carilerin alanına yazar. KAYDETMEZ:
+  /// kullanıcı listeyi görüp (gerekirse tek tek değiştirip) "Kaydet"e basar.
+  void _tumuneUygula() {
+    final fiyat = sayiCoz(_topluCtrl.text);
+    if (fiyat == null || fiyat <= 0) {
+      setState(() => _topluHata = 'Geçerli bir fiyat girin (ör. 12,50)');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _topluHata = null;
+      for (final alanlar in _controllers.values) {
+        alanlar[_topluAlan]!.text = fiyat.toStringAsFixed(2);
+      }
+    });
+    final ad = kYemTurleri.firstWhere((t) => t['alan'] == _topluAlan)['ad'];
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('${_cariler.length} cariye $ad: ${fiyat.toStringAsFixed(2)} ₺ yazıldı. Kaydetmeyi unutmayın.'),
+      duration: const Duration(seconds: 6),
+      action: SnackBarAction(label: 'KAYDET', onPressed: _kaydet),
+    ));
+  }
+
+  Widget _topluFiyatKarti() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Tüm carilere aynı yem fiyatı',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.green[800])),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('topluYemTuru'),
+            value: _topluAlan,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Yem türü',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final t in kYemTurleri)
+                DropdownMenuItem(
+                  value: t['alan'] as String,
+                  child: Row(children: [
+                    Icon(t['ikon'] as IconData, color: t['renk'] as Color, size: 18),
+                    const SizedBox(width: 8),
+                    Text(t['ad'] as String),
+                  ]),
+                ),
+            ],
+            onChanged: (v) => setState(() => _topluAlan = v ?? _topluAlan),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('topluYemFiyati'),
+                  controller: _topluCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onSubmitted: (_) => _tumuneUygula(),
+                  decoration: InputDecoration(
+                    labelText: 'Fiyat',
+                    suffixText: '₺/kg',
+                    isDense: true,
+                    errorText: _topluHata,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _kaydediliyor ? null : _tumuneUygula,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2E7D32),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+                child: const Text('Tümüne\nUygula', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

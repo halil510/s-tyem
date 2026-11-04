@@ -42,6 +42,17 @@ double sutTutari(Sut s, CariFiyat fiyat) => kurusaYuvarla(s.toplam * fiyat.sutFi
 double yemTutari(Yem y, CariFiyat fiyat) => kurusaYuvarla(fiyat.yemBorc(
     y.sutYemi, y.besiYemi, y.bBaslangic, y.bBuyutme, y.kuzuYemi, y.tavukYemi));
 
+/// Bir ay / dönem için GÖSTERİLECEK süt fiyatı. [kullanilan]: o ayın süt
+/// kayıtlarına uygulanan fiyatlar. Tek fiyatsa kendisi; ay içinde fiyat
+/// değiştiyse kg'a göre ağırlıklı ortalama (= tutar / kg); hiç süt yoksa
+/// ayın başındaki geçerli fiyat ([varsayilan]). Tutarlar her gün KENDİ
+/// fiyatıyla hesaplanır — bu değer yalnızca gösterim içindir.
+double donemSutFiyati(Set<double>? kullanilan, double kg, double tutar, double varsayilan) {
+  if (kullanilan == null || kullanilan.isEmpty) return varsayilan;
+  if (kullanilan.length == 1) return kullanilan.first;
+  return kg > 0 ? kurusaYuvarla(tutar / kg) : varsayilan;
+}
+
 /// ─────────────────────────────────────────────────────────────
 /// CANLI CARİ EKSTRESİ
 /// ─────────────────────────────────────────────────────────────
@@ -86,7 +97,7 @@ final cariEkstreProvider = FutureProvider.autoDispose
   var herhangiFiyatEksikMi = false;
 
   for (final s in sutler) {
-    final fiyat = lookup.fiyatIcin(params.cariId, s.tarih.substring(0, 7));
+    final fiyat = lookup.fiyatIcin(params.cariId, s.tarih);
     final tutar = sutTutari(s, fiyat);
     final eksik = s.toplam > 0 && tutar <= 0;
     if (eksik) herhangiFiyatEksikMi = true;
@@ -104,7 +115,7 @@ final cariEkstreProvider = FutureProvider.autoDispose
   }
 
   for (final y in yemler) {
-    final fiyat = lookup.fiyatIcin(params.cariId, y.tarih.substring(0, 7));
+    final fiyat = lookup.fiyatIcin(params.cariId, y.tarih);
     final tutar = yemTutari(y, fiyat);
     final eksik = y.toplam > 0 && tutar <= 0;
     if (eksik) herhangiFiyatEksikMi = true;
@@ -185,10 +196,10 @@ final tumKalanBorclarProvider = FutureProvider<Map<int, double>>((ref) async {
   void ekle(int cariId, double tutar) => bakiyeler[cariId] = (bakiyeler[cariId] ?? 0) + tutar;
 
   for (final s in sutler) {
-    ekle(s.cariId, sutTutari(s, lookup.fiyatIcin(s.cariId, s.tarih.substring(0, 7))));
+    ekle(s.cariId, sutTutari(s, lookup.fiyatIcin(s.cariId, s.tarih)));
   }
   for (final y in yemler) {
-    ekle(y.cariId, -yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih.substring(0, 7))));
+    ekle(y.cariId, -yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih)));
   }
   for (final o in await odemeRepo.getTumOdemeTahsilatlar()) {
     final tutar = kurusaYuvarla(o.toplamTutar);
@@ -210,8 +221,12 @@ class AylikCariOzet {
   final double sutKg;
   final double sutTutar;
 
-  /// O ay geçerli süt fiyatı (o ay tanımlı değilse önceki aydan devralınan).
+  /// Ayın süt fiyatı. Ay içinde fiyat değiştiyse (ör. 1–3'ü 25 ₺, 4'ünden
+  /// itibaren 27 ₺) kg'a göre ağırlıklı ortalama (bkz. [donemSutFiyati]).
   final double sutFiyat;
+
+  /// Bu ay içinde süt fiyatı değişti mi (birden çok fiyat uygulandı mı)?
+  final bool fiyatDegisti;
   final double yemKg;
   final double yemTutar;
   final double odeme;
@@ -228,6 +243,7 @@ class AylikCariOzet {
     this.sutKg = 0,
     this.sutTutar = 0,
     this.sutFiyat = 0,
+    this.fiyatDegisti = false,
     this.yemKg = 0,
     this.yemTutar = 0,
     this.odeme = 0,
@@ -261,16 +277,19 @@ final aylikOzetProvider = FutureProvider.autoDispose
   final yemKg = <int, double>{}, yemTl = <int, double>{};
   final odeme = <int, double>{}, tahsilat = <int, double>{};
   final eksik = <int>{};
+  final sutFiyatlari = <int, Set<double>>{};
   void ekle(Map<int, double> m, int id, double v) => m[id] = (m[id] ?? 0) + v;
 
   for (final s in await sutRepo.getAllInRange(bas, bit)) {
-    final tutar = sutTutari(s, lookup.fiyatIcin(s.cariId, ay));
+    final fiyat = lookup.fiyatIcin(s.cariId, s.tarih);
+    final tutar = sutTutari(s, fiyat);
+    if (s.toplam > 0) sutFiyatlari.putIfAbsent(s.cariId, () => {}).add(fiyat.sutFiyat);
     if (s.toplam > 0 && tutar <= 0) eksik.add(s.cariId);
     ekle(sutKg, s.cariId, s.toplam);
     ekle(sutTl, s.cariId, tutar);
   }
   for (final y in await yemRepo.getAllInRange(bas, bit)) {
-    final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, ay));
+    final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih));
     if (y.toplam > 0 && tutar <= 0) eksik.add(y.cariId);
     ekle(yemKg, y.cariId, y.toplam);
     ekle(yemTl, y.cariId, tutar);
@@ -290,7 +309,9 @@ final aylikOzetProvider = FutureProvider.autoDispose
         cariId: id,
         sutKg: sutKg[id] ?? 0,
         sutTutar: kurusaYuvarla(sutTl[id] ?? 0),
-        sutFiyat: lookup.fiyatIcin(id, ay).sutFiyat,
+        sutFiyat: donemSutFiyati(sutFiyatlari[id], sutKg[id] ?? 0, sutTl[id] ?? 0,
+            lookup.fiyatIcin(id, ay).sutFiyat),
+        fiyatDegisti: (sutFiyatlari[id]?.length ?? 0) > 1,
         yemKg: yemKg[id] ?? 0,
         yemTutar: kurusaYuvarla(yemTl[id] ?? 0),
         odeme: kurusaYuvarla(odeme[id] ?? 0),

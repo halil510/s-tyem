@@ -10,6 +10,7 @@ import '../data/repositories/sut_repository.dart';
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../utils/sayi_format.dart';
+import '../widgetlar/kaydedilmemis_koruma.dart';
 
 /// Tüm aktif cariler için tek ekrandan, bir günün sabah/akşam sütü.
 ///
@@ -223,6 +224,21 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
 
   @override
   Widget build(BuildContext context) {
+    // Girilip kaydedilmeden geri tuşuna basılırsa sor; "Kaydet" seçilirse
+    // kaydedip (hata yoksa) ekrandan çıkar.
+    return KaydedilmemisKoruma(
+      dinle: Listenable.merge([..._sabahCtrl.values, ..._aksamCtrl.values]),
+      degisiklikVar: () => !_yukleniyor && !_kaydediliyor && _kaydedilmemisDegisiklikVar(),
+      kaydet: () async {
+        await _tumunuKaydet();
+        if (mounted && !_kaydedilmemisDegisiklikVar()) Navigator.of(context).pop();
+      },
+      baslik: 'Süt girişleri kaydedilmedi',
+      child: _ekran(context),
+    );
+  }
+
+  Widget _ekran(BuildContext context) {
     final gorunen = _gorunenCariler;
     return Scaffold(
       appBar: AppBar(

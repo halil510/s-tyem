@@ -86,7 +86,7 @@ void main() {
 
     // 3) Cariler sekmesi: liste güncel olmalı, detayda süt görünmeli.
     await tester.tap(find.byIcon(Icons.people_outline_rounded));
-    await bekle(tester, () => gorunur('25.0 kg'), 'cari listesinde bu ayki süt (25.0 kg)');
+    await bekle(tester, () => gorunur('25 kg'), 'cari listesinde bu ayki süt (25 kg)');
     await tester.tap(find.text('AHMET ATAĞ').hitTestable().first);
     await bekle(tester, () => gorunur('Süt Kayıtları'), 'detay ekranı');
     await bekle(tester, () => gorunur('Sabah: 25'), 'detayda süt kaydı');

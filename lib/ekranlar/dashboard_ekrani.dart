@@ -135,7 +135,7 @@ class DashboardEkrani extends ConsumerWidget {
     final kartlar = <Widget>[
       KpiKarti(
         baslik: 'Bugün Süt',
-        deger: '${data.bugunToplamSut.toStringAsFixed(1)} kg',
+        deger: _kg(data.bugunToplamSut),
         altyazi:
             'Sabah ${_kg(data.bugunSabah)} · Akşam ${_kg(data.bugunAksam)}',
         ikon: Icons.water_drop_rounded,
@@ -143,28 +143,28 @@ class DashboardEkrani extends ConsumerWidget {
       ),
       KpiKarti(
         baslik: 'Bugün Yem',
-        deger: '${data.bugunToplamYem.toStringAsFixed(1)} kg',
+        deger: _kg(data.bugunToplamYem),
         altyazi: 'Tüm çeşitler toplamı',
         ikon: Icons.grass_rounded,
         renk: AppColors.accent,
       ),
       KpiKarti(
         baslik: 'Aylık Süt',
-        deger: '${(data.aylikToplamSut / 1000).toStringAsFixed(2)} ton',
+        deger: _kg(data.aylikToplamSut),
         altyazi: 'Bu ay toplam',
         ikon: Icons.calendar_month_rounded,
         renk: AppColors.info,
       ),
       KpiKarti(
         baslik: 'Ödenecek (Alacaklı)',
-        deger: '₺${data.odenecekTutar.toStringAsFixed(0)}',
+        deger: _tl(data.odenecekTutar),
         altyazi: data.odenecekTutar > 0 ? 'Carilere ödenecek' : 'Borç yok ✓',
         ikon: Icons.arrow_upward_rounded,
         renk: data.odenecekTutar > 0 ? AppColors.info : AppColors.success,
       ),
       KpiKarti(
         baslik: 'Tahsil Edilecek (Borçlu)',
-        deger: '₺${data.tahsilEdilecekTutar.toStringAsFixed(0)}',
+        deger: _tl(data.tahsilEdilecekTutar),
         altyazi: data.tahsilEdilecekTutar > 0
             ? 'Carilerden tahsil edilecek'
             : 'Alacak yok ✓',
@@ -288,7 +288,7 @@ class DashboardEkrani extends ConsumerWidget {
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                               fontFamily: 'Poppins'))),
-                  Text('${item.miktar.toStringAsFixed(1)} kg',
+                  Text(_kg(item.miktar),
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -375,8 +375,19 @@ class DashboardEkrani extends ConsumerWidget {
   }
 }
 
-final _kgFormat = NumberFormat('#,##0.#', 'tr_TR');
+// Kusurat KESİLMEZ: 47,8 + 30,54 = 78,34 kg (eskiden tek haneye
+// yuvarlanıp 78,3 görünüyordu; aylık süt "0,08 ton" çıkıyordu).
+final _kgFormat = NumberFormat('#,##0.##', 'tr_TR');
 String _kg(double v) => '${_kgFormat.format(v)} kg';
+
+final _tlTam = NumberFormat('#,##0', 'tr_TR');
+final _tlKurus = NumberFormat('#,##0.00', 'tr_TR');
+
+/// Para: kuruşu varsa gösterilir (₺5.374,40), yoksa tam (₺5.374).
+String _tl(double v) {
+  final kurus = (v * 100).round();
+  return '₺${kurus % 100 == 0 ? _tlTam.format(kurus / 100) : _tlKurus.format(kurus / 100)}';
+}
 
 /// Geçen ayın dönemi kapatılmamışsa hatırlatır.
 class _DonemHatirlatma extends StatelessWidget {

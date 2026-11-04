@@ -15,6 +15,7 @@ import '../data/repositories/yem_repository.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import 'package:intl/intl.dart';
+import '../utils/sayi_format.dart';
 import '../services/toplu_mesaj_servisi.dart';
 import 'cari/cari_dialoglari.dart';
 import 'cari/cari_duzenle.dart';
@@ -531,10 +532,13 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       (sum, value) => sum + (value ?? 0.0)
     );
 
+    // Kompakt, eşit yükseklikte kartlar (ikon solda, sayı + başlık sağda).
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+      child: IntrinsicHeight(
+        child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _istatistikKarti('Toplam', _cariler.length, Icons.people, Colors.blue, null),
           _istatistikKarti('İnek', inekSayisi, Icons.agriculture, Colors.green, _hayvanTuruneGoreToplamSut['İnek']),
@@ -542,73 +546,50 @@ class _CariListesiState extends ConsumerState<CariListesi> {
           _istatistikKarti('Tavuk', tavukSayisi, Icons.egg, Colors.purple, _hayvanTuruneGoreToplamSut['Tavuk']),
           _istatistikKarti('Süt Toplam', null, Icons.local_drink, Colors.blue, toplamSutMiktari),
         ],
+        ),
       ),
     );
   }
 
+  /// Küçük özet kartı: solda renkli ikon, sağda sayı (büyük), altında
+  /// başlık ve varsa bu ayki süt toplamı.
   Widget _istatistikKarti(String baslik, int? sayi, IconData ikon, Color renk, double? sutToplam) {
+    final anaDeger = sayi?.toString() ?? '${sayiGoster(sutToplam ?? 0)} kg';
+    final altBilgi = sayi != null && sutToplam != null ? '${sayiGoster(sutToplam)} kg' : null;
     return Container(
-      width: 120,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(16),
+      constraints: const BoxConstraints(minWidth: 96),
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: renk.withOpacity(0.15)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: renk.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(ikon, color: renk, size: 20),
+            child: Icon(ikon, color: renk, size: 16),
           ),
-          const SizedBox(height: 12),
-          
-          // Sayı ve süt toplamını birlikte göster
-          if (sayi != null)
-            Text(
-              sayi.toString(),
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: renk,
+          const SizedBox(width: 8),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                anaDeger,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: renk, height: 1.1),
               ),
-            ),
-          
-          if (sutToplam != null)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (sayi != null) const SizedBox(height: 4),
-                Text(
-                  '${sutToplam.toStringAsFixed(1)} kg',
-                  style: TextStyle(
-                    fontSize: sayi != null ? 14 : 20,
-                    color: sayi != null ? renk.withOpacity(0.8) : renk,
-                    fontWeight: sayi != null ? FontWeight.w500 : FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          
-          const SizedBox(height: 4),
-          Text(
-            baslik,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+              Text(
+                altBilgi == null ? baslik : '$baslik · $altBilgi',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ],
           ),
         ],
       ),
@@ -744,7 +725,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
                         const Icon(Icons.local_drink, size: 12, color: Colors.blue),
                         const SizedBox(width: 4),
                         Text(
-                          '${buAykiSutToplam.toStringAsFixed(1)} kg',
+                          '${sayiGoster(buAykiSutToplam)} kg',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Colors.blue,

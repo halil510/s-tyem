@@ -45,5 +45,12 @@ void main() {
       expect(sayiGoster(12.340000000000001), '12.34');
       expect(sayiGoster(0), '0');
     });
+
+    test('REGRESYON: toplam tek haneye yuvarlanmaz (47.8 + 30.54 = 78.34)', () {
+      expect(sayiGoster(47.8 + 30.54), '78.34');
+      expect(sayiGoster(12.001), '12', reason: 'eskiden "12.0" çıkıyordu');
+      expect(sayiGoster(25.0), '25');
+      expect(sayiGoster(-0.001), '0');
+    });
   });
 }

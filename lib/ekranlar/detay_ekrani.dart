@@ -5,6 +5,7 @@ import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../models/yem_model.dart';
 import 'package:intl/intl.dart';
+import '../utils/sayi_format.dart';
 import '../utils/excel_export.dart';
 import '../core/router/app_router.dart';
 import '../data/repositories/sut_repository.dart';
@@ -449,7 +450,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
           Expanded(
             child: _istatistikKarti(
               'Toplam Süt',
-              '${_toplamSut.toStringAsFixed(1)} kg',
+              '${sayiGoster(_toplamSut)} kg',
               Icons.local_drink,
               Colors.blue,
             ),
@@ -458,7 +459,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
           Expanded(
             child: _istatistikKarti(
               'Toplam Yem',
-              '${_toplamYem.toStringAsFixed(1)} kg',
+              '${sayiGoster(_toplamYem)} kg',
               Icons.agriculture,
               Colors.green,
             ),
@@ -623,7 +624,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sabah: ${sut.sabah}kg • Akşam: ${sut.aksam}kg',
+                    'Sabah: ${sayiGoster(sut.sabah)}kg • Akşam: ${sayiGoster(sut.aksam)}kg',
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                 ],
@@ -640,7 +641,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    '${sut.toplam}kg',
+                    '${sayiGoster(sut.toplam)}kg',
                     style: TextStyle(
                       color: bugunKayit ? Colors.green[700] : Colors.blue[700],
                       fontWeight: FontWeight.w600,
@@ -756,7 +757,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        '${yem.toplam}kg',
+                        '${sayiGoster(yem.toplam)}kg',
                         style: TextStyle(
                           color: bugunKayit ? Colors.green[700] : Colors.green[700],
                           fontWeight: FontWeight.w600,
@@ -785,12 +786,12 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                if (yem.sutYemi > 0) _yemTipiChip('Süt: ${yem.sutYemi}kg', bugunKayit),
-                if (yem.besiYemi > 0) _yemTipiChip('Besi: ${yem.besiYemi}kg', bugunKayit),
-                if (yem.bBaslangic > 0) _yemTipiChip('Başlangıç: ${yem.bBaslangic}kg', bugunKayit),
-                if (yem.bBuyutme > 0) _yemTipiChip('Büyütme: ${yem.bBuyutme}kg', bugunKayit),
-                if (yem.kuzuYemi > 0) _yemTipiChip('Kuzu: ${yem.kuzuYemi}kg', bugunKayit),
-                if (yem.tavukYemi > 0) _yemTipiChip('Tavuk: ${yem.tavukYemi}kg', bugunKayit),
+                if (yem.sutYemi > 0) _yemTipiChip('Süt: ${sayiGoster(yem.sutYemi)}kg', bugunKayit),
+                if (yem.besiYemi > 0) _yemTipiChip('Besi: ${sayiGoster(yem.besiYemi)}kg', bugunKayit),
+                if (yem.bBaslangic > 0) _yemTipiChip('Başlangıç: ${sayiGoster(yem.bBaslangic)}kg', bugunKayit),
+                if (yem.bBuyutme > 0) _yemTipiChip('Büyütme: ${sayiGoster(yem.bBuyutme)}kg', bugunKayit),
+                if (yem.kuzuYemi > 0) _yemTipiChip('Kuzu: ${sayiGoster(yem.kuzuYemi)}kg', bugunKayit),
+                if (yem.tavukYemi > 0) _yemTipiChip('Tavuk: ${sayiGoster(yem.tavukYemi)}kg', bugunKayit),
               ],
             ),
           ],

@@ -5,6 +5,7 @@ import '../models/cari_model.dart';
 import '../services/whatsapp_service.dart';
 import '../utils/app_theme.dart';
 import '../utils/excel_export.dart';
+import '../utils/sayi_format.dart';
 import '../core/providers/repository_providers.dart';
 import '../features/cari_hesap/providers/cari_hesap_providers.dart'
     show AylikCariOzet, aylikOzetProvider;
@@ -89,6 +90,7 @@ class _FiyatHesaplamaEkraniState extends ConsumerState<FiyatHesaplamaEkrani> {
       ayAdi: _ayAdi,
       sutKg: o.sutKg,
       sutFiyat: o.sutFiyat,
+      fiyatDegisti: o.fiyatDegisti,
       sutTutar: o.sutTutar,
       yemKg: o.yemKg,
       yemTutar: o.yemTutar,
@@ -235,9 +237,9 @@ class _FiyatHesaplamaEkraniState extends ConsumerState<FiyatHesaplamaEkrani> {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(children: [
-        _ozKpi('${topla((o) => o.sutKg).toStringAsFixed(0)} kg', 'Süt'),
+        _ozKpi('${sayiGoster(topla((o) => o.sutKg))} kg', 'Süt'),
         _div(),
-        _ozKpi('${topla((o) => o.yemKg).toStringAsFixed(0)} kg', 'Yem'),
+        _ozKpi('${sayiGoster(topla((o) => o.yemKg))} kg', 'Yem'),
         _div(),
         _ozKpi('${topla((o) => o.ayNet).toStringAsFixed(0)} ₺', 'Bu Ay Net'),
         _div(),
@@ -281,7 +283,7 @@ class _FiyatHesaplamaEkraniState extends ConsumerState<FiyatHesaplamaEkrani> {
                   style: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Poppins')),
               Text(
                 o.sutKg > 0
-                    ? '${o.sutKg.toStringAsFixed(1)} kg × ${o.sutFiyat.toStringAsFixed(2)} ₺'
+                    ? '${sayiGoster(o.sutKg)} kg × ${o.fiyatDegisti ? 'ort. ' : ''}${o.sutFiyat.toStringAsFixed(2)} ₺'
                     : (s.cari.telefon ?? ''),
                 style: const TextStyle(
                     fontSize: 11, color: AppRenkler.metinUcuncul, fontFamily: 'Poppins'),
@@ -307,7 +309,7 @@ class _FiyatHesaplamaEkraniState extends ConsumerState<FiyatHesaplamaEkrani> {
           child: Row(children: [
             _deger(Icons.water_drop, 'Süt', '${o.sutTutar.toStringAsFixed(2)} ₺', AppRenkler.birincil),
             _div2(),
-            _deger(Icons.grass, '${o.yemKg.toStringAsFixed(1)} kg yem',
+            _deger(Icons.grass, '${sayiGoster(o.yemKg)} kg yem',
                 '${o.yemTutar.toStringAsFixed(2)} ₺', const Color(0xFF2E7D32)),
             _div2(),
             _deger(Icons.summarize, 'Bu ay net', '${o.ayNet.toStringAsFixed(2)} ₺', AppRenkler.bilgi),

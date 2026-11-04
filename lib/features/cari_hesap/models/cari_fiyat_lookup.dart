@@ -11,9 +11,16 @@ import '../../../models/cari_fiyat_model.dart';
 /// sorguda çekilir, burada gruplanır ve "ay X için fiyat nedir?"
 /// sorusu bellekten, anında yanıtlanır.
 ///
-/// Fiyat bulma kuralı: Tam o ay için tanımlı bir fiyat varsa o kullanılır;
-/// yoksa GERİYE DOĞRU en son tanımlı fiyata bakılır (ör. Mart için fiyat
-/// girilmemişse ama Ocak'ta girilmişse, Ocak'ın fiyatı kullanılır).
+/// Fiyat anahtarı (`ay` sütunu) iki biçimde olabilir:
+/// - `'yyyy-MM'`     → o ayın 1'inden itibaren geçerli,
+/// - `'yyyy-MM-dd'`  → o GÜNDEN itibaren geçerli (ay ortası fiyat değişikliği).
+///
+/// Fiyat bulma kuralı: sorgulanan tarihe (kaydın günü `'yyyy-MM-dd'` ya da
+/// ay `'yyyy-MM'`) kadar başlamış EN SON fiyat kullanılır. Metin karşılaştırması
+/// doğru sıralar: `'2026-10-20' < '2026-11' < '2026-11-01' < '2026-11-04'`.
+/// Örnek: Kasım 25 ₺, 4 Kasım'dan itibaren 27 ₺ → 1–3 Kasım sütü 25 ₺'dan,
+/// 4 Kasım ve sonrası 27 ₺'dan hesaplanır; Aralık'ta yeni fiyat yoksa 27 ₺.
+/// Ay (`'yyyy-MM'`) ile sorgulanırsa ayın BAŞINDAKİ fiyat döner.
 /// Hiç fiyat tanımlanmamışsa sıfır fiyatlı bir varsayılan döner.
 class CariFiyatLookup {
   final Map<String, CariFiyat> _tekilFiyatlar;
@@ -34,7 +41,7 @@ class CariFiyatLookup {
     return map;
   }
 
-  /// Bir cari + ay ('yyyy-MM') için etkin fiyatı bulur.
+  /// Bir cari + tarih ('yyyy-MM-dd') ya da ay ('yyyy-MM') için etkin fiyatı bulur.
   CariFiyat fiyatIcin(int cariId, String ay) {
     final tam = _tekilFiyatlar['$cariId|$ay'];
     if (tam != null) return tam;

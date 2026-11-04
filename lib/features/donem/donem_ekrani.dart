@@ -6,6 +6,7 @@ import '../../core/providers/veri_surumu_provider.dart';
 import '../../models/cari_model.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/excel_export.dart';
+import '../../utils/sayi_format.dart';
 import 'donem_providers.dart';
 import 'donem_servisi.dart';
 
@@ -324,8 +325,8 @@ class _HakedisKarti extends StatelessWidget {
           const SizedBox(height: 6),
           satir('Önceki dönemden devir', s.devir, eksi: s.devir < 0),
           if (s.sutKg > 0)
-            satir('Süt ${s.sutKg.toStringAsFixed(1)} kg × ${s.sutFiyat.toStringAsFixed(2)} ₺', s.sutTutar),
-          satir('Yem ${s.yemKg.toStringAsFixed(1)} kg', s.yemTutar, eksi: true),
+            satir('Süt ${sayiGoster(s.sutKg)} kg × ${s.sutFiyat.toStringAsFixed(2)} ₺', s.sutTutar),
+          satir('Yem ${sayiGoster(s.yemKg)} kg', s.yemTutar, eksi: true),
           satir('Ödenen', s.odeme, eksi: true),
           satir('Tahsil edilen', s.tahsilat),
         ]),

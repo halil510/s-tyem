@@ -1,8 +1,8 @@
 -- =====================================================================
 -- SÜTYEM PRO — Supabase (PostgreSQL) şeması
 -- =====================================================================
--- Kaynak: lib/core/database/migrations/ (SQLite, şu an v10)
--- Bu dosyanın karşılık geldiği yerel şema sürümü: v10
+-- Kaynak: lib/core/database/migrations/ (SQLite, şu an v11)
+-- Bu dosyanın karşılık geldiği yerel şema sürümü: v11
 --
 -- GENEL KURAL: Uygulamaya yeni tablo / sütun / index eklendiğinde
 -- (yeni migration yazıldığında) bu dosya AYNI commit'te güncellenir.
@@ -146,14 +146,16 @@ create index if not exists idx_odemeler_islem_turu  on public.cari_odemeler (kul
 create index if not exists idx_odemeler_tarih       on public.cari_odemeler (kullanici_id, tarih);
 
 -- ---------------------------------------------------------------------
--- cari_fiyatlar  (v3) — cari bazlı aylık fiyat; o ay yoksa önceki ay geçerli
+-- cari_fiyatlar  (v3, v11) — cari bazlı fiyat. ay: 'yyyy-MM' (ay başından)
+-- ya da 'yyyy-MM-dd' (o günden itibaren, v11). Kayda, tarihine kadar başlamış en son fiyat uygulanır.
 -- ---------------------------------------------------------------------
 create table if not exists public.cari_fiyatlar (
   kullanici_id      uuid   not null default auth.uid() references auth.users (id) on delete cascade,
   id                bigint not null,
   cari_id           bigint not null,
-  ay                text   not null check (ay ~ '^\d{4}-(0[1-9]|1[0-2])$'),
-  sut_fiyat         numeric(12,4) not null default 0 check (sut_fiyat         >= 0),
+  ay                text   not null constraint cari_fiyatlar_ay_check
+                           check (ay ~ '^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$'),
+  sut_fiyat        numeric(12,4) not null default 0 check (sut_fiyat         >= 0),
   sut_yemi_fiyat    numeric(12,4) not null default 0 check (sut_yemi_fiyat    >= 0),
   besi_yemi_fiyat   numeric(12,4) not null default 0 check (besi_yemi_fiyat   >= 0),
   b_baslangic_fiyat numeric(12,4) not null default 0 check (b_baslangic_fiyat >= 0),
@@ -165,6 +167,10 @@ create table if not exists public.cari_fiyatlar (
   unique (kullanici_id, cari_id, ay)
 );
 create index if not exists idx_cari_fiyatlar_ay on public.cari_fiyatlar (kullanici_id, ay);
+-- v11: tablo daha önce yalnız 'yyyy-MM' kabul eden kısıtla kurulduysa güncelle.
+alter table public.cari_fiyatlar drop constraint if exists cari_fiyatlar_ay_check;
+alter table public.cari_fiyatlar add constraint cari_fiyatlar_ay_check
+  check (ay ~ '^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$');
 
 -- ---------------------------------------------------------------------
 -- terazi_cihazlari  (v5) — cihaza özel, yedek amaçlı
@@ -268,8 +274,8 @@ declare
   yeni_ay text;
 begin
   if TG_TABLE_NAME = 'cari_fiyatlar' then
-    if TG_OP <> 'INSERT' then eski_ay := old.ay; end if;
-    if TG_OP <> 'DELETE' then yeni_ay := new.ay; end if;
+    if TG_OP <> 'INSERT' then eski_ay := left(old.ay, 7); end if;
+    if TG_OP <> 'DELETE' then yeni_ay := left(new.ay, 7); end if;
   else
     if TG_OP <> 'INSERT' then eski_ay := to_char(old.tarih, 'YYYY-MM'); end if;
     if TG_OP <> 'DELETE' then yeni_ay := to_char(new.tarih, 'YYYY-MM'); end if;
@@ -363,6 +369,8 @@ end $$;
 -- v8  sutler UNIQUE (cari_id, tarih); tarihler yyyy-MM-dd
 -- v9  donemler, donem_hakedisleri, kapalı dönem kilidi (DONEM_KAPALI)
 -- v10 tarih indeksleri: sutler(tarih) [zaten vardı], yemler(tarih), cari_odemeler(tarih)
+-- v11 cari_fiyatlar.ay 'yyyy-MM-dd' de olabilir (ay ortası fiyat); dönem kilidi left(ay, 7)
 -- 2026-11-04  Dosya ilk kez oluşturuldu (yerel şema v8).
 -- 2026-11-04  v9 eklendi (dönem kapanışı / hakediş).
+-- 2026-11-04  v11 eklendi (o günden itibaren geçerli fiyat).
 -- =====================================================================

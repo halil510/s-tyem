@@ -177,6 +177,7 @@ Teşekkür ederiz.
     required String ayAdi,
     required double sutKg,
     required double sutFiyat,
+    bool fiyatDegisti = false,
     required double sutTutar,
     required double yemKg,
     required double yemTutar,
@@ -196,7 +197,7 @@ Teşekkür ederiz.
             : '📌 *Borçlusunuz:* ${kalanBorc.abs().toStringAsFixed(2)} ₺ (sizden tahsil edilecek)');
 
     final satirlar = <String>[
-      '🥛 *Süt (Alacak):* ${sutKg.toStringAsFixed(2)} kg × ${sutFiyat.toStringAsFixed(2)} ₺ = ${sutTutar.toStringAsFixed(2)} ₺',
+      '🥛 *Süt (Alacak):* ${sutKg.toStringAsFixed(2)} kg × ${fiyatDegisti ? 'ort. ' : ''}${sutFiyat.toStringAsFixed(2)} ₺ = ${sutTutar.toStringAsFixed(2)} ₺',
       if (yemKg > 0 || yemTutar > 0)
         '🌾 *Yem (Borç):* ${yemKg.toStringAsFixed(2)} kg = ${yemTutar.toStringAsFixed(2)} ₺',
       if (odeme > 0) '💵 *Size Ödenen:* ${odeme.toStringAsFixed(2)} ₺',

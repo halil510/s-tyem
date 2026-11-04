@@ -10,11 +10,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sutyem_pro/core/providers/database_provider.dart';
 import 'package:sutyem_pro/ekranlar/ana_ekran.dart';
 import 'package:sutyem_pro/ekranlar/sut_fiyat_ekrani.dart';
+import 'package:sutyem_pro/ekranlar/yem_fiyat_ekrani.dart';
 import 'package:sutyem_pro/features/fis/fis_ekranlari.dart';
 import 'package:sutyem_pro/features/fis/fis_servisi.dart';
 import 'package:sutyem_pro/features/fis/uretici_fisi.dart';
 import 'package:sutyem_pro/features/terazi/providers/terazi_providers.dart';
 import 'package:sutyem_pro/features/terazi/services/terazi_baglanti_durumu.dart';
+import 'package:sutyem_pro/models/cari_fiyat_model.dart';
 import 'package:sutyem_pro/utils/tarih_format.dart';
 
 import '../helpers/test_db.dart';
@@ -207,13 +209,69 @@ void main() {
         reason: 'Kaydet basılmadan veritabanı değişmez');
 
     await tester.tap(find.text('Kaydet'));
+    // Varsayılan: fiyat BUGÜNDEN itibaren geçerli (ayın 1'iyse aylık anahtar).
+    final bugun = DateTime.now();
+    final anahtar = CariFiyat.anahtar(bugun);
     var fiyatlar = <Map<String, Object?>>[];
     for (var i = 0; i < 100 && fiyatlar.length < 3; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump();
-      fiyatlar = (await tester.runAsync(() => db.query('cari_fiyatlar', orderBy: 'cari_id')))!;
+      fiyatlar = (await tester.runAsync(() => db.query('cari_fiyatlar',
+          where: 'ay = ?', whereArgs: [anahtar], orderBy: 'cari_id')))!;
     }
     expect(fiyatlar.map((r) => r['sut_fiyat']), [18.75, 18.75, 18.75]);
+    if (bugun.day != 1) {
+      final ay = await tester.runAsync(() => db.query('cari_fiyatlar',
+          where: 'ay = ?', whereArgs: [anahtar.substring(0, 7)]));
+      expect(ay!.single['sut_fiyat'], 15, reason: 'ayın önceki günleri eski fiyatta kalır');
+    }
+    await tester.pump(const Duration(seconds: 10)); // bildirimler kapansın
+    await tester.runAsync(() => db.close());
+  });
+
+  testWidgets('yem fiyatı: tür seç → tümüne aynı fiyat → kaydet; diğer türler korunur', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    late Database db;
+    final ay = CariFiyat.anahtar(DateTime(DateTime.now().year, DateTime.now().month, 1));
+    await tester.runAsync(() async {
+      db = await testVeritabaniAc();
+      final ali = await cariEkle(db, ad: 'Ali', soyad: 'Kaya');
+      await cariEkle(db, ad: 'Veli', soyad: 'Demir');
+      await fiyatTanimla(db, ali, ay, sut: 15, sutYemi: 11);
+    });
+
+    await tester.pumpWidget(_uygulama(db, const YemFiyatEkrani()));
+    await _bekle(tester, () => find.byKey(const ValueKey('topluYemFiyati')).evaluate().isNotEmpty, 'ekran');
+
+    // Geçersiz fiyat uyarısı
+    await tester.enterText(find.byKey(const ValueKey('topluYemFiyati')), '0');
+    await tester.tap(find.textContaining('Tümüne'));
+    await tester.pump();
+    expect(find.textContaining('Geçerli bir fiyat'), findsOneWidget);
+
+    // Besi Yemi seç, 9,50 yaz, tümüne uygula
+    await tester.tap(find.byKey(const ValueKey('topluYemTuru')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Besi Yemi').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('topluYemFiyati')), '9,50');
+    await tester.tap(find.textContaining('Tümüne'));
+    await tester.pump();
+    expect((await tester.runAsync(() => db.query('cari_fiyatlar')))!.single['besi_yemi_fiyat'], 0,
+        reason: 'Kaydet basılmadan veritabanı değişmez');
+
+    await tester.tap(find.text('Kaydet'));
+    var satirlar = <Map<String, Object?>>[];
+    for (var i = 0; i < 100 && satirlar.length < 2; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+      satirlar = (await tester.runAsync(() =>
+          db.query('cari_fiyatlar', where: 'ay = ?', whereArgs: [ay], orderBy: 'cari_id')))!;
+    }
+    expect(satirlar.map((r) => r['besi_yemi_fiyat']), [9.5, 9.5]);
+    expect(satirlar.first['sut_yemi_fiyat'], 11, reason: 'Ali\'nin süt yemi fiyatı korunur');
+    expect(satirlar.first['sut_fiyat'], 15, reason: 'süt fiyatına dokunulmaz');
     await tester.pump(const Duration(seconds: 10)); // bildirimler kapansın
     await tester.runAsync(() => db.close());
   });

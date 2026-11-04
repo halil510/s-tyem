@@ -10,7 +10,7 @@ import '../../models/sut_model.dart';
 import '../../models/yem_model.dart';
 import '../../utils/sayi_format.dart';
 import '../cari_hesap/models/cari_fiyat_lookup.dart';
-import '../cari_hesap/providers/cari_hesap_providers.dart' show sutTutari, yemTutari;
+import '../cari_hesap/providers/cari_hesap_providers.dart' show donemSutFiyati, sutTutari, yemTutari;
 
 /// Dönem işlemi kurala aykırı (ör. bitmemiş ay kapatılmak istendi).
 class DonemIslemHatasi implements Exception {
@@ -157,14 +157,17 @@ class DonemServisi {
     final yemKg = <int, double>{}, yemTl = <int, double>{};
     final odeme = <int, double>{}, tahsilat = <int, double>{};
     final eksik = <int>{};
+    final sutFiyatlari = <int, Set<double>>{};
     void ekle(Map<int, double> m, int id, double v) => m[id] = (m[id] ?? 0) + v;
 
     for (final m in await e.query('sutler', where: 'tarih <= ?', whereArgs: [bit])) {
       final s = Sut.fromMap(m);
-      final tutar = sutTutari(s, lookup.fiyatIcin(s.cariId, s.tarih.substring(0, 7)));
+      final fiyat = lookup.fiyatIcin(s.cariId, s.tarih);
+      final tutar = sutTutari(s, fiyat);
       if (s.tarih.compareTo(bas) < 0) {
         ekle(devir, s.cariId, tutar);
       } else {
+        if (s.toplam > 0) sutFiyatlari.putIfAbsent(s.cariId, () => {}).add(fiyat.sutFiyat);
         if (s.toplam > 0 && tutar <= 0) eksik.add(s.cariId);
         ekle(sutKg, s.cariId, s.toplam);
         ekle(sutTl, s.cariId, tutar);
@@ -172,7 +175,7 @@ class DonemServisi {
     }
     for (final m in await e.query('yemler', where: 'tarih <= ?', whereArgs: [bit])) {
       final y = Yem.fromMap(m);
-      final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih.substring(0, 7)));
+      final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih));
       if (y.tarih.compareTo(bas) < 0) {
         ekle(devir, y.cariId, -tutar);
       } else {
@@ -204,7 +207,8 @@ class DonemServisi {
           cariId: id,
           devir: kurusaYuvarla(devir[id] ?? 0),
           sutKg: sutKg[id] ?? 0,
-          sutFiyat: lookup.fiyatIcin(id, ay).sutFiyat,
+          sutFiyat: donemSutFiyati(sutFiyatlari[id], sutKg[id] ?? 0, sutTl[id] ?? 0,
+              lookup.fiyatIcin(id, ay).sutFiyat),
           sutTutar: kurusaYuvarla(sutTl[id] ?? 0),
           yemKg: yemKg[id] ?? 0,
           yemTutar: kurusaYuvarla(yemTl[id] ?? 0),

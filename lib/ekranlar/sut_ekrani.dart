@@ -12,6 +12,7 @@ import '../features/donem/donem_kapali_bandi.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/fis/fis_servisi.dart';
 import '../utils/sayi_format.dart';
+import '../widgetlar/kaydedilmemis_koruma.dart';
 import '../data/repositories/sut_repository.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import '../core/providers/repository_providers.dart';
@@ -211,6 +212,10 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
 
   String get _tarihStr => DateFormat('yyyy-MM-dd').format(_seciliTarih);
 
+  /// Sabah/akşam alanına odaklanınca ekran, alanın ALTINDAKİ KAYDET ve
+  /// KAYDET + FİŞ VER düğmeleri de klavyenin üstünde kalacak kadar kayar.
+  static const _kaydetGorunurPay = EdgeInsets.fromLTRB(20, 20, 20, 240);
+
   @override
   void initState() {
     super.initState();
@@ -348,12 +353,36 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       );
 
+  /// Alanlardaki değer, kayıtlı değerden farklı mı? (Geri tuşunda uyarı için.)
+  /// Geçersiz yazılmış alan da "değişiklik" sayılır.
+  bool get _kaydedilmemisVar {
+    if (_yukleniyor || _kaydediliyor) return false;
+    bool farkli(TextEditingController c, double kayitli) {
+      final v = sayiCoz(c.text);
+      return v == null || kurusaYuvarla(v) != kurusaYuvarla(kayitli);
+    }
+    return farkli(_sabahCtrl, _mevcutKayit?.sabah ?? 0) || farkli(_aksamCtrl, _mevcutKayit?.aksam ?? 0);
+  }
+
+  late final _alanDinleyici = Listenable.merge([_sabahCtrl, _aksamCtrl]);
+
   @override
   Widget build(BuildContext context) {
     final agirlikAsync = ref.watch(teraziAgirlikStreamProvider);
     final durumAsync = ref.watch(teraziDurumStreamProvider);
     final teraziBagli = durumAsync.valueOrNull?.aktifBaglanti ?? false;
 
+    // Süt girilip KAYDET'e basılmadan geri tuşuna basılırsa sor.
+    return KaydedilmemisKoruma(
+      dinle: _alanDinleyici,
+      degisiklikVar: () => _kaydedilmemisVar,
+      kaydet: _kaydet,
+      baslik: 'Süt kaydedilmedi',
+      child: _ekran(agirlikAsync, durumAsync, teraziBagli),
+    );
+  }
+
+  Widget _ekran(AsyncValue<String> agirlikAsync, AsyncValue<TeraziBaglantiDurumu> durumAsync, bool teraziBagli) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFF),
       appBar: AppBar(
@@ -393,22 +422,6 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 14),
-            _CanliTeraziKarti(
-              agirlikAsync: agirlikAsync,
-              durumAsync: durumAsync,
-              onSabahaUygula: (kg) {
-                _sabahCtrl.text = kg;
-                setState(() => _sabahHata = null);
-                _snack('Sabah sütüne $kg kg aktarıldı', renk: Colors.blue[700]!);
-              },
-              onAksamaUygula: (kg) {
-                _aksamCtrl.text = kg;
-                setState(() => _aksamHata = null);
-                _snack('Akşam sütüne $kg kg aktarıldı', renk: Colors.indigo[700]!);
-              },
-              onBaglanTikla: () => context.push(AppRoutes.terazi),
             ),
             const SizedBox(height: 14),
             Container(
@@ -458,6 +471,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                       errorText: _sabahHata,
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    scrollPadding: _kaydetGorunurPay,
                     textInputAction: TextInputAction.next,
                     onChanged: (_) {
                       if (_sabahHata != null) setState(() => _sabahHata = null);
@@ -474,6 +488,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                       errorText: _aksamHata,
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    scrollPadding: _kaydetGorunurPay,
                     textInputAction: TextInputAction.done,
                     onChanged: (_) {
                       if (_aksamHata != null) setState(() => _aksamHata = null);
@@ -521,6 +536,24 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
+            ),
+            // Terazi kartı EN ALTTA: klavye açıkken sabah/akşam alanları ile
+            // KAYDET düğmesi birlikte ekranda kalır → seri giriş.
+            const SizedBox(height: 14),
+            _CanliTeraziKarti(
+              agirlikAsync: agirlikAsync,
+              durumAsync: durumAsync,
+              onSabahaUygula: (kg) {
+                _sabahCtrl.text = kg;
+                setState(() => _sabahHata = null);
+                _snack('Sabah sütüne $kg kg aktarıldı', renk: Colors.blue[700]!);
+              },
+              onAksamaUygula: (kg) {
+                _aksamCtrl.text = kg;
+                setState(() => _aksamHata = null);
+                _snack('Akşam sütüne $kg kg aktarıldı', renk: Colors.indigo[700]!);
+              },
+              onBaglanTikla: () => context.push(AppRoutes.terazi),
             ),
             const SizedBox(height: 10),
             SizedBox(

@@ -12,8 +12,11 @@
   `bakiye = (süt değeri + tahsilat) − (yem değeri + ödeme)`
   - bakiye > 0 → işletme cariye borçlu (cari **alacaklı**)
   - bakiye < 0 → cari işletmeye borçlu (cari **borçlu**)
-  - Süt/yem tutarı, kaydın ait olduğu **ayın cari fiyatıyla** canlı hesaplanır
-    (`cari_fiyatlar`; o ay fiyat yoksa önceki aydan devralır).
+  - Süt/yem tutarı, kaydın **GÜNÜNDE geçerli cari fiyatıyla** canlı hesaplanır
+    (`cari_fiyatlar.ay` = `'yyyy-MM'` ay başından ya da `'yyyy-MM-dd'` o günden itibaren;
+    kaydın tarihine kadar başlamış EN SON fiyat — `CariFiyatLookup.fiyatIcin(cariId, s.tarih)`.
+    Ay anahtarıyla değil, KAYDIN TARİHİYLE sorgula!). Örn. 25 ₺, 4 Kasım'dan itibaren 27 ₺ →
+    1–3 Kasım 25, 4 Kasım ve sonrası 27. Yem fiyatı aylık girilir, aynı ayın gün satırlarına yayılır.
   - Bu hesabın tek kaynağı: `lib/features/cari_hesap/providers/cari_hesap_providers.dart`
     (`sutTutari`, `yemTutari`, `cariEkstreProvider`, `tumKalanBorclarProvider`).
 
@@ -55,7 +58,7 @@
 ## Testler
 
 ```bash
-flutter test          # 161 test — hepsi geçmeli
+flutter test          # 176 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -84,6 +87,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/ekran_tarama_test.dart` | TÜM EKRANLAR 360 px'de gerçekçi veriyle açılır (taşma/hata yok); alt panel yazıları; boş veritabanı |
 | `test/features/yazici_fiyat_menu_test.dart` | Wi-Fi (TCP) fiş yazdırma, ulaşılamayan yazıcı, kayıtlı yazıcı kilidi, tümüne aynı süt fiyatı, ⋮ menüsü |
 | `test/data/fiyat_toplu_test.dart` | Toplu ay fiyatı (tek sorgu) = eski cari-başına yöntem |
+| `test/features/gunluk_fiyat_test.dart` | Ay ortası fiyat değişikliği (o günden itibaren), sonraki aya devir, kapalı dönem v11 kilidi, yem fiyatı yayma |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -413,6 +417,37 @@ alıyordu → yeni eklenen / Excel'den alınan cari, uygulama yeniden açılana 
 - Süt fiyat ekranında yükleme sonrası `mounted` kontrolü.
 - Testler: 161/161 (`test/features/yazici_fiyat_menu_test.dart`: gerçek TCP soketiyle Wi-Fi yazdırma,
   ulaşılamayan yazıcı, kilitli yazıcı akışı, tümüne aynı fiyat, menü yeri); `flutter analyze` 0 error.
+
+### 2026-11-04 (16) — Kullanıcı ekran görüntüleri: kusurat, terazi kartı, ay ortası fiyat (sürüm 1.1.2+4)
+
+Kaynak: `bakılacaklar/` klasöründeki telefon ekran görüntüleri (AHMET ALMAÇ: 30,54 + 47,8 kg).
+
+| # | Sorun | Çözüm |
+|---|---|---|
+| 1 | Toplam süt tek haneye yuvarlanıyordu: 30,54 + 47,8 = 78,34 → **78.3 kg** (Cariler listesi, cari detayı, Özet "en çok süt"); Özet'te aylık süt **"0.08 ton"**; Ödenecek tutar kuruşsuz (₺5374) | Tüm kg gösterimleri `sayiGoster` (2 haneye kadar, gereksiz sıfır yok); Özet `#,##0.##` kg, aylık süt kg ile, para kuruşu varsa `₺5.374,40`. `sayiGoster(12.001)` "12.0" veriyordu → düzeltildi. Detayda "Sabah: 25.0kg" → "25kg". |
+| 2 | Süt Ekle ekranında terazi kartı en üstteydi; klavye açılınca KAYDET görünmüyordu | Terazi kartı KAYDET / KAYDET + FİŞ VER düğmelerinin ALTINA alındı; sabah/akşam alanlarına `scrollPadding` (alt 240) → odaklanınca düğmeler de klavyenin üstüne kayar. |
+| 3 | **Fiyat ay ortasında değişince TÜM AY yeni fiyattan hesaplanıyordu** (fiyat yalnızca aylıktı: 4 Kasım'da 25→27 yapınca 1–3 Kasım sütü de 27'den) | Fiyat artık "**o günden itibaren**" geçerli: `cari_fiyatlar.ay` `'yyyy-MM-dd'` de olabilir (şema aynı). Tüm hesaplar (ekstre, bakiye, aylık özet, hakediş) fiyatı KAYDIN TARİHİYLE bulur. Süt Fiyatları ekranı: "Fiyat şu günden itibaren geçerli" (varsayılan bugün) + "Bugünden itibaren" / "Ayın başından" seçimleri; fiyatı değişmeyen cariye satır açılmaz. Ay içinde fiyat değiştiyse aylık özet/hakediş/WhatsApp'ta süt fiyatı **kg ağırlıklı ortalama** ("ort.") — tutar her gün kendi fiyatıyla. |
+| 4 | (3'ün yan etkisi) Kapalı dönem kilidi `ay = dönem` karşılaştırıyordu; `'2026-10-15'` hiçbir dönemle eşleşmez → kapalı aya fiyat yazılabilirdi | **Migration v11**: `cari_fiyatlar` tetikleyicileri `substr(ay, 1, 7)` ile yeniden kuruldu. Supabase: CHECK gün biçimini de kabul eder, `donem_kilidi()` `left(ay, 7)`. |
+| 5 | (3'ün yan etkisi) Gün satırları da yem fiyatı taşır; aylık yem fiyatı değişince ayın kalanı eski yem fiyatında kalırdı | Yem Fiyatları kaydı `topluKaydet(…, yemFiyatiniAyaYay: true)` → aynı ayın gün satırlarının yem fiyatlarını da günceller (süt fiyatına dokunmaz). |
+
+- Yeni test: `test/features/gunluk_fiyat_test.dart` (ekstre/bakiye/özet/hakediş ay ortası fiyat, sonraki aya devir,
+  kapalı dönem v11 kilidi, yem yayma, ekran ön dolgusu); `widget_test.dart` terazi kartı sırası; `sayiGoster` regresyonu.
+- Testler: 172/172; `flutter analyze` 0 error.
+
+### 2026-11-04 (17) — Kompakt cari özet kartları, kaydedilmemiş giriş uyarısı, toplu yem fiyatı (sürüm 1.1.3+5)
+
+- **Cariler ekranı özet kartları** (Toplam / İnek / Koyun / Tavuk / Süt Toplam) küçültüldü: ikon solda, sayı +
+  başlık sağda, hepsi eşit yükseklikte; bu ayki süt "İnek · 78,34 kg" gibi başlığın yanında.
+- **Kaydedilmemiş giriş koruması** (`lib/widgetlar/kaydedilmemis_koruma.dart`, `PopScope`): Süt Ekle, Hızlı Süt
+  Girişi ve Yem Ekle ekranlarında miktar yazılıp KAYDET'e basılmadan geri tuşuna (cihaz ya da üst ok) basılırsa
+  "Kaydet / Kaydetmeden Çık / Vazgeç" sorulur. Değişiklik yoksa geri tuşu normal çalışır. "Kaydet" ekranın kendi
+  kaydetme akışını kullanır (hatalı miktarda ekran açık kalır, hata görünür).
+  KURAL: yeni bir giriş ekranı eklenirse aynı sarmalayıcı kullanılsın.
+- **Yem Fiyatları → "Tüm carilere aynı yem fiyatı"**: yem türü seçilir, fiyat yazılır, "Tümüne Uygula" yalnız o
+  türün alanlarını doldurur (diğer türler ve süt fiyatı korunur); veritabanına ancak "Kaydet" ile yazılır.
+  Kart listenin başında, birlikte kayar (klavye açıkken dar ekranda taşma olmasın).
+- Testler: 176/176 (geri tuşu: değişiklik yok / Vazgeç / Kaydetmeden Çık / Kaydet; toplu yem fiyatı);
+  `flutter analyze` 0 error.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 
