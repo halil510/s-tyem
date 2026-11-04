@@ -19,12 +19,10 @@ class _AppActivationScreenState extends State<AppActivationScreen> {
   bool _showPassword = false;
   String _statusMessage = '';
   bool _isError = false;
-  List<Map<String, String>> _userList = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserList();
     _checkAlreadyActivated();
   }
 
@@ -33,16 +31,6 @@ class _AppActivationScreenState extends State<AppActivationScreen> {
     _passwordController.dispose();
     _ownerController.dispose();
     super.dispose();
-  }
-
-  void _loadUserList() {
-    final passwords = AppLocker.getUserPasswords();
-    _userList = passwords.entries.map((entry) {
-      return {
-        'username': entry.key,
-        'password': entry.value,
-      };
-    }).toList();
   }
 
   Future<void> _checkAlreadyActivated() async {
@@ -101,71 +89,6 @@ class _AppActivationScreenState extends State<AppActivationScreen> {
     context.go(AppRoutes.main);
   }
 
-  void _showUserList() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'KULLANICI LİSTESİ',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Her kullanıcı için farklı şifre:',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _userList.length,
-                  itemBuilder: (context, index) {
-                    final user = _userList[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue,
-                          child: Text(
-                            user['username']!.substring(0, 1),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        title: Text(user['username']!),
-                        subtitle: Text(
-                          'Şifre: ${user['password']}',
-                          style: const TextStyle(fontFamily: 'monospace'),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.copy),
-                          onPressed: () {
-                            _passwordController.text = user['password']!;
-                            Navigator.pop(context);
-                            _showMessage('✅ ${user['username']} şifresi kopyalandı', isError: false);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Kapat'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -212,27 +135,13 @@ class _AppActivationScreenState extends State<AppActivationScreen> {
               const SizedBox(height: 10),
               
               const Text(
-                '10 farklı kullanıcı için 10 farklı şifre mevcut.',
+                'Bu cihazı etkinleştirmek için size verilen aktivasyon şifresini girin.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
               
               const SizedBox(height: 30),
               
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _showUserList,
-                  icon: const Icon(Icons.people),
-                  label: const Text('Kullanıcı Listesini Gör'),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.green),
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                ),
-              ),
-              
-              const SizedBox(height: 20),
               
               TextField(
                 controller: _ownerController,

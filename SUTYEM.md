@@ -42,7 +42,7 @@
 ## Testler
 
 ```bash
-flutter test          # 68 test — hepsi geçmeli
+flutter test          # 74 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -58,6 +58,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/data/supabase_sema_test.dart` | Her SQLite tablo/sütunu Supabase SQL dosyasında var mı |
 | `test/data/app_database_test.dart` | Gerçek dosyada açılış: migration hatası veriyi silmez, bozuk dosya kenara alınır |
 | `test/features/aylik_ozet_test.dart` | Aylık özet: cari fiyatıyla, ekstreyle aynı, WhatsApp mesajı |
+| `test/utils/sifre_ozeti_test.dart` | PBKDF2 test vektörleri, yanlış şifre/kilitlenme, kaynakta açık şifre yok |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -152,13 +153,29 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - Supabase SQL: şema değişmedi.
 - Testler: 68/68 geçti; `flutter analyze` 0 error.
 
+### 2026-11-04 (5) — A4: master şifre koddan çıkarıldı
+
+- **Bulunan ek güvenlik açığı:** Aktivasyon ekranında "Kullanıcı Listesini Gör" düğmesi
+  10 şifreyi (master şifre dahil) **uygulama içinde gösteriyor ve kopyalatıyordu** —
+  telefonu eline alan herkes aktive edebiliyordu. Liste ve düğme kaldırıldı.
+  (Listedeki diğer 9 şifre zaten hiçbir yerde kabul edilmiyordu.)
+- `lib/utils/sifre_ozeti.dart`: PBKDF2-HMAC-SHA256 (120.000 tur) + sabit zamanlı karşılaştırma.
+- `AppLocker`: `_defaultMasterPassword` ve `_userPasswords` kaldırıldı; `_masterTuz` + `_masterOzet`.
+  Doğrulama `Isolate.run` ile arka planda (PC'de ~0,6 sn; telefonda arayüz donmasın).
+  **Mevcut şifre aynen çalışıyor** (özeti eski değerden üretildi ve doğrulandı) → kilitlenme riski yok.
+  `getUsedPassword` artık şifrenin ilk 5 harfini göstermiyor ("Master şifre" / "Özel şifre").
+- `tool/master_sifre_ozeti.dart`: yeni şifre için tuz+özet üretir (şifre hiçbir yere yazılmaz).
+- Proje genelinde eski şifrelerin hiçbir izlenen dosyada kalmadığı denetlendi.
+- Supabase SQL: şema değişmedi.
+- Testler: 74/74 geçti; `flutter analyze` 0 error.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
-1. **Sabit ana şifre:** `lib/utils/app_locker.dart` içinde `_defaultMasterPassword`
-   kaynak kodda açık yazılı. Kodu (veya APK'yı) gören herkes uygulamayı açabilir.
-   GitHub deposu bu yüzden **özel (private)** olmalı. Kalıcı çözüm: şifreyi
-   koddan çıkarıp ilk kurulumda kullanıcıya belirletmek (kilitlenme riskine
-   karşı dikkatli geçiş planı gerekir).
+1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
+   açık şifre GitHub'daki eski commit'lerde duruyor ve depo hâlâ PUBLIC → şifre ifşa olmuş
+   sayılmalı. Yapılacak: (a) depoyu private yap, (b) `dart run tool/master_sifre_ozeti.dart`
+   ile YENİ şifre belirle, çıkan iki satırı `app_locker.dart`'a koy, APK derle.
+   Önceden aktive edilmiş telefonlar etkilenmez (aktivasyon cihazda saklı).
 2. Yem fiyatı ekranı kaydederken her cari için o ayın satırını (süt fiyatını da
    kopyalayarak) yazar. Sonradan **önceki** bir ayın süt fiyatı değişirse bu ay
    eski kopyayı kullanır. İleride fiyatları ürün bazında ayrı satırlara ayırmak düşünülebilir.
@@ -172,7 +189,7 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - [x] A1. Migration hatasında veritabanı silinmiyor (2026-11-04). Ayrıntı: oturum günlüğü (3).
 - [x] A2. Kullanılmayan eski `terazi_baglanti_ekrani.dart` arşive alındı; tek ekran: `features/terazi/screens/terazi_baglanti_ekrani_pro.dart` (düşük seviye `services/terazi_service.dart` Pro servis tarafından kullanılıyor, kalmalı).
 - [x] A3. Aylık Rapor gerçek fiyatlarla hesaplanıyor; `fiyatlar` tablosu ekranı "Piyasa Fiyat Notları" oldu + "hesaplara girmez" bandı. Ayrıntı: oturum günlüğü (4).
-- [ ] A4. Sabit ana şifre → ilk kurulumda belirlenen şifre.
+- [x] A4. Açık şifre koddan kaldırıldı (özet + isolate). **Kullanıcı yeni şifre belirlemeli** (tool/master_sifre_ozeti.dart). Ayrıntı: oturum günlüğü (5).
 - [ ] A5. `cari_listesi.dart` (1675 satır) ve `detay_ekrani.dart` (1094) parçalara böl.
 
 **B. Yeni ekranlar**

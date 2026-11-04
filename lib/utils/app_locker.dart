@@ -4,6 +4,9 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:isolate';
+
+import 'sifre_ozeti.dart';
 
 class AppLocker {
   static final AppLocker _instance = AppLocker._internal();
@@ -23,27 +26,20 @@ class AppLocker {
   static const String _autoLockKey = 'auto_lock_enabled';
   static const String _autoLockTimeKey = 'auto_lock_time';
 
-  // Varsayılan master şifre
-  static const String _defaultMasterPassword = "ibrahim8583791";
+  // Master (aktivasyon) şifresi kaynak kodda AÇIK YAZILMAZ; yalnızca
+  // PBKDF2 özeti durur (bkz. utils/sifre_ozeti.dart). Şifreyi değiştirmek
+  // için: `dart run tool/master_sifre_ozeti.dart` → çıkan iki satırı buraya.
+  static const String _masterTuz = 'f7abd43bf162d7e117131077b7a013ca';
+  static const String _masterOzet = 'd6c47782a5ed413facbbfce3285870a6f7b8f898c962d0462ccff2096cf25944';
+
+  /// Yavaş özet arayüzü dondurmasın diye ayrı isolate'ta hesaplanır.
+  Future<bool> _masterMi(String sifre) =>
+      Isolate.run(() => sifreOzetiEsitMi(sifre, _masterTuz, _masterOzet));
 
   // Güvenlik ayarları
   static const int _maxFailedAttempts = 5;
   static const int _lockDurationMinutes = 15;
   static const int _defaultAutoLockTime = 5; // Dakika
-
-  // Eski sistem uyumluluğu için (kullanılan yerlerde)
-  static final Map<String, String> _userPasswords = {
-    'AHMET': 'ibrahim8583791',
-    'MEHMET': 'HALIL_MEHMET_456', 
-    'ALİ': 'HALIL_ALI_789',
-    'VELİ': 'HALIL_VELI_101',
-    'AYŞE': 'HALIL_AYSE_202',
-    'FATMA': 'HALIL_FATMA_303',
-    'HASAN': 'HALIL_HASAN_404',
-    'HÜSEYİN': 'HALIL_HUSEYIN_505',
-    'ZEYNEP': 'HALIL_ZEYNEP_606',
-    'MUSTAFA': 'HALIL_MUSTAFA_707',
-  };
 
   // Cihaz ID'sini al
   Future<String> _getDeviceId() async {
@@ -145,7 +141,7 @@ class AppLocker {
       {String securityQuestion = "", String securityAnswer = ""}) async {
     try {
       // Master şifre kontrolü
-      if (password != _defaultMasterPassword) {
+      if (!await _masterMi(password)) {
         return {
           'success': false,
           'message': '❌ Geçersiz master şifre!',
@@ -206,7 +202,7 @@ class AppLocker {
       final prefs = await SharedPreferences.getInstance();
       
       // Varsayılan şifreyi kontrol et
-      if (password == _defaultMasterPassword) {
+      if (await _masterMi(password)) {
         await _resetFailedAttempts();
         await _updateLastAccessTime();
         return {
@@ -418,30 +414,10 @@ class AppLocker {
     return prefs.getString(_ownerKey) ?? "Kayıtlı Değil";
   }
 
-  // Kullanılan şifreyi getir (eski sistem uyumluluğu için)
+  // Hangi tür şifre kullanılıyor (şifrenin hiçbir parçası gösterilmez).
   Future<String> getUsedPassword() async {
     final prefs = await SharedPreferences.getInstance();
-    final usedPass = prefs.getString(_passwordKey);
-    
-    if (usedPass == null) return "Kullanılmamış";
-    
-    // Master şifre kontrolü
-    if (_defaultMasterPassword == "ibrahim8583791") {
-      return "MASTER (${_defaultMasterPassword.substring(0, 5)}...)";
-    }
-    
-    return "Özel şifre (${usedPass.substring(0, 5)}...)";
-  }
-
-  // Eski sistem uyumluluğu için statik metodlar
-  static Map<String, String> getUserPasswords() {
-    return _userPasswords;
-  }
-
-  static void updatePassword(String username, String newPassword) {
-    if (_userPasswords.containsKey(username)) {
-      _userPasswords[username] = newPassword;
-    }
+    return prefs.getString(_passwordKey) == null ? 'Master şifre' : 'Özel şifre';
   }
 
   // Güvenlik sorusunu getir
