@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/cari_model.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
+import '../utils/turkce.dart';
 
 class CariEkle extends ConsumerStatefulWidget {
   const CariEkle({super.key});
@@ -303,7 +304,38 @@ class _CariEkleState extends ConsumerState<CariEkle> {
         hayvanTuru: _hayvanTuru,
       );
 
-      await (await ref.read(cariRepositoryProvider.future)).insert(yeniCari);
+      final repo = await ref.read(cariRepositoryProvider.future);
+
+      // Aynı ad-soyadla ikinci cari açılırsa süt/yem yanlış kişiye yazılabilir.
+      String anahtar(String ad, String soyad) =>
+          turkceKucuk('$ad $soyad'.trim().replaceAll(RegExp(r'\s+'), ' '));
+      final ayniIsim = (await repo.getAll())
+          .where((c) => anahtar(c.ad, c.soyad) == anahtar(yeniCari.ad, yeniCari.soyad))
+          .toList();
+      if (ayniIsim.isNotEmpty) {
+        if (!mounted) return;
+        final devam = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Aynı isimde cari var'),
+            content: Text(
+              '"${yeniCari.tamAd}" adında ${ayniIsim.length} cari zaten kayıtlı'
+              '${ayniIsim.any((c) => !c.aktif) ? ' (pasif olabilir)' : ''}.\n\n'
+              'Yine de YENİ bir cari olarak eklensin mi?',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yine de Ekle')),
+            ],
+          ),
+        );
+        if (devam != true) {
+          if (mounted) setState(() => _kaydediliyor = false);
+          return;
+        }
+      }
+
+      await repo.insert(yeniCari);
       ref.veriDegisti();
 
       if (!mounted) return;
@@ -319,6 +351,7 @@ class _CariEkleState extends ConsumerState<CariEkle> {
 
       Navigator.pop(context, true);
     } catch (error) {
+      if (!mounted) return;
       setState(() => _kaydediliyor = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

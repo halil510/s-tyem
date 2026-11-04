@@ -128,15 +128,24 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     );
 
     if (result == true) {
-      await _sutRepo.delete(sut.id!);
+      // Kapalı döneme ait kayıt silinemez (DonemKapaliHatasi) — eskiden hata
+      // yakalanmıyor, kullanıcı hiçbir mesaj görmüyordu.
+      await _silVeYenile(() => _sutRepo.delete(sut.id!), 'Süt kaydı silindi');
+    }
+  }
+
+  Future<void> _silVeYenile(Future<Object?> Function() sil, String mesaj) async {
+    try {
+      await sil();
       ref.veriDegisti();
       await _kayitlariGetir();
-      setState(() {});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Süt kaydı silindi')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mesaj)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Silinemedi: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -161,15 +170,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     );
 
     if (result == true) {
-      await _yemRepo.delete(yem.id!);
-      ref.veriDegisti();
-      await _kayitlariGetir();
-      setState(() {});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Yem kaydı silindi')),
-        );
-      }
+      await _silVeYenile(() => _yemRepo.delete(yem.id!), 'Yem kaydı silindi');
     }
   }
 
@@ -263,7 +264,6 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     );
     if (result == true) {
       await _kayitlariGetir();
-      setState(() {});
     }
   }
 
@@ -274,12 +274,16 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     );
     if (result == true) {
       await _kayitlariGetir();
-      setState(() {});
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Başka ekranda (ör. Hızlı Süt Girişi, ekstre) yapılan değişiklikte
+    // listeyi yenile (bkz. SUTYEM.md kural 11).
+    ref.listen(veriSurumuProvider, (_, __) {
+      if (!_yukleniyor) _kayitlariGetir();
+    });
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(

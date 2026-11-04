@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/providers/repository_providers.dart';
 import '../../../core/providers/veri_surumu_provider.dart';
+import '../../../data/repositories/cari_repository.dart' show cariSirala;
 import '../../../models/cari_model.dart';
 import '../../../models/sut_model.dart';
 import '../../cari_hesap/providers/cari_hesap_providers.dart'
@@ -111,7 +112,7 @@ List<Cari> gelmeyenUreticiler({
       .where((c) =>
           c.id != null && duzenli.contains(c.id) && !bugunGelen.contains(c.id))
       .toList()
-    ..sort((a, b) => a.tamAd.toLowerCase().compareTo(b.tamAd.toLowerCase()));
+    ..sort(cariSirala);
 }
 
 /// Dashboard'un tüm verilerini tek seferde, verimli sorgularla hesaplayan

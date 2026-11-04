@@ -217,8 +217,9 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
       ));
       Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _kaydediliyor = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e'), backgroundColor: Colors.red));
     }
   }
 

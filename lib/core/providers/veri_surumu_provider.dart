@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart' show DateUtils;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,3 +31,29 @@ extension VeriDegistiWidgetRef on WidgetRef {
 /// yedek geri yükleme gibi toplu değişikliklerden sonra çağrılır.
 void veriDegistiBildir(BuildContext context) =>
     ProviderScope.containerOf(context, listen: false).read(veriSurumuProvider.notifier).state++;
+
+/// Bugünün tarihi (saatsiz). Gün değişince (gece yarısı ya da telefon sabah
+/// arka plandan açılınca) yeni değer yayar. [AnaEkran] bunu dinleyip
+/// [veriDegisti] çağırır → Özet'teki "Bugün", Cariler'deki "bu ay" gibi
+/// hesaplar yenilenir. Eskiden uygulama gece açık kalırsa sabah Özet
+/// DÜNÜN rakamlarını "Bugün" diye gösteriyordu.
+final bugunProvider = StreamProvider<DateTime>((ref) {
+  DateTime gun() => DateUtils.dateOnly(DateTime.now());
+  var son = gun();
+  final akis = StreamController<DateTime>();
+  akis.add(son);
+  final zamanlayici = Timer.periodic(const Duration(seconds: 30), (_) {
+    final g = gun();
+    if (g != son) {
+      son = g;
+      akis.add(g);
+    }
+  });
+  // Zamanlayıcı sağlayıcıyla birlikte HEMEN durur (async* + await for
+  // iptalde bir sonraki 30 sn'lik olaya kadar asılı kalıyordu).
+  ref.onDispose(() {
+    zamanlayici.cancel();
+    akis.close();
+  });
+  return akis.stream;
+});

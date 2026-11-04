@@ -11,6 +11,22 @@ import '../../utils/sayi_format.dart';
 /// Detay ekranındaki süt/yem kaydı düzenleme diyalogları.
 /// Geçersiz miktar 0 olarak kaydedilmez, kullanıcıya hata gösterilir.
 
+/// Tüm miktarlar 0 yapıldıysa: boş satır bırakmak yerine kaydı silmeyi sorar.
+Future<bool?> _sifirSilOnayi(BuildContext context, String tur) => showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Miktar 0'),
+        content: Text('Tüm miktarlar 0. Bu $tur kaydı silinsin mi?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
 class SutDuzenleDialog extends ConsumerStatefulWidget {
   final Sut sut;
   const SutDuzenleDialog({required this.sut, super.key});
@@ -65,7 +81,13 @@ class _SutDuzenleDialogState extends ConsumerState<SutDuzenleDialog> {
       );
 
       final repo = await ref.read(sutRepositoryProvider.future);
-      await repo.update(guncellenenSut);
+      if (sabah == 0 && aksam == 0) {
+        // 0 kg'lık boş satır bırakma: kaydı silmeyi öner.
+        if (!mounted || await _sifirSilOnayi(context, 'süt') != true) return;
+        await repo.delete(widget.sut.id!);
+      } else {
+        await repo.update(guncellenenSut);
+      }
       ref.veriDegisti();
 
       if (!mounted) return;
@@ -193,7 +215,12 @@ class _YemDuzenleDialogState extends ConsumerState<YemDuzenleDialog> {
       );
 
       final repo = await ref.read(yemRepositoryProvider.future);
-      await repo.update(guncellenenYem);
+      if (guncellenenYem.toplam == 0) {
+        if (!mounted || await _sifirSilOnayi(context, 'yem') != true) return;
+        await repo.delete(widget.yem.id!);
+      } else {
+        await repo.update(guncellenenYem);
+      }
       ref.veriDegisti();
 
       if (!mounted) return;

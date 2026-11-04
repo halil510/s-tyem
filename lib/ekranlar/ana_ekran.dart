@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/providers/veri_surumu_provider.dart';
 import 'dashboard_ekrani.dart';
 import 'cari_listesi.dart';
 import 'sut_ekrani.dart';
@@ -46,6 +48,21 @@ class _AnaEkranState extends State<AnaEkran> {
 
   @override
   Widget build(BuildContext context) {
+    // Gün değişince (gece yarısı / sabah arka plandan dönüş) tüm sekmeleri
+    // yenile: Özet'in "Bugün"ü, Cariler'in "bu ay" toplamı güncel kalsın.
+    return Consumer(
+      builder: (context, ref, child) {
+        ref.listen<AsyncValue<DateTime>>(bugunProvider, (onceki, simdi) {
+          final eski = onceki?.valueOrNull, yeni = simdi.valueOrNull;
+          if (eski != null && yeni != null && eski != yeni) ref.veriDegisti();
+        });
+        return child!;
+      },
+      child: _sekmeler(context),
+    );
+  }
+
+  Widget _sekmeler(BuildContext context) {
     return PopScope(
       // Özet (Dashboard) sekmesindeyken geri tuşu normal davranır
       // (uygulamadan çıkar). Diğer sekmelerdeyken (Cariler, Süt, Yem,

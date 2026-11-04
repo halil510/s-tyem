@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/repositories/cari_repository.dart' show cariSirala;
 import 'package:intl/intl.dart';
 import '../models/cari_model.dart';
 import '../services/whatsapp_service.dart';
@@ -48,9 +49,7 @@ class _FiyatHesaplamaEkraniState extends ConsumerState<FiyatHesaplamaEkrani> {
       for (final c in cariler)
         if (c.id != null && ozet[c.id!] != null) (cari: c, ozet: ozet[c.id!]!),
     ];
-    liste.sort((a, b) => '${a.cari.ad} ${a.cari.soyad}'
-        .toLowerCase()
-        .compareTo('${b.cari.ad} ${b.cari.soyad}'.toLowerCase()));
+    liste.sort((a, b) => cariSirala(a.cari, b.cari));
     return liste;
   }
 

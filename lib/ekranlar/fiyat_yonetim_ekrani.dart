@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/fiyat_model.dart';
 import '../core/providers/repository_providers.dart';
 import '../sabitler/renkler.dart';
+import '../utils/sayi_format.dart';
 
 /// Genel (cariye bağlı olmayan) süt alış / yem satış fiyat geçmişi.
 ///
@@ -165,8 +166,7 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: renk),
               onPressed: () async {
-                final val =
-                    double.tryParse(fiyatCtrl.text.replaceAll(',', '.'));
+                final val = sayiCoz(fiyatCtrl.text);
                 if (val == null || val <= 0) return;
                 final repo = await ref.read(fiyatRepositoryProvider.future);
                 await repo.insert(Fiyat(

@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../../models/cari_model.dart';
+import '../../utils/turkce.dart';
 import 'donem_kilidi.dart';
 
 /// Cari (müşteri/tedarikçi) kayıtları için veri erişim katmanı.
@@ -30,9 +31,9 @@ class CariRepository {
     final maps = await db.query(
       'cariler',
       where: sadeceAktif ? 'aktif = 1 OR aktif IS NULL' : null,
-      orderBy: 'ad ASC, soyad ASC',
     );
-    return maps.map(Cari.fromMap).toList();
+    // Türk alfabesiyle sırala (SQL'in ORDER BY'ı Ç/Ş/Ö/Ü/İ'yi Z'den sonraya atıyordu).
+    return maps.map(Cari.fromMap).toList()..sort(cariSirala);
   }
 
   Future<Cari?> getById(int id) async {
@@ -73,8 +74,13 @@ class CariRepository {
       'cariler',
       where: 'ad LIKE ? OR soyad LIKE ? OR telefon LIKE ?',
       whereArgs: ['%$sorgu%', '%$sorgu%', '%$sorgu%'],
-      orderBy: 'ad ASC, soyad ASC',
     );
-    return maps.map(Cari.fromMap).toList();
+    return maps.map(Cari.fromMap).toList()..sort(cariSirala);
   }
+}
+
+/// Carileri ad, sonra soyad sırasıyla Türk alfabesine göre dizer.
+int cariSirala(Cari a, Cari b) {
+  final ad = turkceKarsilastir(a.ad, b.ad);
+  return ad != 0 ? ad : turkceKarsilastir(a.soyad, b.soyad);
 }

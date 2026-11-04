@@ -15,6 +15,8 @@ import '../bluetooth/wifi_transfer_service.dart';
 import '../utils/app_locker.dart';
 import '../data/yedek/yedek_servisi.dart';
 import '../core/providers/veri_surumu_provider.dart';
+import '../core/providers/database_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class YedeklemeEkrani extends StatefulWidget {
   const YedeklemeEkrani({super.key});
@@ -30,6 +32,17 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   final AppLocker _appLocker = AppLocker();
   Map<String, String> _deviceInfo = {};
 
+  // Başlıktaki sayılar ve sahip bilgisi BİR KEZ okunur (eskiden her yeniden
+  // çizimde yeni sorgu atılıyor, sayılar bir an 0 görünüp titriyordu).
+  // Veri değişince [_istatistikYenile] ile tazelenir.
+  late Future<Map<String, int>> _istatistik = _getStatistics();
+  late final Future<String> _sahipBilgisi = _appLocker.getOwnerInfo();
+  late final Future<String> _kullanilanSifre = _appLocker.getUsedPassword();
+
+  void _istatistikYenile() {
+    if (mounted) setState(() => _istatistik = _getStatistics());
+  }
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +52,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
 
   Future<void> _loadPassword() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _kayitliSifre = prefs.getString('veritabani_sifre') ?? '12345';
     });
@@ -46,6 +60,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
 
   Future<void> _loadDeviceInfo() async {
     final info = await _appLocker.getDeviceInfo();
+    if (!mounted) return;
     setState(() {
       _deviceInfo = info;
     });
@@ -271,7 +286,10 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
 
     _showSnack('Veritabanına uygulanıyor...');
     final ozet = await (await _veriRepo).yedekYukle(veri);
-    if (mounted) veriDegistiBildir(context);
+    if (mounted) {
+      veriDegistiBildir(context);
+      _istatistikYenile();
+    }
     _showSnack('✅ Yedek geri yüklendi: ${ozet.toplam} kayıt');
   }
 
@@ -286,31 +304,58 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     // başlar ve kullanıcı tüm verilerinin gittiğini sanır.
     await VeriYonetimiRepository.dbDosyasiniDogrula(dbFile.path);
 
-    await AppDatabase.instance.close();
-
     final dbPath = await getDatabasesPath();
     final mevcutDb = File(p.join(dbPath, 'sut_yem.db'));
 
+    // 1) Yeni dosya ÖNCE yanına geçici kopyalanır. Eskiden mevcut veritabanı
+    //    silinip SONRA kopyalanıyordu: kopya yarıda kalırsa (yer yok, dosya
+    //    okunamadı) uygulama BOŞ veritabanıyla açılıyordu.
+    final gecici = File('${mevcutDb.path}.geri_yukleme');
+    if (await gecici.exists()) await gecici.delete();
+    await dbFile.copy(gecici.path);
+
+    await AppDatabase.instance.close();
+
+    // 2) Mevcut veritabanının yedeği (geri dönüş için).
+    File? eskiYedek;
     if (await mevcutDb.exists()) {
       final docDir = await getApplicationDocumentsDirectory();
-      await mevcutDb.copy(
+      eskiYedek = await mevcutDb.copy(
         '${docDir.path}/sut_yem_backup_${DateTime.now().millisecondsSinceEpoch}.db',
       );
     }
 
-    if (await mevcutDb.exists()) {
-      await mevcutDb.delete();
-    }
-    // Eski veritabanına ait günlük dosyaları yeni dosyaya uygulanırsa
-    // onu bozar; geri yüklemeden önce temizlenir.
-    for (final ek in const ['-wal', '-shm', '-journal']) {
-      final f = File('${mevcutDb.path}$ek');
-      if (await f.exists()) await f.delete();
+    // 3) Yer değiştir. Eski veritabanına ait günlük dosyaları yeni dosyaya
+    //    uygulanırsa onu bozar; temizlenir.
+    try {
+      for (final ek in const ['-wal', '-shm', '-journal']) {
+        final f = File('${mevcutDb.path}$ek');
+        if (await f.exists()) await f.delete();
+      }
+      if (await mevcutDb.exists()) await mevcutDb.delete();
+      await gecici.rename(mevcutDb.path);
+    } catch (e) {
+      // Geri dön: eski veritabanını yerine koy.
+      if (eskiYedek != null && !await mevcutDb.exists()) await eskiYedek.copy(mevcutDb.path);
+      if (await gecici.exists()) await gecici.delete();
+      _veritabaniniYenidenAc();
+      rethrow;
     }
 
-    await dbFile.copy(mevcutDb.path);
+    // 4) Uygulama yeni veritabanını hemen kullansın (eskiden kapalı
+    //    veritabanıyla devam edip her ekranda hata veriyordu).
+    _veritabaniniYenidenAc();
     _showSnack('✅ Veritabanı başarıyla geri yüklendi');
     _showRestartDialog();
+  }
+
+  /// Açık ekranların ve servislerin yeni / geri konan veritabanını
+  /// kullanması için veritabanı sağlayıcısını yeniler.
+  void _veritabaniniYenidenAc() {
+    if (!mounted) return;
+    ProviderScope.containerOf(context, listen: false).invalidate(databaseProvider);
+    veriDegistiBildir(context);
+    _istatistikYenile();
   }
 
   Future<bool> _checkImportPermission() async {
@@ -442,7 +487,10 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     setState(() => _isProcessing = true);
     try {
       final silinen = await (await _veriRepo).sutVeYemSil();
-      if (mounted) veriDegistiBildir(context);
+      if (mounted) {
+      veriDegistiBildir(context);
+      _istatistikYenile();
+    }
       _showSnack('✅ ${silinen.sut} süt ve ${silinen.yem} yem kaydı temizlendi\n(Cariler korundu)');
     } on DonemKapaliHatasi {
       _showSnack('❌ Kapatılmış dönemlerde kayıt var; hiçbir kayıt silinmedi. '
@@ -567,15 +615,15 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
 
   Widget _buildHeader() {
     return FutureBuilder<Map<String, int>>(
-      future: _getStatistics(),
+      future: _istatistik,
       builder: (context, snapshot) {
         final stats = snapshot.data ?? {'sut': 0, 'yem': 0, 'cari': 0};
         
         return FutureBuilder<String>(
-          future: _appLocker.getOwnerInfo(),
+          future: _sahipBilgisi,
           builder: (context, ownerSnapshot) {
             return FutureBuilder<String>(
-              future: _appLocker.getUsedPassword(),
+              future: _kullanilanSifre,
               builder: (context, passSnapshot) {
                 return Container(
                   width: double.infinity,
@@ -847,7 +895,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
             Text('Hash: ${_deviceInfo['device_hash']?.substring(0, 12)}...'),
             const SizedBox(height: 4),
             FutureBuilder<String>(
-              future: _appLocker.getOwnerInfo(),
+              future: _sahipBilgisi,
               builder: (context, snapshot) {
                 return Text('Sahip: ${snapshot.data ?? "Belirtilmemiş"}');
               },

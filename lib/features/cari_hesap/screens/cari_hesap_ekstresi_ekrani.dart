@@ -262,7 +262,19 @@ class _CariHesapEkstresiEkraniState extends ConsumerState<CariHesapEkstresiEkran
       ),
     );
     if (onay == true && hareket.kayitId != null) {
-      await ref.read(cariHesapNotifierProvider.notifier).sil(hareket.kayitId!);
+      // Kapalı döneme ait hareket silinemez; eskiden hata yakalanmıyor,
+      // kullanıcı hiçbir mesaj görmüyordu.
+      try {
+        await ref.read(cariHesapNotifierProvider.notifier).sil(hareket.kayitId!);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Hareket silindi')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Silinemedi: $e'),
+          backgroundColor: AppColors.danger,
+        ));
+      }
     }
   }
 

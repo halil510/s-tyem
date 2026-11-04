@@ -64,7 +64,7 @@
 ## Testler
 
 ```bash
-flutter test          # 195 test — hepsi geçmeli
+flutter test          # 203 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -96,6 +96,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/gunluk_fiyat_test.dart` | Ay ortası fiyat değişikliği (o günden itibaren), sonraki aya devir, kapalı dönem v11 kilidi, yem fiyatı yayma |
 | `test/features/sanal_terazi_test.dart` | SANAL TERAZİ (gerçek TCP) → gerçek terazi servisi → Süt Ekle → KAYDET; bölünen/çoklu satır, farklı terazi biçimleri |
 | `test/features/terazi_veri_cozucu_test.dart` | Tartı satırı çözme, parça birleştirme, satır sonu yok, cihaz kaydı yarışı |
+| `test/features/derin_tarama_test.dart` | Türkçe alfabetik sıralama, aynı isimli cari uyarısı, 0 kg düzenlemede silme |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -489,7 +490,25 @@ ekranı: tartı gelir → Sabaha/Akşama Uygula → KAYDET → veritabanı. Bulu
   gibi davranır; telefonda Terazi → Wi-Fi → ekrandaki IP/port. Komutlar: sayı = kilo, `b` bölünmüş paket,
   `d` oynak okuma, `q` çıkış.
 - Not: testler gece yarısını aşarsa (test "bugün"ü başta hesaplar) Hızlı/Süt Ekle testleri bir kez düşebilir; tekrar çalıştır.
-- Testler: 195/195; `flutter analyze` 0 error.
+- Testler: 195/195; `flutter analyze` 0 error. Terazi telefonda (gerçek cihazla) kullanıcı tarafından denendi: çalışıyor.
+
+### 2026-11-05 (2) — Tüm ekranların derin taraması (sürüm 1.1.6+8)
+
+| # | Ekran | Sorun | Çözüm |
+|---|---|---|---|
+| 1 | Yedekleme → .db geri yükle | Mevcut veritabanı ÖNCE siliniyor, yeni dosya SONRA kopyalanıyordu → kopya yarıda kalırsa uygulama BOŞ açılırdı. Sonra uygulama kapalı veritabanıyla çalışmaya devam edip her ekranda hata veriyordu | Önce geçici kopya → eski DB yedeği → yer değiştir; hata olursa eski DB geri konur. Ardından `databaseProvider` yenilenir |
+| 2 | Cari detayı, ekstre | Kapalı döneme ait süt/yem/ödeme silinirken hata YAKALANMIYORDU (mesaj yok, yarım kalan ekran) | try/catch + anlaşılır mesaj; `mounted` kontrolleri |
+| 3 | Tüm listeler | `ORDER BY ad` / `toLowerCase().compareTo`: ÇETİN, ŞÜKRÜ, ÖMER, ÜMİT, İSMAİL listenin EN SONUNDA | `turkceKarsilastir` (`lib/utils/turkce.dart`) + `cariSirala` (repository, Özet, Aylık Rapor, Dönem) |
+| 4 | Cari Ekle | Aynı ad-soyadla ikinci cari açılabiliyordu → süt yanlış kişiye | Türkçe harf duyarsız aynı isim kontrolü + "Yine de Ekle" onayı |
+| 5 | Özet / Cariler | "Bugün" ve "bu ay" yalnız veri değişince hesaplanıyordu → uygulama gece açık kalırsa sabah DÜNÜN rakamları | `bugunProvider` (30 sn'de bir gün kontrolü) → `AnaEkran` gün değişince `veriDegisti` |
+| 6 | Süt/Yem düzenle | Tüm miktar 0 yapılınca 0 kg'lık satır kalıyordu | Silme onayı sorulur, kayıt silinir |
+| 7 | Yedekleme başlığı | Her yeniden çizimde DB sorgusu (FutureBuilder in build) → sayılar titriyordu | Future'lar bir kez; veri değişince yenilenir |
+| 8 | Cari detayı | Başka ekrandaki değişiklikle yenilenmiyordu | `ref.listen(veriSurumuProvider)` |
+| 9 | Yem Ekle, Cari Ekle, Piyasa Fiyat Notları | Kapanmış ekranda `setState` (çökme riski); fiyat girişi `double.tryParse` | `mounted` kontrolü; `sayiCoz` |
+
+Bakılıp sorun bulunmayanlar: cari silme (CASCADE + dönem kilidi doğru), Ödemeler toplamı, Hızlı Süt Girişi tarih değişimi,
+ödeme/tahsilat girişi, Wi-Fi aktarım mesajları (analizci uyarısı yanlış alarm: `context.mounted` kontrolü var).
+- Testler: 203/203; `flutter analyze` 0 error.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 

@@ -231,7 +231,7 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
       degisiklikVar: () => !_yukleniyor && !_kaydediliyor && _kaydedilmemisDegisiklikVar(),
       kaydet: () async {
         await _tumunuKaydet();
-        if (mounted && !_kaydedilmemisDegisiklikVar()) Navigator.of(context).pop();
+        if (mounted && !_kaydedilmemisDegisiklikVar()) Navigator.of(this.context).pop();
       },
       baslik: 'Süt girişleri kaydedilmedi',
       child: _ekran(context),

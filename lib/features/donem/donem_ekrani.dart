@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/repositories/cari_repository.dart' show cariSirala;
 import 'package:intl/intl.dart';
 
 import '../../core/providers/veri_surumu_provider.dart';
@@ -119,9 +120,7 @@ class _DonemEkraniState extends ConsumerState<DonemEkrani> {
     final liste = [
       for (final s in b.satirlar)
         (cari: cariler[s.cariId] ?? Cari(id: s.cariId, ad: 'Silinmiş cari', soyad: '#${s.cariId}'), satir: s),
-    ]..sort((a, b) => '${a.cari.ad} ${a.cari.soyad}'
-        .toLowerCase()
-        .compareTo('${b.cari.ad} ${b.cari.soyad}'.toLowerCase()));
+    ]..sort((a, b) => cariSirala(a.cari, b.cari));
     return liste;
   }
 
