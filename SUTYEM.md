@@ -34,11 +34,15 @@
 6. Şema değişikliği = yeni migration dosyası (`lib/core/database/migrations/`),
    `MigrationRunner._all` listesine ekle, test yaz. Yayınlanmış migration değiştirilmez.
 7. Müşteri verisi içeren `.db` / `.zip` dosyaları **asla** git'e girmez (`.gitignore`).
+8. **Supabase SQL eşliği (genel kural):** her yeni tablo/sütun/index (yeni migration)
+   AYNI commit'te `supabase/supabase_sema.sql` dosyasına da eklenir; başlıktaki
+   "yerel şema sürümü" ve sondaki DEĞİŞİKLİK GEÇMİŞİ güncellenir.
+   `test/data/supabase_sema_test.dart` eksik tablo/sütunu yakalar.
 
 ## Testler
 
 ```bash
-flutter test          # 55 test — hepsi geçmeli
+flutter test          # 57 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -51,6 +55,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/data/cari_repository_test.dart` | Pasife alma, silme etkisi, alan koruma |
 | `test/features/cari_hesap_test.dart` | Bakiye/ekstre hesabı, fiyat devralma, önbellek yenileme |
 | `test/widget_test.dart` | Gerçek ekranlar: Hızlı Süt Girişi, Süt Ekle, terazi, ödeme formu |
+| `test/data/supabase_sema_test.dart` | Her SQLite tablo/sütunu Supabase SQL dosyasında var mı |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -96,6 +101,17 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - Bozuk `widget_test.dart` gerçek ekran testleriyle değiştirildi.
 - `flutter_lints` + `sqflite_common_ffi` dev bağımlılıkları eklendi.
 
+### 2026-11-04 (2) — GitHub + Supabase şeması + profesyonelleşme planı
+
+- GitHub'a gönderildi: `halil510/s-tyem`, dal `main`.
+- `supabase/supabase_sema.sql` yazıldı (yerel v8 karşılığı; RLS, `(kullanici_id, id)` anahtarları).
+  Postgres bu makinede yok → SQL henüz gerçek Supabase'de çalıştırılmadı.
+- `test/data/supabase_sema_test.dart`: SQLite ↔ SQL dosyası eşlik testi. 57 test geçti.
+- Altyapı incelemesi: migration sistemi (transaction + user_version) doğru.
+  **Bulunan risk:** `AppDatabase._open` her hatada `_recoverCorrupted` çağırıyor →
+  bir migration hata verirse canlı veritabanı yedeklenip SİLİNİYOR, uygulama boş açılıyor
+  (yedek dosyası `sut_yem_backup_*.db`, kullanıcıya söylenmiyor). Plan madde A1.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Sabit ana şifre:** `lib/utils/app_locker.dart` içinde `_defaultMasterPassword`
@@ -109,6 +125,32 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 3. `withOpacity` vb. ~180 adet "info" düzeyinde eski API uyarısı var (çalışmayı etkilemez).
 
 ## Sıradaki işler (öneri sırası)
+
+### Profesyonelleşme planı (kullanıcı onayı bekleniyor)
+
+**A. Altyapı (önce)**
+- [ ] A1. Migration hatasında veritabanını silme; yalnız gerçek bozulmada sıfırla, kullanıcıya hata ekranı göster.
+- [ ] A2. İki terazi ekranını (`terazi_baglanti_ekrani` + `_pro`) teke indir.
+- [ ] A3. İki fiyat sistemi (`fiyatlar` genel / `cari_fiyatlar`) — "Genel Fiyat Geçmişi" bakiyeyi etkilemiyor; sadeleştir.
+- [ ] A4. Sabit ana şifre → ilk kurulumda belirlenen şifre.
+- [ ] A5. `cari_listesi.dart` (1675 satır) ve `detay_ekrani.dart` (1094) parçalara böl.
+
+**B. Yeni ekranlar**
+- [ ] B1. Toplama turu (sabah/akşam vardiya, üretici sırası/rota, gelmeyenler).
+- [ ] B2. Süt kalitesi (yağ %, protein, yoğunluk, sıcaklık, antibiyotik testi) + kaliteye göre prim/kesinti.
+- [ ] B3. Tank ve sevkiyat (fabrikaya teslim, fire = toplanan − sevk).
+- [ ] B4. Dönem kapanışı / üretici hakedişi (15 günlük ya da aylık, kapanan dönem kilitli).
+- [ ] B5. Kesintiler (stopaj vb. — oranlar ayarlanabilir) + müstahsil makbuzu çıktısı.
+- [ ] B6. Yem stok/depo (alış, tedarikçi, stok, kritik stok uyarısı).
+- [ ] B7. Raporlar merkezi (günlük, aylık üretici, bakiye listesi, yem satış; PDF/Excel/WhatsApp).
+- [ ] B8. Üretici fişi (Bluetooth termal yazıcı / WhatsApp).
+- [ ] B9. İşlem geçmişi ekranı (denetim izi).
+- [ ] B10. Ayarlar (işletme bilgisi, şifre, dönem tipi, kesinti oranları, otomatik yedek).
+- [ ] B11. Bulut senkron (Supabase) — en son.
+
+**C. Mevcut ekranların yenilenmesi**
+- [ ] C1. Özet: bugün sabah/akşam kg, bu ay, gelmeyen üreticiler, bakiye özeti.
+- [ ] C2. Ortak tema/bileşenler (kart, boş durum, hata, yükleniyor) tüm ekranlarda aynı.
 
 - [x] GitHub: https://github.com/halil510/s-tyem (dal: **main**). 2026-11-04 itibarıyla depo **PUBLIC** — Settings → Danger Zone → Change visibility → Private yapılmalı.
 - [ ] Sabit ana şifre konusunu çöz (bkz. Açık riskler 1).
