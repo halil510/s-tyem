@@ -85,6 +85,11 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - Hızlı Süt Girişi: arama, günlük toplam kg, hatalı satır vurgusu, boşaltılan kaydın silinmesi için onay, kaydedilmemiş değişiklik uyarısı.
 - Süt ve ödeme işlemleri için **denetim izi** (`islem_gecmisi`: ekle/güncelle/sil, önceki-yeni değer).
 
+**Android derleme**
+- Uygulama bu makinedeki Flutter 3.47 ile hiç derlenmiyordu (Gradle 8.12, AGP 8.9.1,
+  Kotlin 2.1.0 → minimum altında). Yükseltildi: Gradle **8.14**, AGP **8.11.1**,
+  Kotlin **2.2.20**. `flutter build apk --debug` başarılı.
+
 **Temizlik**
 - Derlenmeyen `lib/bluetooth/main.dart` ve kullanılmayan, yanlış hesaplı
   `cari_odemeler_ekrani.dart` → `_arsiv/` klasörüne taşındı (git'e girmez).
