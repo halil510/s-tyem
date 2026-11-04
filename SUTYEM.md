@@ -64,7 +64,7 @@
 ## Testler
 
 ```bash
-flutter test          # 176 test — hepsi geçmeli
+flutter test          # 195 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -94,6 +94,8 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/yazici_fiyat_menu_test.dart` | Wi-Fi (TCP) fiş yazdırma, ulaşılamayan yazıcı, kayıtlı yazıcı kilidi, tümüne aynı süt fiyatı, ⋮ menüsü |
 | `test/data/fiyat_toplu_test.dart` | Toplu ay fiyatı (tek sorgu) = eski cari-başına yöntem |
 | `test/features/gunluk_fiyat_test.dart` | Ay ortası fiyat değişikliği (o günden itibaren), sonraki aya devir, kapalı dönem v11 kilidi, yem fiyatı yayma |
+| `test/features/sanal_terazi_test.dart` | SANAL TERAZİ (gerçek TCP) → gerçek terazi servisi → Süt Ekle → KAYDET; bölünen/çoklu satır, farklı terazi biçimleri |
+| `test/features/terazi_veri_cozucu_test.dart` | Tartı satırı çözme, parça birleştirme, satır sonu yok, cihaz kaydı yarışı |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -466,6 +468,28 @@ Kaynak: `bakılacaklar/` klasöründeki telefon ekran görüntüleri (AHMET ALMA
 - `pubspec.yaml`'daki `assets/templates/` kaldırıldı: boş klasör git'e girmediği için GitHub'dan indirilen
   bilgisayarda `flutter build apk` "unable to find directory entry" ile duruyordu; kodda kullanılmıyordu.
 - Doğrulandı: `app-release.apk` → `com.sutyem.pro`, versionCode 6, sertifika SHA-256 `9E:B0:EA:…:52:8D` = anahtar.
+
+### 2026-11-05 — Sanal terazi ile uçtan uca test; terazi verisi hataları (sürüm 1.1.5+7)
+
+Sanal terazi (gerçek TCP sunucusu, `test/features/sanal_terazi_test.dart`) + GERÇEK terazi servisi + Süt Ekle
+ekranı: tartı gelir → Sabaha/Akşama Uygula → KAYDET → veritabanı. Bulunan ve düzeltilen hatalar:
+
+| # | Sorun | Çözüm |
+|---|---|---|
+| 1 | Satır iki pakete bölünürse (`+0012` + `.80kg`) ekranda 12.00 / 80.00 görünüyordu; o an "Uygula" = yanlış kilo | `TeraziVeriCozucu` (`lib/features/terazi/services/`): parçaları biriktirir, satır sonunda (CR/LF/ETX) çözer; satır sonu yoksa 200 ms sessizlikte |
+| 2 | Bir pakette birden çok satır → ilki (eski tartı) gösteriliyordu | En SON çözülebilen satır |
+| 3 | `001 0033.60` (terazi no + tartı) → **10033** okunuyordu (sayılar arası boşluk birleştiriliyordu) | Birimi yazılı → ondalıklı → son sayı seçilir; `g` → kg'a çevrilir; "gross" gram sayılmaz |
+| 4 | `OL`/`ST` gibi durum satırları göstergeye **0.00** basıyordu | Çözülemeyen satır yok sayılır, son tartı kalır |
+| 5 | Klasik Bluetooth: Kotlin `String(...).trim()` satır sonlarını siliyordu → Dart satırları ayıramıyordu | `MainActivity.kt`: trim kaldırıldı (ISO-8859-1) |
+| 6 | Yeni teraziye İLK bağlanışta cihaz kaydı iki kez aynı anda → UNIQUE hatası → "Bağlantı hatası" | `TeraziCihazRepository.kaydetVeyaGuncelle` tek transaction; dinleyicideki çağrı `catchError` |
+| 7 | Eski `TeraziService` tekil (singleton): `dispose` ortak akışları kapatıyor, sonraki servis kapalı akışa yazıp çöküyordu | Tekil kaldırıldı; kapalı akışa yazma korundu; Wi-Fi/BLE `utf8` yerine `latin1` (bölünen baytta paket kaybı yok) |
+| 8 | Süt Ekle açılırken terazi zaten bağlıyken otomatik yeniden bağlanma mevcut bağlantıyı koparabiliyordu | `baslangicOtomatikBaglan`: bağlı/bağlanıyorsa hiçbir şey yapmaz |
+
+- **Elle deneme aracı:** `dart run tool/sanal_terazi.dart [port]` (varsayılan 9100) — bilgisayar Wi-Fi terazi
+  gibi davranır; telefonda Terazi → Wi-Fi → ekrandaki IP/port. Komutlar: sayı = kilo, `b` bölünmüş paket,
+  `d` oynak okuma, `q` çıkış.
+- Not: testler gece yarısını aşarsa (test "bugün"ü başta hesaplar) Hızlı/Süt Ekle testleri bir kez düşebilir; tekrar çalıştır.
+- Testler: 195/195; `flutter analyze` 0 error.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 

@@ -29,26 +29,28 @@ class TeraziCihazRepository {
 
   /// Cihazı kaydeder/günceller (adres + tür bazında upsert) ve
   /// bağlantı zamanını şimdiki zamana günceller.
-  Future<void> kaydetVeyaGuncelle(TeraziCihazi cihaz) async {
-    final mevcut = await db.query(
-      _tablo,
-      where: 'cihaz_adresi = ? AND baglanti_turu = ?',
-      whereArgs: [cihaz.cihazAdresi, cihaz.baglantiTuru.kod],
-    );
-    cihaz.sonBaglantiTarihi = DateTime.now().toIso8601String();
-    if (mevcut.isNotEmpty) {
-      // ÖNEMLİ: `id` alanı UPDATE'e dahil edilmemeli — INTEGER PRIMARY
-      // KEY (rowid) sütununa NULL yazılması "datatype mismatch" hatası
-      // verir (bkz. fiyat_repository.dart'taki aynı düzeltme).
-      final guncellemeMap = cihaz.toMap()..remove('id');
-      await db.update(_tablo, guncellemeMap,
+  /// Bağlantı kurulunca hem bağlanma akışı hem bağlantı dinleyicisi bunu
+  /// AYNI ANDA çağırır. Eskiden ikisi de "yok" görüp ikisi de ekliyordu →
+  /// UNIQUE hatası (yeni teraziye ilk bağlanışta "Bağlantı hatası"). Kontrol
+  /// + yazma tek transaction'da: ikinci çağrı birincinin kaydını görür.
+  Future<void> kaydetVeyaGuncelle(TeraziCihazi cihaz) => db.transaction((txn) async {
+        final mevcut = await txn.query(
+          _tablo,
           where: 'cihaz_adresi = ? AND baglanti_turu = ?',
-          whereArgs: [cihaz.cihazAdresi, cihaz.baglantiTuru.kod]);
-    } else {
-      final eklemeMap = cihaz.toMap()..remove('id');
-      await db.insert(_tablo, eklemeMap);
-    }
-  }
+          whereArgs: [cihaz.cihazAdresi, cihaz.baglantiTuru.kod],
+        );
+        cihaz.sonBaglantiTarihi = DateTime.now().toIso8601String();
+        // ÖNEMLİ: `id` alanı yazılmaz — INTEGER PRIMARY KEY (rowid) sütununa
+        // NULL yazılması "datatype mismatch" hatası verir.
+        final map = cihaz.toMap()..remove('id');
+        if (mevcut.isNotEmpty) {
+          await txn.update(_tablo, map,
+              where: 'cihaz_adresi = ? AND baglanti_turu = ?',
+              whereArgs: [cihaz.cihazAdresi, cihaz.baglantiTuru.kod]);
+        } else {
+          await txn.insert(_tablo, map);
+        }
+      });
 
   Future<void> varsayilanYap(int id) async {
     await db.update(_tablo, {'varsayilan': 0});

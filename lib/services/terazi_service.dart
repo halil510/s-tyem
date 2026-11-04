@@ -5,11 +5,22 @@ import 'package:flutter/foundation.dart';
 import '../utils/permission_helper.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../bluetooth/classic_bluetooth_service.dart';
+import '../features/terazi/services/terazi_veri_cozucu.dart';
 
+/// Düşük seviyeli terazi bağlantısı (BLE / Classic Bluetooth / Wi-Fi).
+///
+/// Eskiden tekil (singleton) idi: `dispose()` ortak akışları KAPATIYOR,
+/// sonra kurulan servis kapalı akışa yazmaya çalışıp çöküyordu. Artık her
+/// [TeraziServicePro] kendi örneğini kullanır.
 class TeraziService {
-  static final TeraziService _instance = TeraziService._internal();
-  factory TeraziService() => _instance;
-  TeraziService._internal();
+  TeraziService() {
+    _cozucu = TeraziVeriCozucu((kg) {
+      if (!_weightController.isClosed) _weightController.add(kg.toStringAsFixed(2));
+    });
+  }
+
+  /// Parça parça gelen veriyi satırlara ayırıp kiloyu çözer.
+  late final TeraziVeriCozucu _cozucu;
 
   // ------------------------
   // BLE
@@ -121,10 +132,7 @@ class TeraziService {
             if (characteristic.properties.notify) {
               await characteristic.setNotifyValue(true);
               _bleDataSubscription = characteristic.onValueReceived.listen((data) {
-                if (data.isNotEmpty) {
-                  final raw = utf8.decode(data);
-                  _processWeightData(raw);
-                }
+                if (data.isNotEmpty) _processWeightData(latin1.decode(data, allowInvalid: true));
               });
             }
             break;
@@ -169,14 +177,9 @@ class TeraziService {
       _connectionController.add(true);
 
       _wifiSubscription = _wifiSocket!.listen(
-        (data) {
-          try {
-            final raw = utf8.decode(data);
-            _processWeightData(raw);
-          } catch (e) {
-            if (kDebugMode) print("WiFi decode error: $e");
-          }
-        },
+        // Terazi verisi ASCII'dir; utf8 bir paketin ortasında bölünen baytta
+        // hata atıp o paketi tümden kaybediyordu.
+        (data) => _processWeightData(latin1.decode(data, allowInvalid: true)),
         onError: (e) {
           if (kDebugMode) print("WiFi socket error: $e");
           _connectionController.add(false);
@@ -194,36 +197,15 @@ class TeraziService {
   // ------------------------
   // Veri işle
   // ------------------------
-  void _processWeightData(String rawData) {
-    try {
-      String clean = rawData.replaceAll(RegExp(r'[\r\n]'), ' ');
-      final match = RegExp(r'[-+]?\d{1,}\s*[.,]?\s*\d*').firstMatch(clean);
-      if (match != null) {
-        String numStr = match.group(0)?.replaceAll(RegExp(r'\s+'), '') ?? '0';
-        numStr = numStr.replaceAll(',', '.');
-        int dotCount = '.'.allMatches(numStr).length;
-        if (dotCount > 1) {
-          int lastDot = numStr.lastIndexOf('.');
-          numStr = numStr.substring(0, lastDot).replaceAll('.', '') + numStr.substring(lastDot);
-        }
-        bool isNegative = numStr.startsWith('-');
-        if (isNegative) numStr = numStr.substring(1);
-        final parsed = double.tryParse(numStr);
-        if (parsed != null) {
-          _weightController.add((isNegative ? -parsed : parsed).toStringAsFixed(2));
-          return;
-        }
-      }
-      _weightController.add("0.00");
-    } catch (e) {
-      _weightController.add("0.00");
-    }
-  }
+  /// Ham parçayı çözücüye verir (bkz. [TeraziVeriCozucu]: satırlara ayırma,
+  /// bölünen satırları birleştirme, birden çok sayı içeren satırlar).
+  void _processWeightData(String rawData) => _cozucu.ekle(rawData);
 
   // ------------------------
   // Disconnect / Cleanup
   // ------------------------
   Future<void> disconnect() async {
+    _cozucu.sifirla();
     _cleanupBLE();
     _cleanupWiFi();
     try {
@@ -231,8 +213,9 @@ class TeraziService {
     } catch (_) {}
     _classicDataSubscription?.cancel();
     _classicDataSubscription = null;
-    _weightController.add("0.00");
-    _connectionController.add(false);
+    // dispose() sırasında akışlar kapanmış olabilir.
+    if (!_weightController.isClosed) _weightController.add("0.00");
+    if (!_connectionController.isClosed) _connectionController.add(false);
   }
 
   void _cleanupBLE() {
@@ -256,9 +239,9 @@ class TeraziService {
     _wifiSocket = null;
   }
 
-  void dispose() {
-    disconnect();
-    _weightController.close();
-    _connectionController.close();
+  Future<void> dispose() async {
+    await disconnect();
+    await _weightController.close();
+    await _connectionController.close();
   }
 }

@@ -59,7 +59,10 @@ class TeraziServicePro {
         _yenidenDenemeSayaci = 0;
         _durumGuncelle(TeraziBaglantiDurumu.bagli);
         if (_sonBaglanilanCihaz != null) {
-          _cihazRepository.kaydetVeyaGuncelle(_sonBaglanilanCihaz!);
+          // Beklenmeyen çağrı: hata olursa yakalanmazsa uygulama hata raporlar.
+          _cihazRepository.kaydetVeyaGuncelle(_sonBaglanilanCihaz!).catchError((Object e) {
+            if (kDebugMode) debugPrint('[TeraziServicePro] Cihaz kaydedilemedi: $e');
+          });
         }
       } else {
         if (!_kullaniciBaglantiyiKesti && _sonBaglanilanCihaz != null) {
@@ -180,6 +183,8 @@ class TeraziServicePro {
   /// sayesinde yeniden tarama yapmadan bağlanabiliyoruz; yalnızca
   /// Bluetooth kapalıysa veya cihaz menzil dışındaysa başarısız olur).
   Future<bool> baslangicOtomatikBaglan() async {
+    // Zaten bağlıysa / bağlanıyorsa mevcut bağlantıyı koparıp yeniden kurma.
+    if (_durum.aktifBaglanti || _durum.mesgul) return _durum.aktifBaglanti;
     final varsayilan = await _cihazRepository.getVarsayilan();
     if (varsayilan == null) return false;
     try {

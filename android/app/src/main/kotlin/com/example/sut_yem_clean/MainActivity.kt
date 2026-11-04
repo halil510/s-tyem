@@ -211,7 +211,9 @@ class MainActivity : FlutterActivity() {
                 try {
                     bytes = inputStream!!.read(buffer)
                     if (bytes > 0) {
-                        val data = String(buffer, 0, bytes).trim()
+                        // trim() YOK: satır sonları (CR/LF) Dart tarafında tartı satırlarını
+                        // ayırmak için gerekli (TeraziVeriCozucu). Parça parça gelebilir.
+                        val data = String(buffer, 0, bytes, Charsets.ISO_8859_1)
                         Log.d(TAG, "Received data: $data")
                         
                         // Send to Flutter
