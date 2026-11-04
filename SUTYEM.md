@@ -249,7 +249,7 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 
 **B. Yeni ekranlar**
 - [ ] B1. Toplama turu (sabah/akşam vardiya, üretici sırası/rota, gelmeyenler).
-- [ ] B2. Süt kalitesi (yağ %, protein, yoğunluk, sıcaklık, antibiyotik testi) + kaliteye göre prim/kesinti.
+- [~] B2. Süt kalitesi — İPTAL (2026-11-04, kullanıcı: "süt kalite ekranına gerek yok").
 - [ ] B3. Tank ve sevkiyat (fabrikaya teslim, fire = toplanan − sevk).
 - [x] B4. Aylık dönem kapanışı + hakediş bordrosu + DB seviyesinde kilit (migration v9). Ayrıntı: oturum günlüğü (7).
 - [ ] B5. Kesintiler (stopaj vb. — oranlar ayarlanabilir) + müstahsil makbuzu çıktısı.
