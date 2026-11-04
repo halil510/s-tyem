@@ -68,3 +68,7 @@ _arsiv/
 /android/build/
 /android/app/build/
 /android/.kotlin/
+
+# Müşteri listesi içeren Excel dosyaları (ör. cariler.xlsx) asla git'e girmez
+*.xlsx
+*.xls

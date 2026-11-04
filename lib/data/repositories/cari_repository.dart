@@ -14,6 +14,17 @@ class CariRepository {
 
   Future<int> insert(Cari cari) => db.insert('cariler', cari.toMap());
 
+  /// Birçok cariyi TEK transaction'da ekler (Excel'den içeri alma): biri
+  /// hata verirse hiçbiri eklenmez. Eklenen kayıt sayısını döner.
+  Future<int> topluEkle(List<Cari> cariler) => db.transaction((txn) async {
+        final b = txn.batch();
+        for (final c in cariler) {
+          b.insert('cariler', c.toMap()..remove('id'));
+        }
+        await b.commit(noResult: true);
+        return cariler.length;
+      });
+
   /// [sadeceAktif] true ise pasife alınmış (aktif=0) cariler listeye dahil edilmez.
   Future<List<Cari>> getAll({bool sadeceAktif = false}) async {
     final maps = await db.query(

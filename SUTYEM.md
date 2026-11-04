@@ -48,7 +48,7 @@
 ## Testler
 
 ```bash
-flutter test          # 122 test — hepsi geçmeli
+flutter test          # 130 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -72,6 +72,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/dashboard_test.dart` | Gelmeyen üreticiler kuralı, bugün sabah/akşam/dün, buzağı yemi dilimi, dönem hatırlatması |
 | `test/dashboard_ekrani_test.dart` | Özet ekranı 360 px genişlikte taşmadan çizilir |
 | `test/data/veri_yonetimi_test.dart` | Veri yönetimi repo (sayılar, temizlik + dönem kilidi, .db doğrulama), toplu fiyat (ya hep ya hiç), tarih indeksleri sorgu planında |
+| `test/features/cari_excel_test.dart` | Excel'den cari: rapor biçimi, ayrı Ad/Soyad/Telefon, "Cari Kodu" tuzağı, başlıksız, tekrar, Türkçe İ/ı, ekran akışı |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
