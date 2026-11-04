@@ -14,7 +14,7 @@ class BLEService {
 
   // Bağlı cihazlar
   Future<List<BluetoothDevice>> getConnectedDevices() async {
-    return await FlutterBluePlus.connectedDevices;
+    return FlutterBluePlus.connectedDevices;
   }
 
   // Eşleştirilmiş cihazlar

@@ -28,12 +28,6 @@
 4. Süt / yem / ödeme / fiyat / cari değiştiren her işlemden sonra
    `ref.veriDegisti()` (Riverpod ekran) ya da `veriDegistiBildir(context)`
    (düz StatefulWidget) çağır → bakiyeler, ekstre ve ana sayfa yenilenir.
-10. **Ekranlar ve provider'lar SQL yazmaz.** Veriye yalnızca `lib/data/repositories/` üzerinden
-   erişilir (istisna: kendi tablolarının sahibi `DonemServisi`). `DBHelper` kaldırıldı — geri getirme.
-   Yeni sorgu = ilgili repository'ye metot. Tarih aralığı sorgusu yazınca indeks kullandığını kontrol et.
-9. **Kapalı dönem kilidi veritabanındadır** (migration v9 tetikleyicileri). Yeni bir tarihli
-   tablo eklenirse ona da tetikleyici yazılmalı. Repository yazmaları `donemKilidiyle` / `_yaz`
-   ile sarılır; ekranlar `DonemKapaliHatasi` mesajını gösterir.
 5. **Yedek** alma/yükleme yalnızca `YedekServisi` üzerinden
    (`lib/data/yedek/yedek_servisi.dart`). `INSERT OR REPLACE` KULLANMA:
    `ON DELETE CASCADE` yüzünden carinin ödemelerini siler.
@@ -44,11 +38,21 @@
    AYNI commit'te `supabase/supabase_sema.sql` dosyasına da eklenir; başlıktaki
    "yerel şema sürümü" ve sondaki DEĞİŞİKLİK GEÇMİŞİ güncellenir.
    `test/data/supabase_sema_test.dart` eksik tablo/sütunu yakalar.
+9. **Kapalı dönem kilidi veritabanındadır** (migration v9 tetikleyicileri). Yeni bir tarihli
+   tablo eklenirse ona da tetikleyici yazılmalı. Repository yazmaları `donemKilidiyle` / `_yaz`
+   ile sarılır; ekranlar `DonemKapaliHatasi` mesajını gösterir.
+10. **Ekranlar ve provider'lar SQL yazmaz.** Veriye yalnızca `lib/data/repositories/` üzerinden
+   erişilir (istisna: kendi tablolarının sahibi `DonemServisi`). `DBHelper` kaldırıldı — geri getirme.
+   Yeni sorgu = ilgili repository'ye metot. Tarih aralığı sorgusu yazınca indeks kullandığını kontrol et.
+11. **Sekmeler (`AnaEkran`, IndexedStack) bellekte kalır.** Sekme ekranları veriyi ya
+    `veriSurumuProvider` izleyen bir provider'dan almalı (ör. `aktifCarilerProvider`) ya da
+    `ref.listen(veriSurumuProvider, …)` ile yenilenmeli. `build` içinde `FutureBuilder(future: repo…)` YASAK.
+12. **Arama** her yerde `aramaEslesir` (`lib/utils/turkce.dart`) — `toLowerCase()` Türkçe İ/ı'yı bozar.
 
 ## Testler
 
 ```bash
-flutter test          # 130 test — hepsi geçmeli
+flutter test          # 132 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -73,6 +77,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/dashboard_ekrani_test.dart` | Özet ekranı 360 px genişlikte taşmadan çizilir |
 | `test/data/veri_yonetimi_test.dart` | Veri yönetimi repo (sayılar, temizlik + dönem kilidi, .db doğrulama), toplu fiyat (ya hep ya hiç), tarih indeksleri sorgu planında |
 | `test/features/cari_excel_test.dart` | Excel'den cari: rapor biçimi, ayrı Ad/Soyad/Telefon, "Cari Kodu" tuzağı, başlıksız, tekrar, Türkçe İ/ı, ekran akışı |
+| `test/akis_test.dart` | UYGULAMA AKIŞI (AnaEkran): Süt sekmesinde girilen süt → Cariler listesi + detay; yeni/içe alınan cari tüm açık sekmelere düşer; Türkçe arama; Ödemelerde pasif alacaklı |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -292,18 +297,68 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
   3. Cari listesi: ekrandan çıkarken yükleme bitince `setState` hatası (mounted kontrolü yoktu).
 - Testler: 122/122; `flutter analyze` 0 error.
 
-. **Wi-Fi aktarımı** yedeği yerel ağda 8080 portundan ŞİFRESİZ sunuyor: aynı Wi-Fi'daki herkes
+### 2026-11-04 (11) — Excel'den cari içeri alma
+
+- Kullanıcı isteği: Excel'deki isim listesinden cari oluşturma. Örnek dosya proje kökünde
+  `cariler.xlsx` (uygulamanın kendi "Süt Raporu" Excel'i, 38 cari + GENEL TOPLAM).
+  **Gerçek müşteri isimleri içerdiği için `.gitignore`'a `*.xlsx` / `*.xls` eklendi; repoya girmez.**
+- Yer: Cari listesi → Excel düğmesi → **"Excel'den Cari İçeri Al"**.
+- `lib/features/cari/cari_excel_ice_aktarma.dart`: `CariExcelOkuyucu.oku(bayt)` — başlık satırını
+  ilk 5 satırda arar (İsim Soyisim / Ad Soyad / Cari Adı / Üretici / Müşteri… ya da ayrı Ad + Soyad;
+  isteğe bağlı Telefon/Cep/GSM, Adres/Köy). "Kod/No/Bakiye/Tutar" içeren başlıklar isim sanılmaz.
+  Başlık yoksa ilk metin sütunu. "Toplam" satırları, boş satırlar, dosya içi tekrarlar atlanır.
+  Ad soyad ayrımı: son kelime soyad ("MEHMET ALİ YILMAZ" → ad "MEHMET ALİ"). Yalnız .xlsx.
+  `iceAktarmaPlani`: Türkçe harf kurallarıyla (İ/i, I/ı) ve boşluk farkı gözetmeden kayıtlı
+  carilerle (pasifler dahil) eşleştirir — kayıtlılar tekrar eklenmez.
+- `CariRepository.topluEkle` (tek transaction). Ekran: `cari_excel_ekrani.dart` (özet, hayvan türü,
+  seçmeli liste, kayıtlı/atlanan listeleri). Süt/yem rakamları ALINMAZ, yalnız cariler.
+- Gerçek dosyada denendi: 38 cari bulundu, başlık ve GENEL TOPLAM atlandı.
+- Supabase SQL: şema değişmedi.
+- Testler: 130/130; `flutter analyze` 0 error.
+
+### 2026-11-04 (12) — "Süt ekledim, cari detayında görünmüyor" hatası + genel tarama
+
+**Kök neden (testle yeniden üretildi, `test/akis_test.dart`):** `AnaEkran` sekmeleri `IndexedStack` ile
+bellekte tutuyor. Cariler listesi verisini yalnız ilk açılışta yüklüyordu ve "veri değişti" sinyalini
+dinlemiyordu → Süt sekmesinde süt girilince Cariler sekmesi eski veriyi (bu ayki süt 0) gösteriyordu.
+Aynı kök neden: Süt/Yem/Ödemeler sekmeleri cari listesini `build` içindeki `FutureBuilder` ile
+alıyordu → yeni eklenen / Excel'den alınan cari, uygulama yeniden açılana kadar bu sekmelerde görünmüyordu;
+Ödemeler her yeniden çizimde veritabanına sorgu atıp titriyordu.
+
+**Düzeltmeler**
+- `lib/features/cari/providers/cari_providers.dart`: `aktifCarilerProvider`, `butunCarilerProvider`
+  (veriSurumu izler). Süt, Yem, Ödemeler sekmeleri bunları kullanıyor.
+- Cariler sekmesi `ref.listen(veriSurumuProvider)` ile kendini yeniliyor; yenilemede arama filtresi korunuyor
+  (eskiden arama kutusu dolu ama tüm liste görünüyordu).
+- **Türkçe arama** (`lib/utils/turkce.dart` → `turkceKucuk`, `aramaEslesir`): `toLowerCase()` "İ"yi "i̇" yapıyordu;
+  Excel'den gelen BÜYÜK HARFLİ "İSMAİL" "ismail" diye aranınca bulunmuyordu. Cariler, Süt, Yem, Ödemeler,
+  Hızlı Süt Girişi aramaları düzeltildi.
+- **Ödemeler:** pasif ama açık bakiyeli cari üstteki toplamda sayılıp listede yoktu (ödeme yapılamıyordu) → artık
+  "(pasif)" etiketiyle listede.
+- Süt/Yem/Piyasa Fiyat kartlarında `ListTile` renkli `Container` içindeydi → dokunma efekti görünmüyordu,
+  debug'da hata → `Material(transparency)` ile sarıldı.
+- 14 "ekran kapandıktan sonra context kullanımı" (çökme riski) düzeltildi: yedekleme, Excel yedeği,
+  Bluetooth/Wi-Fi aktarım, detay ekranı (geri çıkınca setState hatası).
+- Testler: 132/132; `flutter analyze` 0 error.
+- **GitHub push bu adımda otomatik izin sisteminde engellendi**; commit yalnız yerelde. Kullanıcı `git push` ile gönderebilir.
+
+## ⚠️ Açık riskler / karar bekleyenler
+
+1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
+   bu şifreyle korunuyor; **varsayılanı `12345`** ve telefonda **düz metin** (SharedPreferences
+   `veritabani_sifre`). Öneri: bu işlemleri master/uygulama şifresine bağla. KULLANICI KARARI BEKLİYOR.
+2. **Wi-Fi aktarımı** yedeği yerel ağda 8080 portundan ŞİFRESİZ sunuyor: aynı Wi-Fi'daki herkes
    `/download` adresinden tüm müşteri verisini indirebilir (aktarım ekranı açıkken). Rastgele
    tek kullanımlık adres + aktarım bitince sunucuyu kapatma eklenmeli.
-1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
+3. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
    açık şifre GitHub'daki eski commit'lerde duruyor ve depo hâlâ PUBLIC → şifre ifşa olmuş
    sayılmalı. Yapılacak: (a) depoyu private yap, (b) `dart run tool/master_sifre_ozeti.dart`
    ile YENİ şifre belirle, çıkan iki satırı `app_locker.dart`'a koy, APK derle.
    Önceden aktive edilmiş telefonlar etkilenmez (aktivasyon cihazda saklı).
-2. Yem fiyatı ekranı kaydederken her cari için o ayın satırını (süt fiyatını da
+4. Yem fiyatı ekranı kaydederken her cari için o ayın satırını (süt fiyatını da
    kopyalayarak) yazar. Sonradan **önceki** bir ayın süt fiyatı değişirse bu ay
    eski kopyayı kullanır. İleride fiyatları ürün bazında ayrı satırlara ayırmak düşünülebilir.
-3. `withOpacity` vb. ~180 adet "info" düzeyinde eski API uyarısı var (çalışmayı etkilemez).
+5. `withOpacity` vb. ~180 adet "info" düzeyinde eski API uyarısı var (çalışmayı etkilemez).
 
 ## Sıradaki işler (öneri sırası)
 
@@ -335,7 +390,7 @@ Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle ye
 - [ ] C2. Ortak tema/bileşenler (kart, boş durum, hata, yükleniyor) tüm ekranlarda aynı.
 
 - [x] GitHub: https://github.com/halil510/s-tyem (dal: **main**). 2026-11-04 itibarıyla depo **PUBLIC** — Settings → Danger Zone → Change visibility → Private yapılmalı.
-- [ ] Sabit ana şifre konusunu çöz (bkz. Açık riskler 1).
+- [ ] Sabit ana şifre konusunu çöz (bkz. Açık riskler 3).
 - [ ] Yem girişi için de "aynı gün" uyarısı / düzenleme (yem çoklu teslimata izin veriyor, bilinçli).
 - [ ] Cari ekstre ekranında denetim geçmişini (kim ne değiştirdi) gösteren bir sekme.
 - [ ] Ay sonu toplu "hesap özeti" PDF'i (tüm cariler) + WhatsApp paylaşımı.

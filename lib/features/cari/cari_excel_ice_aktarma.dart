@@ -1,6 +1,9 @@
 import 'package:excel/excel.dart';
 
 import '../../models/cari_model.dart';
+import '../../utils/turkce.dart';
+
+export '../../utils/turkce.dart' show turkceKucuk;
 
 /// Excel'den okunan bir cari adayı (henüz kaydedilmedi).
 class CariAdayi {
@@ -34,9 +37,6 @@ class CariExcelHatasi implements Exception {
   @override
   String toString() => mesaj;
 }
-
-/// Türkçe kurallarıyla küçük harf (İ→i, I→ı); karşılaştırma için.
-String turkceKucuk(String s) => s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
 
 /// Karşılaştırma anahtarı: Türkçe küçük harf + tek boşluk.
 String adAnahtari(String tamAd) => turkceKucuk(tamAd.trim().replaceAll(RegExp(r'\s+'), ' '));

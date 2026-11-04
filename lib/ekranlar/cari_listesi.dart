@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../utils/turkce.dart';
 import 'package:go_router/go_router.dart';
 import '../models/cari_model.dart';
 import 'cari_ekle.dart';
@@ -106,7 +107,8 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       if (!mounted) return;
       setState(() {
         _cariler = liste;
-        _filtrelenen = liste;
+        // Yenilemede arama kutusundaki filtre korunur (eskiden tüm liste dönüyordu).
+        _filtrelenen = _filtrele(liste, _aramaController.text);
         _yukleniyor = false;
       });
       
@@ -116,15 +118,13 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     }
   }
 
+  /// Türkçe İ/ı farkını gözeten arama (büyük harfli "İSMAİL", "ismail" ile bulunur).
+  List<Cari> _filtrele(List<Cari> liste, String sorgu) => liste
+      .where((c) => aramaEslesir(c.tamAd, sorgu) || aramaEslesir(c.hayvanTuru ?? '', sorgu))
+      .toList();
+
   void _aramaYap(String sorgu) {
-    final kucukSorgu = sorgu.toLowerCase();
-    setState(() {
-      _filtrelenen = _cariler.where((cari) {
-        final tamAd = '${cari.ad} ${cari.soyad}'.toLowerCase();
-        final hayvanTuru = cari.hayvanTuru?.toLowerCase() ?? '';
-        return tamAd.contains(kucukSorgu) || hayvanTuru.contains(kucukSorgu);
-      }).toList();
-    });
+    setState(() => _filtrelenen = _filtrele(_cariler, sorgu));
   }
 
   void _cariSec(int cariId, bool secili) {
@@ -411,6 +411,9 @@ class _CariListesiState extends ConsumerState<CariListesi> {
   }
 
   Widget build(BuildContext context) {
+    // Sekmeler IndexedStack'te bellekte durur: başka sekmede süt/yem/ödeme/cari
+    // değişince bu liste (bu ayki süt toplamları dahil) kendiliğinden yenilenir.
+    ref.listen<int>(veriSurumuProvider, (_, __) => _verileriYukle());
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: Column(

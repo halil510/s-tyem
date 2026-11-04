@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/cari/providers/cari_providers.dart';
+import '../utils/turkce.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -39,14 +41,12 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
   }
 
   List<Cari> _filtreUygula(List<Cari> hepsi) {
-    if (_aramaMetni.isEmpty) return hepsi;
-    final q = _aramaMetni.toLowerCase();
-    return hepsi.where((c) => c.tamAd.toLowerCase().contains(q)).toList();
+    return hepsi.where((c) => aramaEslesir(c.tamAd, _aramaMetni)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final carilerAsync = ref.watch(cariRepositoryProvider);
+    final carilerAsync = ref.watch(aktifCarilerProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFF),
@@ -80,13 +80,7 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
           ),
           Expanded(
             child: carilerAsync.when(
-              data: (repo) => FutureBuilder<List<Cari>>(
-                future: repo.getAll(sadeceAktif: true),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final cariler = snap.data ?? [];
+              data: (cariler) {
                   final filtrelenen = _filtreUygula(cariler);
                   if (filtrelenen.isEmpty) {
                     return Center(
@@ -104,18 +98,17 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
                     );
                   }
                   return RefreshIndicator(
-                    onRefresh: () async => ref.invalidate(cariRepositoryProvider),
+                    onRefresh: () async => ref.invalidate(aktifCarilerProvider),
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                       itemCount: filtrelenen.length,
                       itemBuilder: (ctx, i) => _CariKarti(
                         cari: filtrelenen[i],
-                        onKaydedildi: () => ref.invalidate(cariRepositoryProvider),
+                        onKaydedildi: () => ref.invalidate(aktifCarilerProvider),
                       ),
                     ),
                   );
                 },
-              ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Hata: $e')),
             ),
@@ -148,7 +141,11 @@ class _CariKarti extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
-      child: ListTile(
+      // ListTile dokunma efekti en yakın Material'a çizilir; renkli Container
+      // onu gizliyordu (dokunduğunu görmüyordun, debug'da hata).
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           width: 48,
@@ -177,6 +174,7 @@ class _CariKarti extends StatelessWidget {
           child: const Text('Süt Ekle', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         ),
         onTap: () => _girisSayfasinaGit(context),
+      ),
       ),
     );
   }

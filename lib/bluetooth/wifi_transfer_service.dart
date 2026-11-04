@@ -12,6 +12,7 @@ class WiFiTransferService {
 
   static Future<void> showWiFiTransferDialog(BuildContext context, String filePath) async {
     final localIP = await _getLocalIP();
+    if (!context.mounted) return;
     if (localIP.isEmpty) {
       _showError(context, 'IP adresi alınamadı. Wi-Fi bağlı olduğunuzdan emin olun.');
       return;
@@ -239,6 +240,7 @@ class WiFiTransferService {
   }
 
   static void _showError(BuildContext context, String message) {
+    if (!context.mounted) return; // ekran kapandıysa mesaj gösterme (çökme)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -249,6 +251,7 @@ class WiFiTransferService {
   }
 
   static void _showSuccess(BuildContext context, String message) {
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),

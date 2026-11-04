@@ -155,6 +155,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
       );
 
       if (confirmed != true) return;
+      if (!mounted) return;
 
       final sifreCtrl = TextEditingController();
       final sifreOk = await showDialog<bool>(
@@ -187,6 +188,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
       );
 
       if (sifreOk != true) return;
+      if (!mounted) return;
 
       // Dosya tipi seçimi
       final dosyaTipi = await showDialog<String>(
@@ -334,6 +336,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     );
     
     if (result != true) return false;
+    if (!mounted) return false;
     
     final sifreCtrl = TextEditingController();
     final sifreOk = await showDialog<bool>(
@@ -353,7 +356,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
           ElevatedButton(
             onPressed: () async {
               final verification = await _appLocker.verifyPassword(sifreCtrl.text);
-              Navigator.pop(context, verification['success'] == true);
+              if (context.mounted) Navigator.pop(context, verification['success'] == true);
             },
             child: const Text('Doğrula'),
           ),
@@ -514,7 +517,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
                 _showSnack('❌ Yeni şifreler uyuşmuyor!');
               } else {
                 await _savePassword(yeniController.text.trim());
-                Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               }
             },
             child: const Text('Kaydet'),

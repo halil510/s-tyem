@@ -51,7 +51,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     _selectedRange = DateTimeRange(start: baslangic, end: bitis);
 
     await _kayitlariGetir();
-    setState(() => _yukleniyor = false);
+    if (mounted) setState(() => _yukleniyor = false);
   }
 
   Future<void> _kayitlariGetir() async {
@@ -63,6 +63,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     List<Sut> sutler = await _sutRepo.getByCari(widget.cari.id!, baslangicStr, bitisStr);
     List<Yem> yemler = await _yemRepo.getByCari(widget.cari.id!, baslangicStr, bitisStr);
 
+    if (!mounted) return;
     setState(() {
       _sutKayitlari = List.from(sutler.reversed);
       _yemKayitlari = List.from(yemler.reversed);
@@ -101,7 +102,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
         _yukleniyor = true;
       });
       await _kayitlariGetir();
-      setState(() => _yukleniyor = false);
+      if (mounted) setState(() => _yukleniyor = false);
     }
   }
 

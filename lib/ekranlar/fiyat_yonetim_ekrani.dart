@@ -39,7 +39,10 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
   }
 
   @override
-  void dispose() { _tab.dispose(); super.dispose(); }
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
 
   Future<void> _yukle() async {
     setState(() => _yukleniyor = true);
@@ -66,39 +69,48 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
 
   Future<void> _fiyatEkle(String tur) async {
     final fiyatCtrl = TextEditingController();
-    final notCtrl   = TextEditingController();
+    final notCtrl = TextEditingController();
     DateTime seciliTarih = DateTime.now();
     final renk = tur == 'sut' ? C.mavi : C.yesil;
-    final ad   = tur == 'sut' ? 'Süt Alış' : 'Yem Satış';
+    final ad = tur == 'sut' ? 'Süt Alış' : 'Yem Satış';
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(children: [
             Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: renk.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: Icon(tur == 'sut' ? Icons.water_drop : Icons.grass, color: renk, size: 18),
+                  color: renk.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Icon(tur == 'sut' ? Icons.water_drop : Icons.grass,
+                  color: renk, size: 18),
             ),
             const SizedBox(width: 10),
-            Expanded(child: Text('$ad Fiyatı Ekle',
-              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 15))),
+            Expanded(
+                child: Text('$ad Fiyatı Ekle',
+                    style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15))),
           ]),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             GestureDetector(
               onTap: () async {
                 final t = await showDatePicker(
-                  context: ctx, initialDate: seciliTarih,
+                  context: ctx,
+                  initialDate: seciliTarih,
                   firstDate: DateTime(2020),
                   lastDate: DateTime.now().add(const Duration(days: 365)),
                 );
                 if (t != null) setSt(() => seciliTarih = t);
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                 decoration: BoxDecoration(
                   color: renk.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(10),
@@ -107,10 +119,14 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
                 child: Row(children: [
                   Icon(Icons.calendar_today, size: 16, color: renk),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(
-                    'Geçerlilik: ${DateFormat('dd MMMM yyyy', 'tr_TR').format(seciliTarih)}',
-                    style: TextStyle(fontSize: 13, color: renk, fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w500))),
+                  Expanded(
+                      child: Text(
+                          'Geçerlilik: ${DateFormat('dd MMMM yyyy', 'tr_TR').format(seciliTarih)}',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: renk,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500))),
                   Icon(Icons.edit, size: 14, color: renk.withOpacity(0.5)),
                 ]),
               ),
@@ -119,12 +135,17 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
             TextField(
               controller: fiyatCtrl,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: renk,
-                fontFamily: 'Poppins'),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: renk,
+                  fontFamily: 'Poppins'),
               decoration: InputDecoration(
                 labelText: 'Birim Fiyat (₺/kg)',
-                hintText: (tur == 'sut' ? _guncelSut : _guncelYem).toStringAsFixed(2),
+                hintText:
+                    (tur == 'sut' ? _guncelSut : _guncelYem).toStringAsFixed(2),
                 suffixText: '₺',
               ),
             ),
@@ -138,22 +159,28 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
             ),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('İptal')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: renk),
               onPressed: () async {
-                final val = double.tryParse(fiyatCtrl.text.replaceAll(',', '.'));
+                final val =
+                    double.tryParse(fiyatCtrl.text.replaceAll(',', '.'));
                 if (val == null || val <= 0) return;
                 final repo = await ref.read(fiyatRepositoryProvider.future);
                 await repo.insert(Fiyat(
                   urunTuru: tur,
                   birimFiyat: val,
                   tarih: DateFormat('yyyy-MM-dd').format(seciliTarih),
-                  aciklama: notCtrl.text.trim().isEmpty ? null : notCtrl.text.trim(),
+                  aciklama:
+                      notCtrl.text.trim().isEmpty ? null : notCtrl.text.trim(),
                 ));
                 if (ctx.mounted) Navigator.pop(ctx);
                 _yukle();
-                if (mounted) _snack('$ad fiyatı eklendi ₺${val.toStringAsFixed(2)}/kg', renk);
+                if (mounted)
+                  _snack(
+                      '$ad fiyatı eklendi ₺${val.toStringAsFixed(2)}/kg', renk);
               },
               child: const Text('Kaydet'),
             ),
@@ -165,21 +192,25 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
 
   Future<void> _sil(int id) async {
     final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        content: const Text('Bu fiyat kaydını silmek istiyor musunuz?',
-          style: TextStyle(fontFamily: 'Poppins')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('İptal')),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: C.kirmizi),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sil'),
+          context: context,
+          builder: (_) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            content: const Text('Bu fiyat kaydını silmek istiyor musunuz?',
+                style: TextStyle(fontFamily: 'Poppins')),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('İptal')),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: C.kirmizi),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Sil'),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
     if (!ok) return;
     final repo = await ref.read(fiyatRepositoryProvider.future);
     await repo.delete(id);
@@ -187,9 +218,11 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
     if (mounted) _snack('Fiyat silindi', C.kirmizi);
   }
 
-  void _snack(String m, Color renk) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(m, style: const TextStyle(fontFamily: 'Poppins')),
-      backgroundColor: renk, behavior: SnackBarBehavior.floating));
+  void _snack(String m, Color renk) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(m, style: const TextStyle(fontFamily: 'Poppins')),
+          backgroundColor: renk,
+          behavior: SnackBarBehavior.floating));
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +239,10 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
               indicatorColor: C.mavi,
               labelColor: C.mavi,
               unselectedLabelColor: C.metinUc,
-              labelStyle: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13),
+              labelStyle: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
               tabs: const [
                 Tab(icon: Icon(Icons.water_drop, size: 16), text: 'Süt Alış'),
                 Tab(icon: Icon(Icons.grass, size: 16), text: 'Yem Satış'),
@@ -236,14 +272,15 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
         label: Text(isSut ? 'Süt Fiyatı Ekle' : 'Yem Fiyatı Ekle',
-          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
+            style: const TextStyle(
+                fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
       ),
     );
   }
 
   Widget _sayfa(String tur, List<Fiyat> liste, double guncel) {
     final renk = tur == 'sut' ? C.mavi : C.yesil;
-    final ad   = tur == 'sut' ? 'Süt Alış' : 'Yem Satış';
+    final ad = tur == 'sut' ? 'Süt Alış' : 'Yem Satış';
     final ikon = tur == 'sut' ? Icons.water_drop : Icons.grass;
 
     return ListView(padding: const EdgeInsets.all(16), children: [
@@ -251,61 +288,81 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [renk, renk.withOpacity(0.75)],
-            begin: Alignment.topLeft, end: Alignment.bottomRight),
+              colors: [renk, renk.withOpacity(0.75)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Güncel $ad Fiyatı',
-              style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.85), fontFamily: 'Poppins')),
-            const SizedBox(height: 4),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('₺${guncel.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800,
-                  color: Colors.white, fontFamily: 'Poppins')),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5, left: 4),
-                child: Text('/kg',
-                  style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.75), fontFamily: 'Poppins')),
-              ),
-            ]),
-          ])),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('Güncel $ad Fiyatı',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.85),
+                        fontFamily: 'Poppins')),
+                const SizedBox(height: 4),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('₺${guncel.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          fontFamily: 'Poppins')),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 5, left: 4),
+                    child: Text('/kg',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.75),
+                            fontFamily: 'Poppins')),
+                  ),
+                ]),
+              ])),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
             child: Icon(ikon, color: Colors.white, size: 30),
           ),
         ]),
       ),
       const SizedBox(height: 20),
-
       Row(children: [
         const Icon(Icons.history_rounded, size: 16, color: C.metinUc),
         const SizedBox(width: 6),
         const Text('Fiyat Geçmişi',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: C.metinIki, fontFamily: 'Poppins')),
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: C.metinIki,
+                fontFamily: 'Poppins')),
         const Spacer(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-          decoration: BoxDecoration(color: renk.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(
+              color: renk.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20)),
           child: Text('${liste.length} kayıt',
-            style: TextStyle(fontSize: 11, color: renk, fontFamily: 'Poppins')),
+              style:
+                  TextStyle(fontSize: 11, color: renk, fontFamily: 'Poppins')),
         ),
       ]),
       const SizedBox(height: 10),
-
       if (liste.isEmpty)
         Container(
           padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(color: C.yuzey, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: C.sinir)),
+          decoration: BoxDecoration(
+              color: C.yuzey,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: C.sinir)),
           child: Column(children: [
             Icon(ikon, size: 40, color: C.sinir),
             const SizedBox(height: 8),
             const Text('Henüz fiyat kaydı yok',
-              style: TextStyle(color: C.metinUc, fontFamily: 'Poppins')),
+                style: TextStyle(color: C.metinUc, fontFamily: 'Poppins')),
           ]),
         )
       else
@@ -320,46 +377,68 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
               color: C.yuzey,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isGuncel ? renk.withOpacity(0.5) : C.sinir,
-                width: isGuncel ? 1.5 : 1),
+                  color: isGuncel ? renk.withOpacity(0.5) : C.sinir,
+                  width: isGuncel ? 1.5 : 1),
             ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
-              leading: Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: isGuncel ? renk.withOpacity(0.12) : C.yuzeyVar,
-                  borderRadius: BorderRadius.circular(11)),
-                child: Icon(ikon, color: isGuncel ? renk : C.metinUc, size: 20),
-              ),
-              title: Row(children: [
-                Text('₺${f.birimFiyat.toStringAsFixed(2)}/kg',
-                  style: TextStyle(fontWeight: FontWeight.w700,
-                    color: isGuncel ? renk : C.metinAna,
-                    fontFamily: 'Poppins', fontSize: 16)),
-                if (isGuncel) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: renk.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                    child: Text('Güncel',
-                      style: TextStyle(fontSize: 10, color: renk,
-                        fontWeight: FontWeight.w600, fontFamily: 'Poppins')),
-                  ),
-                ],
-              ]),
-              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const SizedBox(height: 2),
-                Text('${DateFormat('dd MMMM yyyy', 'tr_TR').format(tarih)} tarihinden itibaren',
-                  style: const TextStyle(fontSize: 11, color: C.metinUc, fontFamily: 'Poppins')),
-                if (f.aciklama != null && f.aciklama!.isNotEmpty)
-                  Text(f.aciklama!,
-                    style: const TextStyle(fontSize: 11, color: C.metinIki, fontFamily: 'Poppins')),
-              ]),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: C.kirmizi, size: 20),
-                onPressed: () => _sil(f.id!),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                contentPadding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                      color: isGuncel ? renk.withOpacity(0.12) : C.yuzeyVar,
+                      borderRadius: BorderRadius.circular(11)),
+                  child:
+                      Icon(ikon, color: isGuncel ? renk : C.metinUc, size: 20),
+                ),
+                title: Row(children: [
+                  Text('₺${f.birimFiyat.toStringAsFixed(2)}/kg',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: isGuncel ? renk : C.metinAna,
+                          fontFamily: 'Poppins',
+                          fontSize: 16)),
+                  if (isGuncel) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: renk.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text('Güncel',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: renk,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Poppins')),
+                    ),
+                  ],
+                ]),
+                subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 2),
+                      Text(
+                          '${DateFormat('dd MMMM yyyy', 'tr_TR').format(tarih)} tarihinden itibaren',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: C.metinUc,
+                              fontFamily: 'Poppins')),
+                      if (f.aciklama != null && f.aciklama!.isNotEmpty)
+                        Text(f.aciklama!,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: C.metinIki,
+                                fontFamily: 'Poppins')),
+                    ]),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      color: C.kirmizi, size: 20),
+                  onPressed: () => _sil(f.id!),
+                ),
               ),
             ),
           );
@@ -393,7 +472,10 @@ class _HesabaEtkiYokBandi extends StatelessWidget {
             'Bu ekran yalnızca not amaçlıdır; buradaki fiyatlar hesaplara '
             'GİRMEZ. Carilerin süt/yem tutarları Menü → Süt Fiyatları ve '
             'Yem Fiyatları ekranlarındaki aylık fiyatlarla hesaplanır.',
-            style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontFamily: 'Poppins'),
+            style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange.shade900,
+                fontFamily: 'Poppins'),
           ),
         ),
       ]),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../utils/turkce.dart';
 import '../features/donem/donem_kapali_bandi.dart';
 import 'package:intl/intl.dart';
 
@@ -214,8 +215,7 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
 
   List<Cari> get _gorunenCariler {
     if (_arama.isEmpty) return _cariler;
-    final q = _arama.toLowerCase();
-    return _cariler.where((c) => c.tamAd.toLowerCase().contains(q)).toList();
+    return _cariler.where((c) => aramaEslesir(c.tamAd, _arama)).toList();
   }
 
   double get _gunlukToplamKg =>

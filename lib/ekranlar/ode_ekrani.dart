@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/cari/providers/cari_providers.dart';
+import '../utils/turkce.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/cari_model.dart';
-import '../core/providers/repository_providers.dart';
 import '../core/router/app_router.dart';
 import '../features/cari_hesap/providers/cari_hesap_providers.dart';
 
@@ -33,31 +34,35 @@ class _OdeEkraniState extends ConsumerState<OdeEkrani> {
   }
 
   List<Cari> _filtreUygula(List<Cari> hepsi) {
-    if (_aramaMetni.isEmpty) return hepsi;
-    final q = _aramaMetni.toLowerCase();
-    return hepsi.where((c) => c.tamAd.toLowerCase().contains(q)).toList();
+    return hepsi.where((c) => aramaEslesir(c.tamAd, _aramaMetni)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final carilerAsync = ref.watch(cariRepositoryProvider.future).then((r) => r.getAll(sadeceAktif: true));
+    // Eskiden her yeniden çizimde veritabanına yeni sorgu atılıyordu (titreme);
+    // artık veri değişince kendiliğinden yenilenen ortak provider.
+    final carilerAsync = ref.watch(butunCarilerProvider);
+    final bakiyelerAsync = ref.watch(tumKalanBorclarProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFF),
-      body: FutureBuilder<List<Cari>>(
-        future: carilerAsync,
-        builder: (context, cariSnap) {
-          if (cariSnap.connectionState == ConnectionState.waiting) {
+      body: Builder(
+        builder: (context) {
+          if (carilerAsync.hasError) {
+            return Center(child: Text('Hata: ${carilerAsync.error}'));
+          }
+          if (!carilerAsync.hasValue) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (cariSnap.hasError) {
-            return Center(child: Text('Hata: ${cariSnap.error}'));
-          }
-          final cariler = cariSnap.data ?? [];
-          final bakiyelerAsync = ref.watch(tumKalanBorclarProvider);
+          final hepsi = carilerAsync.value!;
 
           return bakiyelerAsync.when(
             data: (bakiyeler) {
+              // Pasif cari listede yalnız açık bakiyesi varsa görünür — aksi halde
+              // üstteki toplamda sayılıp listede bulunmuyordu (ödeme yapılamıyordu).
+              final cariler = hepsi
+                  .where((c) => c.aktif || ((bakiyeler[c.id] ?? 0).abs() >= 0.005))
+                  .toList();
               final filtrelenen = _filtreUygula(cariler);
               // Kayan nokta yuvarlama hatalarını tolere etmek için 1 kuruşluk
               // eşik — kart gösterimindeki (Hesap Kapalı) mantıkla tutarlı
@@ -290,7 +295,8 @@ class _CariOdemeKarti extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(cari.tamAd, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                    Text(cari.aktif ? cari.tamAd : '${cari.tamAd} (pasif)',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                     const SizedBox(height: 2),
                     Text(cari.hayvanTuru ?? 'Belirtilmemiş', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                   ],

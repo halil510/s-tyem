@@ -301,6 +301,7 @@ class _YedeklemeDialogState extends State<_YedeklemeDialog> {
 
     await ExcelYedekleme.shareFile(file);
 
+    if (!mounted) return;
     setState(() => _loading = false);
     Navigator.pop(context);
   }

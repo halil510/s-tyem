@@ -448,6 +448,7 @@ class _BluetoothAktarimEkraniState extends State<BluetoothAktarimEkrani> {
       if (widget.isBLE && _txCharacteristic != null) {
         await _sendOverBLE(bytes);
       } else {
+        if (!mounted) return;
         await WiFiTransferService.showWiFiTransferDialog(context, backupPath);
       }
 
@@ -592,6 +593,7 @@ class _BluetoothAktarimEkraniState extends State<BluetoothAktarimEkrani> {
       await file.writeAsBytes(data);
 
       final fileSize = await file.length();
+      if (!mounted) return;
       _showMessage('✅ ${BluetoothUtils.formatBytes(fileSize)} boyutunda dosya alındı');
 
       final shouldApply = await _showApplyDialog(file.path);
@@ -642,7 +644,8 @@ class _BluetoothAktarimEkraniState extends State<BluetoothAktarimEkrani> {
   Future<bool?> _showApplyDialog(String filePath) async {
     final file = File(filePath);
     final fileSize = await file.length();
-    
+    if (!mounted) return null;
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
