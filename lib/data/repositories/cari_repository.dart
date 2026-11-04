@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../../models/cari_model.dart';
+import 'donem_kilidi.dart';
 
 /// Cari (müşteri/tedarikçi) kayıtları için veri erişim katmanı.
 ///
@@ -35,8 +36,9 @@ class CariRepository {
   /// CASCADE` olduğundan carinin tüm süt, yem, ödeme ve fiyat kayıtları da
   /// silinir. Hareketi olan bir cari için önce [hareketSayilari] ile
   /// kullanıcı uyarılmalı ve [pasifeAl] önerilmelidir.
+  /// Kapalı bir dönemde kaydı olan cari silinemez ([DonemKapaliHatasi]).
   Future<int> delete(int id) =>
-      db.delete('cariler', where: 'id = ?', whereArgs: [id]);
+      donemKilidiyle(() => db.delete('cariler', where: 'id = ?', whereArgs: [id]));
 
   /// Carinin kaç süt / yem / ödeme-tahsilat kaydı olduğunu döner.
   Future<({int sut, int yem, int odeme})> hareketSayilari(int id) async {

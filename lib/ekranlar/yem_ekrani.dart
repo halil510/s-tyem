@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/donem/donem_kapali_bandi.dart';
 import 'package:intl/intl.dart';
 
 import '../models/cari_model.dart';
@@ -279,6 +280,7 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
               ),
             ),
             const SizedBox(height: 14),
+            DonemKapaliBandi(tarih: _tarih),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))]),

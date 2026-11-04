@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/donem/donem_kapali_bandi.dart';
 import 'package:intl/intl.dart';
 
 import '../core/providers/repository_providers.dart';
@@ -242,6 +243,7 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
       body: Column(
         children: [
           _TarihKarti(tarih: _tarih, onDegistir: _yukleniyor ? null : _tarihSec),
+          DonemKapaliBandi(tarih: _tarih, margin: const EdgeInsets.fromLTRB(16, 0, 16, 8)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../utils/tarih_secici.dart';
+import '../features/donem/donem_kapali_bandi.dart';
 import '../utils/sayi_format.dart';
 import '../data/repositories/sut_repository.dart';
 import '../core/providers/veri_surumu_provider.dart';
@@ -409,6 +410,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
               ),
             ),
             const SizedBox(height: 14),
+            DonemKapaliBandi(tarih: _seciliTarih),
             if (_mevcutKayit != null) ...[
               _MevcutKayitBandi(kayit: _mevcutKayit!),
               const SizedBox(height: 14),

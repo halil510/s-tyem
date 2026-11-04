@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../../models/fiyat_model.dart';
 import '../../models/cari_fiyat_model.dart';
+import 'donem_kilidi.dart';
 
 /// Eski / global (cariye bağlı olmayan) fiyat tanımları.
 class FiyatRepository {
@@ -58,7 +59,9 @@ class CariFiyatRepository {
     return maps.isNotEmpty ? CariFiyat.fromMap(maps.first) : null;
   }
 
-  Future<void> kaydet(CariFiyat fiyat) async {
+  Future<void> kaydet(CariFiyat fiyat) => donemKilidiyle(() => _kaydet(fiyat));
+
+  Future<void> _kaydet(CariFiyat fiyat) async {
     final mevcut = await getirTekil(fiyat.cariId, fiyat.ay);
     if (mevcut != null) {
       // ÖNEMLİ: `toMap()` içindeki `id` alanı UPDATE'e dahil edilmemeli.

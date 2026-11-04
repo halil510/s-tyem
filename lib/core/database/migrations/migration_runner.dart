@@ -10,6 +10,7 @@ import 'migration_v5_terazi_cihazlari.dart';
 import 'migration_v6_islem_gecmisi.dart';
 import 'migration_v7_cari_durum_vade.dart';
 import 'migration_v8_sut_gunluk_tekil.dart';
+import 'migration_v9_donemler.dart';
 
 /// ─────────────────────────────────────────────────────────────
 /// MIGRATION RUNNER
@@ -45,6 +46,7 @@ class MigrationRunner {
     MigrationV6IslemGecmisi(),
     MigrationV7CariDurumVade(),
     MigrationV8SutGunlukTekil(),
+    MigrationV9Donemler(),
   ]..sort((a, b) => a.version.compareTo(b.version));
 
   /// Bu örneğin uygulayacağı migration listesi. Uygulamada daima [_all];

@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../../models/sut_model.dart';
 import 'denetim_kaydi.dart';
+import 'donem_kilidi.dart';
 
 /// Kayıt doğrulanamadığında (geçersiz tarih, negatif/aşırı miktar)
 /// fırlatılır. Mesaj doğrudan kullanıcıya gösterilebilir.
@@ -52,6 +53,10 @@ class TopluSutKayitSonucu {
 class SutRepository {
   final Database db;
   const SutRepository(this.db);
+
+  /// Yazma işlemi: transaction + kapalı dönem kilidinin okunur hataya çevrilmesi.
+  Future<T> _yaz<T>(Future<T> Function(Transaction txn) islem) =>
+      donemKilidiyle(() => db.transaction(islem));
 
   static const _tablo = 'sutler';
 
@@ -129,7 +134,7 @@ class SutRepository {
     required double sabah,
     required double aksam,
   }) {
-    return db.transaction(
+    return _yaz(
       (txn) => _gunlukKaydet(txn, cariId: cariId, tarih: tarih, sabah: sabah, aksam: aksam),
     );
   }
@@ -146,7 +151,7 @@ class SutRepository {
       _miktarDogrula(g.sabah, g.aksam);
     }
     final sonuc = TopluSutKayitSonucu();
-    await db.transaction((txn) async {
+    await _yaz((txn) async {
       for (final g in girdiler) {
         sonuc.ekle(await _gunlukKaydet(
           txn, cariId: g.cariId, tarih: tarih, sabah: g.sabah, aksam: g.aksam,
@@ -161,7 +166,7 @@ class SutRepository {
     if (sut.id == null) throw const SutKayitHatasi('Güncellenecek kaydın kimliği yok.');
     _tarihDogrula(sut.tarih);
     _miktarDogrula(sut.sabah, sut.aksam);
-    return db.transaction((txn) async {
+    return _yaz((txn) async {
       final onceki = await txn.query(_tablo, where: 'id = ?', whereArgs: [sut.id]);
       final yeni = {
         'sabah': sut.sabah,
@@ -180,7 +185,7 @@ class SutRepository {
   }
 
   Future<int> delete(int id) {
-    return db.transaction((txn) async {
+    return _yaz((txn) async {
       final onceki = await txn.query(_tablo, where: 'id = ?', whereArgs: [id]);
       final adet = await txn.delete(_tablo, where: 'id = ?', whereArgs: [id]);
       if (adet > 0) {

@@ -1,4 +1,5 @@
 import 'denetim_kaydi.dart';
+import 'donem_kilidi.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../models/cari_odeme_model.dart';
 
@@ -37,6 +38,10 @@ class CariOdemeRepository {
   final Database db;
   const CariOdemeRepository(this.db);
 
+  /// Yazma işlemi: transaction + kapalı dönem kilidinin okunur hataya çevrilmesi.
+  Future<T> _yaz<T>(Future<T> Function(Transaction txn) islem) =>
+      donemKilidiyle(() => db.transaction(islem));
+
   static const _tablo = 'cari_odemeler';
 
   /// Bakiyeyi ARTIRAN (krediye/cari alacağına katkı yapan) işlem türleri.
@@ -56,7 +61,7 @@ class CariOdemeRepository {
     if (!odeme.toplamTutar.isFinite || odeme.toplamTutar < 0) {
       throw ArgumentError.value(odeme.toplamTutar, 'toplamTutar', 'Geçersiz tutar');
     }
-    return db.transaction((txn) async {
+    return _yaz((txn) async {
       final map = odeme.toMap()..remove('id');
       final id = await txn.insert(_tablo, map);
       await denetimKaydet(txn, tablo: _tablo, kayitId: id, islem: 'ekle', yeniDeger: map);
@@ -80,7 +85,7 @@ class CariOdemeRepository {
   }
 
   Future<int> update(CariOdeme odeme) {
-    return db.transaction((txn) async {
+    return _yaz((txn) async {
       final onceki = await txn.query(_tablo, where: 'id = ?', whereArgs: [odeme.id]);
       final yeni = odeme.toMap()..remove('id');
       final result = await txn.update(_tablo, yeni, where: 'id = ?', whereArgs: [odeme.id]);
@@ -94,7 +99,7 @@ class CariOdemeRepository {
   }
 
   Future<int> delete(int id) {
-    return db.transaction((txn) async {
+    return _yaz((txn) async {
       final onceki = await txn.query(_tablo, where: 'id = ?', whereArgs: [id]);
       final result = await txn.delete(_tablo, where: 'id = ?', whereArgs: [id]);
       if (result > 0) {

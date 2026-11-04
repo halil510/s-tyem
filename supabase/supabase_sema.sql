@@ -1,8 +1,8 @@
 -- =====================================================================
 -- SÜTYEM PRO — Supabase (PostgreSQL) şeması
 -- =====================================================================
--- Kaynak: lib/core/database/migrations/ (SQLite, şu an v8)
--- Bu dosyanın karşılık geldiği yerel şema sürümü: v8
+-- Kaynak: lib/core/database/migrations/ (SQLite, şu an v9)
+-- Bu dosyanın karşılık geldiği yerel şema sürümü: v9
 --
 -- GENEL KURAL: Uygulamaya yeni tablo / sütun / index eklendiğinde
 -- (yeni migration yazıldığında) bu dosya AYNI commit'te güncellenir.
@@ -199,12 +199,127 @@ create table if not exists public.islem_gecmisi (
 create index if not exists idx_islem_gecmisi_tablo on public.islem_gecmisi (kullanici_id, tablo_adi, kayit_id);
 
 -- ---------------------------------------------------------------------
+-- donemler  (v9) — aylık dönem; durum: acik | kapali
+-- ---------------------------------------------------------------------
+create table if not exists public.donemler (
+  kullanici_id   uuid   not null default auth.uid() references auth.users (id) on delete cascade,
+  id             bigint not null,
+  ay             text   not null check (ay ~ '^\d{4}-(0[1-9]|1[0-2])$'),
+  durum          text   not null default 'acik' check (durum in ('acik','kapali')),
+  kapanis_tarihi timestamptz,
+  acilis_sayisi  integer not null default 0,
+  aciklama       text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  primary key (kullanici_id, id),
+  unique (kullanici_id, ay)
+);
+
+-- ---------------------------------------------------------------------
+-- donem_hakedisleri  (v9) — kapanış anındaki bordro (dondurulmuş)
+-- donem_sonu = devir + (sut_tutar + tahsilat) − (yem_tutar + odeme)
+-- ---------------------------------------------------------------------
+create table if not exists public.donem_hakedisleri (
+  kullanici_id uuid   not null default auth.uid() references auth.users (id) on delete cascade,
+  id           bigint not null,
+  donem_id     bigint not null,
+  cari_id      bigint not null,
+  devir        numeric(14,2) not null default 0,
+  sut_kg       numeric(12,2) not null default 0,
+  sut_fiyat    numeric(12,4) not null default 0,
+  sut_tutar    numeric(14,2) not null default 0,
+  yem_kg       numeric(12,2) not null default 0,
+  yem_tutar    numeric(14,2) not null default 0,
+  odeme        numeric(14,2) not null default 0,
+  tahsilat     numeric(14,2) not null default 0,
+  donem_sonu   numeric(14,2) not null default 0,
+  created_at   timestamptz not null default now(),
+  primary key (kullanici_id, id),
+  foreign key (kullanici_id, donem_id) references public.donemler (kullanici_id, id) on delete cascade,
+  foreign key (kullanici_id, cari_id)  references public.cariler  (kullanici_id, id) on delete cascade,
+  unique (kullanici_id, donem_id, cari_id)
+);
+
+-- ---------------------------------------------------------------------
+-- Kapalı dönem kilidi (v9): kapalı aya ait süt / yem / ödeme / fiyat
+-- satırı eklenemez, değiştirilemez, silinemez. Hata metni: DONEM_KAPALI
+-- ---------------------------------------------------------------------
+create or replace function public.donem_kapali_mi(p_kullanici uuid, p_ay text)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.donemler d
+    where d.kullanici_id = p_kullanici and d.ay = p_ay and d.durum = 'kapali'
+  );
+$$;
+
+create or replace function public.donem_kilidi()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  eski_ay text;
+  yeni_ay text;
+begin
+  if TG_TABLE_NAME = 'cari_fiyatlar' then
+    if TG_OP <> 'INSERT' then eski_ay := old.ay; end if;
+    if TG_OP <> 'DELETE' then yeni_ay := new.ay; end if;
+  else
+    if TG_OP <> 'INSERT' then eski_ay := to_char(old.tarih, 'YYYY-MM'); end if;
+    if TG_OP <> 'DELETE' then yeni_ay := to_char(new.tarih, 'YYYY-MM'); end if;
+  end if;
+
+  if (eski_ay is not null and public.donem_kapali_mi(old.kullanici_id, eski_ay))
+     or (yeni_ay is not null and public.donem_kapali_mi(new.kullanici_id, yeni_ay)) then
+    raise exception 'DONEM_KAPALI';
+  end if;
+
+  if TG_OP = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+create or replace function public.donem_bordrosu_kilidi()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if exists (select 1 from public.donemler d
+             where d.kullanici_id = old.kullanici_id and d.id = old.donem_id and d.durum = 'kapali') then
+    raise exception 'DONEM_KAPALI';
+  end if;
+  return old;
+end;
+$$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['sutler','yemler','cari_odemeler','cari_fiyatlar']
+  loop
+    execute format('drop trigger if exists trg_%1$s_donem_kilidi on public.%1$I', t);
+    execute format(
+      'create trigger trg_%1$s_donem_kilidi before insert or update or delete on public.%1$I
+         for each row execute function public.donem_kilidi()', t);
+  end loop;
+end $$;
+
+drop trigger if exists trg_donem_hakedisleri_sil on public.donem_hakedisleri;
+create trigger trg_donem_hakedisleri_sil before delete on public.donem_hakedisleri
+  for each row execute function public.donem_bordrosu_kilidi();
+
+-- ---------------------------------------------------------------------
 -- updated_at tetikleyicileri
 -- ---------------------------------------------------------------------
 do $$
 declare t text;
 begin
-  foreach t in array array['cariler','sutler','yemler','fiyatlar','cari_odemeler','terazi_cihazlari']
+  foreach t in array array['cariler','sutler','yemler','fiyatlar','cari_odemeler','terazi_cihazlari','donemler']
   loop
     execute format('drop trigger if exists trg_%1$s_updated_at on public.%1$I', t);
     execute format(
@@ -220,7 +335,8 @@ do $$
 declare t text;
 begin
   foreach t in array array['cariler','sutler','yemler','fiyatlar','cari_odemeler',
-                           'cari_fiyatlar','terazi_cihazlari','islem_gecmisi']
+                           'cari_fiyatlar','terazi_cihazlari','islem_gecmisi',
+                           'donemler','donem_hakedisleri']
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists %1$s_sahibi on public.%1$I', t);
@@ -243,5 +359,7 @@ end $$;
 -- v6  islem_gecmisi
 -- v7  cariler.aktif, cariler.not_metni, cari_odemeler.vade_tarihi
 -- v8  sutler UNIQUE (cari_id, tarih); tarihler yyyy-MM-dd
+-- v9  donemler, donem_hakedisleri, kapalı dönem kilidi (DONEM_KAPALI)
 -- 2026-11-04  Dosya ilk kez oluşturuldu (yerel şema v8).
+-- 2026-11-04  v9 eklendi (dönem kapanışı / hakediş).
 -- =====================================================================

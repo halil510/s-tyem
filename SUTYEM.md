@@ -28,6 +28,9 @@
 4. Süt / yem / ödeme / fiyat / cari değiştiren her işlemden sonra
    `ref.veriDegisti()` (Riverpod ekran) ya da `veriDegistiBildir(context)`
    (düz StatefulWidget) çağır → bakiyeler, ekstre ve ana sayfa yenilenir.
+9. **Kapalı dönem kilidi veritabanındadır** (migration v9 tetikleyicileri). Yeni bir tarihli
+   tablo eklenirse ona da tetikleyici yazılmalı. Repository yazmaları `donemKilidiyle` / `_yaz`
+   ile sarılır; ekranlar `DonemKapaliHatasi` mesajını gösterir.
 5. **Yedek** alma/yükleme yalnızca `YedekServisi` üzerinden
    (`lib/data/yedek/yedek_servisi.dart`). `INSERT OR REPLACE` KULLANMA:
    `ON DELETE CASCADE` yüzünden carinin ödemelerini siler.
@@ -42,7 +45,7 @@
 ## Testler
 
 ```bash
-flutter test          # 80 test — hepsi geçmeli
+flutter test          # 90 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -60,6 +63,8 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/aylik_ozet_test.dart` | Aylık özet: cari fiyatıyla, ekstreyle aynı, WhatsApp mesajı |
 | `test/utils/sifre_ozeti_test.dart` | PBKDF2 test vektörleri, yanlış şifre/kilitlenme, kaynakta açık şifre yok |
 | `test/services/toplu_mesaj_test.dart` | Telefon biçimi, toplu gönderim sayımı, haftalık süt toplamı, yem dökümü, rapor diyaloğu |
+| `test/features/donem_test.dart` | Hakediş hesabı, kapatma kilidi (süt/yem/ödeme/fiyat/cari silme), fiyat sabitleme, yeniden açma, yedek |
+| `test/donem_ekrani_test.dart` | Dönem ekranı: kapat → kilitli → gerekçeyle yeniden aç |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -192,6 +197,33 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - Supabase SQL: şema değişmedi.
 - Testler: 80/80 geçti; `flutter analyze` 0 error.
 
+### 2026-11-04 (7) — B4: Dönem kapanışı & hakediş
+
+Kullanıcı kararı: **aylık dönem**; kapanan dönem **kilitli, gerekçeyle yeniden açılabilir**.
+
+- **Migration v9** (`migration_v9_donemler.dart`): `donemler` (ay, durum, kapanis_tarihi,
+  acilis_sayisi, aciklama), `donem_hakedisleri` (dondurulmuş bordro).
+  Tetikleyiciler: kapalı aya ait `sutler` / `yemler` / `cari_odemeler` / `cari_fiyatlar`
+  satırı eklenemez/değişemez/silinemez → `RAISE(ABORT,'DONEM_KAPALI')`. Kapalı dönemin
+  bordrosu silinemez. CASCADE silmelerde de çalışır (kapalı dönemde kaydı olan cari silinemez).
+- `lib/data/repositories/donem_kilidi.dart`: `DonemKapaliHatasi`, `donemKilidiyle`.
+  Süt/ödeme repoları `_yaz` (transaction + kilit çevirisi); yem, fiyat, cari silme sarıldı.
+- `lib/features/donem/donem_servisi.dart`: `DonemServisi.hesapla / kapat / yenidenAc / bilgi`,
+  `HakedisSatiri` (devir + süt + tahsilat − yem − ödeme = dönem sonu).
+  - Yalnız bitmiş ay kapatılır; fiyatı eksik cari varsa kapatılmaz.
+  - Kapanışta devralınan fiyat o aya **sabitlenir** (önceki ay fiyatı sonra değişse de kapalı ay değişmez).
+  - Yeniden açma gerekçe ister; eski bordro JSON olarak `islem_gecmisi`'ne yazılır.
+- Ekran: Menü → **Dönem Kapanışı & Hakediş** (`donem_ekrani.dart`): ay seçimi, durum kartı,
+  toplamlar (ödenecek / alacak), üretici kartları, Excel bordro (`ExcelExport.exportHakedisBordrosu`).
+- Süt Ekle, Hızlı Süt Girişi, Yem Girişi: kapalı ay seçilince `DonemKapaliBandi` uyarısı.
+- Yedek format **v3**: `donemler`, `donem_hakedisleri` dahil. v2 yedekleri hâlâ "tam" sayılır.
+  "Tamamen değiştir" önce yerel kilitleri açar, sonra yedekteki dönem durumlarını yazar.
+- Supabase SQL: v9 tabloları + `donem_kilidi()` / `donem_bordrosu_kilidi()` tetikleyicileri + RLS.
+- Bilinen sınır: kapalı ayın bordrosundaki "devir", kapanış anındaki değerdir; daha eski AÇIK
+  bir ayda sonradan değişiklik yapılırsa kapalı ayın bordrosu değişmez (sonraki ayın devri doğru hesaplanır).
+  Öneri: ayları sırayla kapatın.
+- Testler: 90/90 geçti; `flutter analyze` 0 error.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Ana şifre (2026-11-04 güncel):** koddan kaldırıldı, yalnız PBKDF2 özeti var. ANCAK eski
@@ -219,7 +251,7 @@ Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_comm
 - [ ] B1. Toplama turu (sabah/akşam vardiya, üretici sırası/rota, gelmeyenler).
 - [ ] B2. Süt kalitesi (yağ %, protein, yoğunluk, sıcaklık, antibiyotik testi) + kaliteye göre prim/kesinti.
 - [ ] B3. Tank ve sevkiyat (fabrikaya teslim, fire = toplanan − sevk).
-- [ ] B4. Dönem kapanışı / üretici hakedişi (15 günlük ya da aylık, kapanan dönem kilitli).
+- [x] B4. Aylık dönem kapanışı + hakediş bordrosu + DB seviyesinde kilit (migration v9). Ayrıntı: oturum günlüğü (7).
 - [ ] B5. Kesintiler (stopaj vb. — oranlar ayarlanabilir) + müstahsil makbuzu çıktısı.
 - [ ] B6. Yem stok/depo (alış, tedarikçi, stok, kritik stok uyarısı).
 - [ ] B7. Raporlar merkezi (günlük, aylık üretici, bakiye listesi, yem satış; PDF/Excel/WhatsApp).

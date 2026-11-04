@@ -6,6 +6,7 @@ import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../models/yem_model.dart';
 import '../features/cari_hesap/providers/cari_hesap_providers.dart' show AylikCariOzet;
+import '../features/donem/donem_servisi.dart' show HakedisSatiri;
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
 
@@ -245,6 +246,67 @@ class ExcelExport {
       debugPrint('❌ Hesaplama raporu hatası: $e\n$st');
       rethrow;
     }
+  }
+
+  // 📋 HAKEDİŞ BORDROSU (dönem kapanışı)
+  static Future<File> exportHakedisBordrosu({
+    required List<({Cari cari, HakedisSatiri satir})> satirlar,
+    required String ayAdi,
+    required bool kapali,
+  }) async {
+    final excel = Excel.createExcel();
+    final sheet = excel['Hakediş $ayAdi'];
+    excel.delete('Sheet1');
+
+    final baslikStil = CellStyle(backgroundColorHex: '#B3E5FC', bold: true, horizontalAlign: HorizontalAlign.Center);
+    final toplamStil = CellStyle(backgroundColorHex: '#FFF59D', bold: true);
+
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
+      ..value = 'Hakediş Bordrosu — $ayAdi ${kapali ? '(KAPALI DÖNEM)' : '(TASLAK — dönem açık)'}'
+      ..cellStyle = CellStyle(bold: true, fontSize: 13);
+
+    // Bakiye işareti: + üreticiye ödenecek, − üretici borçlu.
+    const basliklar = [
+      'Üretici', 'Devir (₺)', 'Süt (kg)', 'Süt Fiyatı (₺/kg)', 'Süt Tutarı (₺)',
+      'Yem (kg)', 'Yem Tutarı (₺)', 'Ödenen (₺)', 'Tahsil Edilen (₺)', 'Dönem Sonu (₺)',
+    ];
+    for (var i = 0; i < basliklar.length; i++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 2))
+        ..value = basliklar[i]
+        ..cellStyle = baslikStil;
+    }
+
+    final toplam = List<double>.filled(basliklar.length, 0);
+    var satir = 3;
+    for (final r in satirlar) {
+      final s = r.satir;
+      final degerler = [
+        s.devir, s.sutKg, s.sutFiyat, s.sutTutar, s.yemKg, s.yemTutar, s.odeme, s.tahsilat, s.donemSonu,
+      ];
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: satir)).value =
+          '${r.cari.ad} ${r.cari.soyad}';
+      for (var i = 0; i < degerler.length; i++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: i + 1, rowIndex: satir)).value = degerler[i];
+        toplam[i + 1] += degerler[i];
+      }
+      satir++;
+    }
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: satir))
+      ..value = 'TOPLAM'
+      ..cellStyle = toplamStil;
+    for (var i = 1; i < basliklar.length; i++) {
+      if (i == 3) continue; // fiyat toplanmaz
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: satir))
+        ..value = double.parse(toplam[i].toStringAsFixed(2))
+        ..cellStyle = toplamStil;
+    }
+
+    final bytes = excel.save();
+    if (bytes == null) throw Exception('Excel oluşturulamadı.');
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/Hakedis_${ayAdi.replaceAll(' ', '_')}.xlsx');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
   }
 
   // 🐮 YEM EXCEL RAPORU

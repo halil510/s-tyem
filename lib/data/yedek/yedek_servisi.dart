@@ -42,10 +42,25 @@ class YedekServisi {
   static const uygulamaKodu = 'sut_yem';
 
   /// v1: yalnızca cariler/sutler/yemler. v2: tüm iş tabloları.
-  static const formatSurumu = 2;
+  /// v3: + dönemler ve kapanmış dönem bordroları.
+  static const formatSurumu = 3;
 
   /// Yabancı anahtar sırasına göre (önce ebeveyn tablo).
   static const tablolar = [
+    'cariler',
+    'cari_fiyatlar',
+    'fiyatlar',
+    'sutler',
+    'yemler',
+    'cari_odemeler',
+    'donemler',
+    'donem_hakedisleri',
+  ];
+
+  /// "Tam yedek" sayılmak için gereken tablolar (format v2). Dönem
+  /// tabloları sonradan eklendi; onları içermeyen v2 yedeği de tamdır
+  /// (geri yüklenince dönemler açık kalır, veri kaybı olmaz).
+  static const _zorunluTablolar = [
     'cariler',
     'cari_fiyatlar',
     'fiyatlar',
@@ -114,7 +129,7 @@ class YedekServisi {
 
   /// Yedek tüm iş tablolarını içeriyor mu? (v2 ve sonrası)
   static bool tamYedekMi(Map<String, dynamic> veri) =>
-      tablolar.every((t) => veri[t] is List);
+      _zorunluTablolar.every((t) => veri[t] is List);
 
   // ──────────────────────────────────────────
   // İÇE AKTAR
@@ -146,6 +161,9 @@ class YedekServisi {
 
     return db.transaction((txn) async {
       if (tamamenDegistir) {
+        // Kapalı dönem kilidi (tetikleyiciler) silmeyi engellemesin; yedekteki
+        // dönem durumları aşağıda yeniden yazılır.
+        await txn.update('donemler', {'durum': 'acik'});
         for (final tablo in tablolar.reversed) {
           await txn.delete(tablo);
         }
@@ -222,6 +240,8 @@ class YedekServisi {
     final dogalAnahtar = switch (tablo) {
       'sutler' => ['cari_id', 'tarih'],
       'cari_fiyatlar' => ['cari_id', 'ay'],
+      'donemler' => ['ay'],
+      'donem_hakedisleri' => ['donem_id', 'cari_id'],
       _ => const <String>[],
     };
     if (dogalAnahtar.isNotEmpty && dogalAnahtar.every((k) => satir[k] != null)) {
@@ -239,6 +259,7 @@ class YedekServisi {
 
   static String _kisaHata(DatabaseException e) {
     final metin = e.toString();
+    if (metin.contains('DONEM_KAPALI')) return 'kaydın tarihi bu cihazda kapatılmış bir döneme ait';
     if (metin.contains('FOREIGN KEY')) return 'kaydın bağlı olduğu cari yedekte yok';
     if (metin.contains('NOT NULL')) return 'zorunlu bir alan boş';
     if (metin.contains('UNIQUE')) return 'aynı kayıt iki kez var';

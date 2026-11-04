@@ -8,6 +8,7 @@ import '../core/router/app_router.dart';
 import '../utils/excel_export.dart';
 import '../services/whatsapp_service.dart';
 import '../data/repositories/cari_repository.dart';
+import '../data/repositories/donem_kilidi.dart';
 import '../data/repositories/sut_repository.dart';
 import '../data/repositories/yem_repository.dart';
 import '../core/providers/repository_providers.dart';
@@ -187,7 +188,13 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     if (secim == 'pasif') {
       await _cariRepo.pasifeAl(cariId);
     } else if (secim == 'sil') {
-      await _cariRepo.delete(cariId);
+      try {
+        await _cariRepo.delete(cariId);
+      } on DonemKapaliHatasi {
+        _mesajGoster('Bu carinin kapatılmış dönemlerde kaydı var; kalıcı silinemez. '
+            'Hesap geçmişi korunsun diye cariyi "Pasife Al" ile listeden kaldırabilirsiniz.');
+        return;
+      }
     } else {
       return;
     }

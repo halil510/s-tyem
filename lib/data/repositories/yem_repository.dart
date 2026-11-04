@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../../models/yem_model.dart';
+import 'donem_kilidi.dart';
 
 class YemRepository {
   final Database db;
@@ -9,7 +10,7 @@ class YemRepository {
   /// her teslimat ayrı satırdır.
   Future<int> insert(Yem yem) {
     _dogrula(yem);
-    return db.insert('yemler', yem.toMap()..remove('id'));
+    return donemKilidiyle(() => db.insert('yemler', yem.toMap()..remove('id')));
   }
 
   static void _dogrula(Yem y) {
@@ -41,9 +42,10 @@ class YemRepository {
 
   Future<int> update(Yem yem) {
     _dogrula(yem);
-    return db.update('yemler', yem.toMap()..remove('id'), where: 'id = ?', whereArgs: [yem.id]);
+    return donemKilidiyle(
+        () => db.update('yemler', yem.toMap()..remove('id'), where: 'id = ?', whereArgs: [yem.id]));
   }
 
   Future<int> delete(int id) =>
-      db.delete('yemler', where: 'id = ?', whereArgs: [id]);
+      donemKilidiyle(() => db.delete('yemler', where: 'id = ?', whereArgs: [id]));
 }
