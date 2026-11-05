@@ -18,8 +18,10 @@ import '../widgetlar/kaydedilmemis_koruma.dart';
 /// - Kayıt TEK transaction'dır: bir satır bile geçersizse hiçbir şey
 ///   yazılmaz (yarım kalmış toplu giriş müşteri hesaplarını bozamaz).
 /// - Geçersiz sayı girilen satır kırmızı işaretlenir, 0 kg kaydedilmez.
-/// - Kayıtlı bir satırın iki alanı da boşaltılırsa kayıt silinir; bu,
-///   kaydetmeden önce ayrıca onaylatılır.
+/// - O gün GİRİLMİŞ öğün (sabah/akşam) KİLİTLİDİR: kutu yerine yazı görünür,
+///   değiştirilemez, silinemez; yalnız boş öğün girilir. Düzeltme yalnız
+///   Cari Detay → Düzenle (kullanıcı kararı 2026-11-05). Kayıt katmanı da
+///   korur: `topluGunlukKaydet(kayitliOgunuKoru: true)`.
 class HizliSutGiris extends ConsumerStatefulWidget {
   const HizliSutGiris({super.key});
 
@@ -109,12 +111,20 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
     await _gunuYukle();
   }
 
+  /// Kilitli öğünün değeri yazıdan değil KAYITTAN alınır; açık öğün yazıdan.
+  ({double? sabah, double? aksam}) _degerler(int id) {
+    final k = _mevcutKayitlar[id];
+    return (
+      sabah: (k?.sabah ?? 0) > 0 ? k!.sabah : sayiCoz(_sabahCtrl[id]!.text),
+      aksam: (k?.aksam ?? 0) > 0 ? k!.aksam : sayiCoz(_aksamCtrl[id]!.text),
+    );
+  }
+
   bool _kaydedilmemisDegisiklikVar() {
     for (final cari in _cariler) {
       final k = _mevcutKayitlar[cari.id!];
-      final sabah = sayiCoz(_sabahCtrl[cari.id!]!.text);
-      final aksam = sayiCoz(_aksamCtrl[cari.id!]!.text);
-      if (sabah != (k?.sabah ?? 0) || aksam != (k?.aksam ?? 0)) return true;
+      final d = _degerler(cari.id!);
+      if (d.sabah != (k?.sabah ?? 0) || d.aksam != (k?.aksam ?? 0)) return true;
     }
     return false;
   }
@@ -124,20 +134,17 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
     FocusScope.of(context).unfocus();
 
     final girdiler = <GunlukSutGirdisi>[];
-    final silinecekler = <Cari>[];
     final hatalilar = <int>{};
     for (final cari in _cariler) {
       final id = cari.id!;
-      final sabah = sayiCoz(_sabahCtrl[id]!.text);
-      final aksam = sayiCoz(_aksamCtrl[id]!.text);
+      final (:sabah, :aksam) = _degerler(id);
       if (sabah == null || aksam == null) {
         hatalilar.add(id);
         continue;
       }
       final mevcut = _mevcutKayitlar[id];
-      if (mevcut == null && sabah == 0 && aksam == 0) continue;
+      if (sabah == 0 && aksam == 0) continue; // bu ekrandan kayıt silinmez
       if (mevcut != null && mevcut.sabah == sabah && mevcut.aksam == aksam) continue;
-      if (mevcut != null && sabah == 0 && aksam == 0) silinecekler.add(cari);
       girdiler.add(GunlukSutGirdisi(cariId: id, sabah: sabah, aksam: aksam));
     }
 
@@ -154,20 +161,20 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
       _snack('Kaydedilecek değişiklik yok.', Colors.blueGrey);
       return;
     }
-    if (silinecekler.isNotEmpty && await _silmeOnayi(silinecekler) != true) return;
-
     setState(() => _kaydediliyor = true);
     try {
       final repo = await ref.read(sutRepositoryProvider.future);
-      final sonuc = await repo.topluGunlukKaydet(_tarihFormat.format(_tarih), girdiler);
+      final sonuc = await repo.topluGunlukKaydet(_tarihFormat.format(_tarih), girdiler, kayitliOgunuKoru: true);
       ref.veriDegisti();
       final parcalar = [
         if (sonuc.eklenen > 0) '${sonuc.eklenen} yeni',
-        if (sonuc.guncellenen > 0) '${sonuc.guncellenen} güncellendi',
-        if (sonuc.silinen > 0) '${sonuc.silinen} silindi',
+        if (sonuc.guncellenen > 0) '${sonuc.guncellenen} öğün eklendi',
       ];
       _snack('Kaydedildi: ${parcalar.join(', ')}', Colors.green[700]!);
       await _gunuYukle();
+    } on KayitliOgunHatasi catch (e) {
+      _snack('${e.mesaj} Hiçbir kayıt yapılmadı.', Colors.red);
+      await _gunuYukle(); // güncel kayıtlar kilitlensin
     } on SutKayitHatasi catch (e) {
       _snack('${e.mesaj} Hiçbir kayıt yapılmadı.', Colors.red);
     } catch (e) {
@@ -176,24 +183,6 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
       if (mounted) setState(() => _kaydediliyor = false);
     }
   }
-
-  Future<bool?> _silmeOnayi(List<Cari> cariler) => showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Kayıtlar silinecek'),
-          content: Text(
-            'Şu carilerin bu tarihteki süt kaydı boşaltıldı ve SİLİNECEK:\n\n'
-            '${cariler.map((c) => '• ${c.tamAd}').join('\n')}\n\nDevam edilsin mi?',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Sil ve Kaydet', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      );
 
   Future<bool?> _degisiklikleriAtOnayi() => showDialog<bool>(
         context: context,
@@ -382,7 +371,35 @@ class _CariSatiri extends StatelessWidget {
     required this.onDegisti,
   });
 
-  Widget _alan(TextEditingController ctrl, IconData ikon, Color renk) {
+  Widget _alan(TextEditingController ctrl, IconData ikon, Color renk, double kayitliKg, String anahtar) {
+    // Girilmiş öğün kilitli: kutu yerine yazı (düzeltme Cari Detay → Düzenle).
+    if (kayitliKg > 0) {
+      return Expanded(
+        child: Container(
+          key: ValueKey('kilitli-$anahtar-${cari.id}'),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[200]!),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock, size: 12, color: Colors.green[700]),
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(sayiGoster(kayitliKg),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800])),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Expanded(
       child: TextField(
         controller: ctrl,
@@ -441,9 +458,9 @@ class _CariSatiri extends StatelessWidget {
                 ],
               ),
             ),
-            _alan(sabahCtrl, Icons.wb_sunny, Colors.orange[600]!),
+            _alan(sabahCtrl, Icons.wb_sunny, Colors.orange[600]!, mevcutKayit?.sabah ?? 0, 'sabah'),
             const SizedBox(width: 8),
-            _alan(aksamCtrl, Icons.nightlight_round, Colors.blue[600]!),
+            _alan(aksamCtrl, Icons.nightlight_round, Colors.blue[600]!, mevcutKayit?.aksam ?? 0, 'aksam'),
           ],
         ),
       ),

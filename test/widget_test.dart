@@ -118,45 +118,109 @@ void main() {
       expect(await sutler(tester), isEmpty);
     });
 
-    testWidgets('mevcut kayıt yüklenir ve güncellenir, mükerrer oluşmaz', (tester) async {
+    testWidgets('sabahı kayıtlı carinin sabahı KİLİTLİ (yazı), yalnız akşam girilir; mükerrer oluşmaz',
+        (tester) async {
       await hazirla(tester);
       await tester.runAsync(() => db.insert('sutler',
           {'cari_id': ali, 'tarih': bugunStr, 'sabah': 20, 'aksam': 0, 'toplam': 20}));
       await tester.pumpWidget(_uygulama(db, const HizliSutGiris()));
       await _bekle(tester, () => find.text('Kayıtlı · 20 kg').evaluate().isNotEmpty);
 
-      expect(tester.widget<TextField>(alan(1)).controller!.text, '20');
-      await tester.enterText(alan(2), '17'); // akşamı ekle
+      // Ali'nin sabahı kutu değil yazı → alanlar: [0] arama, [1] Ali akşam, [2] Veli sabah, [3] Veli akşam
+      expect(find.byKey(ValueKey('kilitli-sabah-$ali')), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(4));
+      await tester.enterText(alan(1), '17'); // Ali akşam
       await tester.tap(find.text('Tümünü Kaydet'));
-      await _bekle(tester, () => find.textContaining('1 güncellendi').evaluate().isNotEmpty);
+      await _bekle(tester, () => find.textContaining('1 öğün eklendi').evaluate().isNotEmpty);
 
       final s = await sutler(tester);
       expect(s, hasLength(1));
+      expect(s.single['sabah'], 20);
       expect(s.single['toplam'], 37);
+      // Kaydedince akşam da kilitlenir.
+      await _bekle(tester, () => find.byKey(ValueKey('kilitli-aksam-$ali')).evaluate().isNotEmpty);
+    });
+
+    testWidgets('sabah + akşamı tamam olan carinin iki alanı da kilitli', (tester) async {
+      await hazirla(tester);
+      await tester.runAsync(() => db.insert('sutler',
+          {'cari_id': ali, 'tarih': bugunStr, 'sabah': 20, 'aksam': 15, 'toplam': 35}));
+      await tester.pumpWidget(_uygulama(db, const HizliSutGiris()));
+      await _bekle(tester, () => find.text('Kayıtlı · 35 kg').evaluate().isNotEmpty);
+
+      expect(find.byKey(ValueKey('kilitli-sabah-$ali')), findsOneWidget);
+      expect(find.byKey(ValueKey('kilitli-aksam-$ali')), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(3), reason: 'arama + Veli sabah/akşam');
+      await tester.tap(find.text('Tümünü Kaydet'));
+      await _bekle(tester, () => find.text('Kaydedilecek değişiklik yok.').evaluate().isNotEmpty);
+      expect((await sutler(tester)).single['toplam'], 35);
     });
   });
 
   group('Süt Ekle (tek cari)', () {
     Cari cariNesnesi() => Cari(id: ali, ad: 'Ali', soyad: 'Kaya');
 
-    testWidgets('aynı güne ikinci giriş mevcut kaydı günceller', (tester) async {
+    testWidgets('sabah kayıtlıysa sabah KİLİTLİ (yazı), yalnız akşam girilir, aynı satıra eklenir',
+        (tester) async {
       await hazirla(tester);
       await tester.runAsync(() => db.insert('sutler',
           {'cari_id': ali, 'tarih': bugunStr, 'sabah': 20, 'aksam': 0, 'toplam': 20}));
       await tester.pumpWidget(_uygulama(db, SutGirisSayfasi(cari: cariNesnesi())));
-      await _bekle(tester, () => find.textContaining('Bu tarihte kayıt var').evaluate().isNotEmpty);
-      expect(find.text('GÜNCELLE'), findsOneWidget);
+      await _bekle(tester, () => find.textContaining('Sabah sütü kayıtlı (20 kg)').evaluate().isNotEmpty);
+
+      expect(find.byKey(const ValueKey('kilitliSabah')), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Sabah Sütü (kg)'), findsNothing, reason: 'sabah değiştirilemez');
+      expect(find.text('GÜNCELLE'), findsNothing);
+      expect(find.text('KAYDET'), findsOneWidget);
 
       await tester.enterText(find.widgetWithText(TextField, 'Akşam Sütü (kg)'), '18');
-      await tester.ensureVisible(find.text('GÜNCELLE'));
+      await tester.ensureVisible(find.text('KAYDET'));
       await tester.pump();
-      await tester.tap(find.text('GÜNCELLE'));
-      await _bekle(tester, () => find.textContaining('güncellendi').evaluate().isNotEmpty);
+      await tester.tap(find.text('KAYDET'));
+      await _bekle(tester, () => find.textContaining('Akşam sütü eklendi').evaluate().isNotEmpty);
 
       final s = await sutler(tester);
       expect(s, hasLength(1));
       expect(s.single['sabah'], 20);
       expect(s.single['aksam'], 18);
+    });
+
+    testWidgets('akşam kayıtlıysa akşam kilitli, terazi "Akşama Uygula" kapalı', (tester) async {
+      await hazirla(tester);
+      await tester.runAsync(() => db.insert('sutler',
+          {'cari_id': ali, 'tarih': bugunStr, 'sabah': 0, 'aksam': 15, 'toplam': 15}));
+      final agirlik = StreamController<String>();
+      await tester.pumpWidget(_uygulama(db, SutGirisSayfasi(cari: cariNesnesi()),
+          agirlik: agirlik.stream, terazi: TeraziBaglantiDurumu.bagli));
+      await _bekle(tester, () => find.byKey(const ValueKey('kilitliAksam')).evaluate().isNotEmpty);
+      agirlik.add('7.20');
+      await _bekle(tester, () => find.text('7.20').evaluate().isNotEmpty);
+
+      expect(find.widgetWithText(TextField, 'Sabah Sütü (kg)'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Akşam Sütü (kg)'), findsNothing);
+      final aksamaUygula = tester.widget<OutlinedButton>(
+          find.ancestor(of: find.text('Akşama Uygula'), matching: find.byWidgetPredicate((w) => w is OutlinedButton)));
+      expect(aksamaUygula.onPressed, isNull);
+      final sabahaUygula = tester.widget<OutlinedButton>(
+          find.ancestor(of: find.text('Sabaha Uygula'), matching: find.byWidgetPredicate((w) => w is OutlinedButton)));
+      expect(sabahaUygula.onPressed, isNotNull);
+      await agirlik.close();
+    });
+
+    testWidgets('sabah + akşam tamamsa ikisi kilitli, KAYDET kapalı, yalnız FİŞ VER', (tester) async {
+      await hazirla(tester);
+      await tester.runAsync(() => db.insert('sutler',
+          {'cari_id': ali, 'tarih': bugunStr, 'sabah': 20, 'aksam': 15, 'toplam': 35}));
+      await tester.pumpWidget(_uygulama(db, SutGirisSayfasi(cari: cariNesnesi())));
+      await _bekle(tester, () => find.textContaining('Bu günün sütü tamam').evaluate().isNotEmpty);
+
+      expect(find.widgetWithText(TextField, 'Sabah Sütü (kg)'), findsNothing);
+      expect(find.widgetWithText(TextField, 'Akşam Sütü (kg)'), findsNothing);
+      final kaydet = tester.widget<ElevatedButton>(
+          find.ancestor(of: find.text('KAYDET'), matching: find.byWidgetPredicate((w) => w is ElevatedButton)));
+      expect(kaydet.onPressed, isNull);
+      expect(find.text('FİŞ VER'), findsOneWidget);
+      expect(find.textContaining('Detay → Düzenle'), findsOneWidget);
     });
 
     testWidgets('REGRESYON: terazi okuması girilmiş sabah değerini EZMEZ', (tester) async {

@@ -60,11 +60,16 @@
     Her bilgisayarda (ev + işyeri) `C:\Users\<kullanıcı>\.sutyem\` klasörü aynı olmalı; klasör yoksa
     derleme bilerek durur. Anahtar kaybolursa telefondaki uygulamalar bir daha GÜNCELLENEMEZ →
     klasörün en az iki yedeği tutulur (USB + bulut). Sertifika: `CN=SUTYEM PRO, O=SUTYEM, C=TR`.
+15. **Girilmiş öğün kilitli (kullanıcı kararı 2026-11-05):** Süt Ekle ve Hızlı Süt Girişi'nde o gün
+    girilmiş sabah/akşam DEĞİŞTİRİLEMEZ (kutu yerine "kayıtlı" yazısı, terazi uygulanamaz), bu ekranlardan
+    kayıt silinmez; yalnız boş öğün girilir. Her tarih için geçerli. Düzeltme YALNIZ Cari Detay → Düzenle
+    (`SutRepository.update`). Bu iki ekran `gunlukKaydet` / `topluGunlukKaydet`'i `kayitliOgunuKoru: true`
+    ile çağırır → kayıtlı öğün değişirse `KayitliOgunHatasi` (toplu girişte hiçbir satır yazılmaz).
 
 ## Testler
 
 ```bash
-flutter test          # 203 test — hepsi geçmeli
+flutter test          # 224 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -97,6 +102,8 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/sanal_terazi_test.dart` | SANAL TERAZİ (gerçek TCP) → gerçek terazi servisi → Süt Ekle → KAYDET; bölünen/çoklu satır, farklı terazi biçimleri |
 | `test/features/terazi_veri_cozucu_test.dart` | Tartı satırı çözme, parça birleştirme, satır sonu yok, cihaz kaydı yarışı |
 | `test/features/derin_tarama_test.dart` | Türkçe alfabetik sıralama, aynı isimli cari uyarısı, 0 kg düzenlemede silme |
+| `test/features/excel_rapor_test.dart` | Excel çıktıları geri okunur: boş Sheet1 yok, yuvarlama, pasif cari, yıllık rapor, ekstre dönem neti, hakediş, dosya adı |
+| `test/features/pdf_ekstre_test.dart` | Excel/PDF ortak ekstre satırları (sıra, yürüyen bakiye, DÖNEM NETİ), PDF internetsiz oluşur, çok sayfa |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -510,6 +517,47 @@ Bakılıp sorun bulunmayanlar: cari silme (CASCADE + dönem kilidi doğru), Öde
 ödeme/tahsilat girişi, Wi-Fi aktarım mesajları (analizci uyarısı yanlış alarm: `context.mounted` kontrolü var).
 - Testler: 203/203; `flutter analyze` 0 error.
 
+
+### 2026-11-05 (3) — Excel dışa aktarmalarının taraması
+
+6 Excel çıktısı (Süt raporu, Yem raporu, Hesap ekstresi, Aylık hesaplama, Hakediş bordrosu, Yedekleme → Excel)
+gerçek dosya üretip geri okuyan testle (`test/features/excel_rapor_test.dart`) denendi.
+
+| # | Rapor | Sorun | Çözüm |
+|---|---|---|---|
+| 1 | **Hakediş bordrosu** | HİÇ oluşmuyordu: excel 3.0 + archive 3.6 uyumsuzluğu, `delete('Sheet1')` "unmodifiable list" ile çöküyordu | `excel` paketi **4.0.6**'ya yükseltildi (hücre değerleri `TextCellValue`/`DoubleCellValue`, renkler `ExcelColor`) |
+| 2 | Tüm raporlar | Dosya boş "Sheet1" sayfasıyla açılıyordu (rapor 2. sekmede) | Boş sayfa kaydetmeden önce silinir |
+| 3 | Süt raporu (cari listesi) | ~1 yıllık aralıkta çöküyordu (sütun harfi hesabı 702. sütunda taşıyor) | Hücreler sütun/satır numarasıyla |
+| 4 | Süt / Yem raporu | Pasif carinin sütü raporda ve GENEL TOPLAM'da YOKTU; yemi "Bilinmeyen Cari" | Aktif + aralıkta kaydı olan pasif cariler; listede olmayan kayıt "Silinmiş/pasif cari #id" satırı; genel toplam = tüm kayıtlar |
+| 5 | Tüm raporlar | `0.30000000000000004` gibi kayan nokta değerleri | Her sayı kuruşa/2 haneye yuvarlanır |
+| 6 | Hesap ekstresi | Tarih filtresi varken "NET BAKİYE" yazıyordu (aslında dönem neti, devir yok) → müşteri toplam borcu sanabilir | Başlıkta dönem; "DÖNEM NETİ" + not; eskiden yeniye, Alacak/Borç/yürüyen Bakiye sütunları; ALACAKLI/BORÇLU yazısı |
+| 7 | Hesap ekstresi | Cari adında `/` varsa dosya yazılamıyordu | `ExcelExport.dosyaAdi` temizler |
+| 8 | Yem raporu | Ekrandaki listeyi yerinde sıralıyordu (Detay'da sıra ters dönüyordu); tür bazında genel toplam yoktu | Kopya üzerinde; cariye göre gruplu, cari ara toplamı, her yem türünün genel toplamı |
+| 9 | Aylık hesaplama, Hakediş | Fiyatı eksik cari Excel'de 0 ₺ görünüyordu, uyarı yok | "Not" sütunu: FİYAT EKSİK / fiyat ay içinde değişti (ortalama) |
+| 10 | Yedekleme → Excel | Kendi kopya kodu; yıllıkta cari×gün×kayıt tarama (telefonda dakikalar); hata olursa diyalog sonsuza dek "yükleniyor" | `ExcelExport.exportSutVeYemRaporu` (ortak kod); hata mesajı; "geri yüklenemez, tam yedek JSON" notu |
+| 11 | Paylaş | Her paylaşımda gereksiz 2 sn bekleme | Kaldırıldı |
+
+- Yıllık süt raporu (40 cari × 365 gün): ~0,6 sn.
+- **PDF ekstresi de düzeltildi** (aynı oturum): yazı tipi Google Fonts'tan İNDİRİLİYORDU (internetsiz PDF oluşmuyordu) → uygulama içi DejaVu Sans; Türkçe harfler ("Sut"→"Süt") ve para biçimi (1.250,10 TL); dönem + "DÖNEM NETİ" + not; Alacak/Borç/yürüyen Bakiye sütunları; adında "/" olan cari. Excel ve PDF aynı hesabı kullanır: `lib/utils/ekstre_satirlari.dart`.
+- Supabase SQL: şema değişmedi.
+- Testler: 216/216; `flutter analyze` 0 error.
+
+
+### 2026-11-05 (4) — Süt girişinde kayıtlı öğün kilidi
+
+Kullanıcı isteği: sabah girildiyse süt giriş ekranında sabah tekrar değiştirilemesin (kafa karışıklığı),
+yalnız akşam girilsin; düzeltme Cari Detay'daki Düzenle'den. Karar: Hızlı Süt Girişi'nde de, her tarih için.
+
+- **Süt Ekle:** kayıtlı öğün → `_KilitliOgun` (yeşil, kilit simgesi, "kayıtlı"); bilgi bandı "Sabah sütü kayıtlı
+  (20 kg). Yalnız akşam sütü girilebilir. Düzeltmek için: Cariler → cari → Detay → Düzenle". Düğme hep
+  "KAYDET" (GÜNCELLE kalktı); gün tamamsa KAYDET kapalı, ikinci düğme "FİŞ VER" (kayıt değişmeden fiş).
+  Terazinin "Sabaha/Akşama Uygula" düğmesi kayıtlı öğün için kapalı. Bu ekrandan silme kalktı.
+  Kilitli değer yazıdan değil kayıttan alınır (yuvarlama farkıyla yanlışlıkla değişmesin).
+- **Hızlı Süt Girişi:** kayıtlı öğün hücresi kutu değil kilitli yazı; boşaltıp silme ve "Sil ve Kaydet" onayı kalktı.
+- **Kayıt katmanı:** `kayitliOgunuKoru` + `KayitliOgunHatasi`; hata olursa ekran günü yeniden yükler.
+  Detay → Düzenle (`update`) etkilenmez.
+- Supabase SQL: şema değişmedi.
+- Testler: 224/224; `flutter analyze` 0 error.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"

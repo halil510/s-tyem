@@ -18,7 +18,12 @@ List<int> excelYap(List<List<Object?>> satirlar, {String sayfa = 'Liste'}) {
   for (var r = 0; r < satirlar.length; r++) {
     for (var c = 0; c < satirlar[r].length; c++) {
       final v = satirlar[r][c];
-      if (v != null) s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r)).value = v;
+      if (v == null) continue;
+      s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r)).value = switch (v) {
+        int i => IntCellValue(i),
+        double d => DoubleCellValue(d),
+        _ => TextCellValue(v.toString()),
+      };
     }
   }
   return x.encode()!;

@@ -127,6 +127,59 @@ void main() {
     });
   });
 
+  group('kayitliOgunuKoru (Süt Ekle + Hızlı Süt Girişi)', () {
+    const t = '2026-05-01';
+
+    test('sabah kayıtlıyken akşam eklenir', () async {
+      await repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 20, aksam: 0, kayitliOgunuKoru: true);
+      final d = await repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 20, aksam: 18, kayitliOgunuKoru: true);
+      expect(d, SutKayitDurumu.guncellendi);
+      expect((await repo.getGunluk(cari, t))!.toplam, 38);
+    });
+
+    test('kayıtlı sabah DEĞİŞTİRİLEMEZ, kayıt aynen kalır', () async {
+      await repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 20, aksam: 0);
+      await expectLater(
+        repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 25, aksam: 18, kayitliOgunuKoru: true),
+        throwsA(isA<KayitliOgunHatasi>().having((e) => e.mesaj, 'mesaj', contains('Sabah sütü bu gün için zaten kayıtlı (20 kg)'))),
+      );
+      final k = (await repo.getGunluk(cari, t))!;
+      expect((k.sabah, k.aksam), (20.0, 0.0));
+    });
+
+    test('kayıtlı akşam değiştirilemez; boş gönderim kaydı SİLMEZ', () async {
+      await repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 0, aksam: 15.5);
+      await expectLater(
+        repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 10, aksam: 0, kayitliOgunuKoru: true),
+        throwsA(isA<KayitliOgunHatasi>()),
+      );
+      expect(await repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 0, aksam: 0, kayitliOgunuKoru: true),
+          SutKayitDurumu.degismedi);
+      expect((await repo.getGunluk(cari, t))!.aksam, 15.5);
+    });
+
+    test('toplu girişte bir carinin kayıtlı öğünü değişiyorsa HİÇBİR satır yazılmaz', () async {
+      final cari2 = await cariEkle(db, ad: 'Veli');
+      await repo.gunlukKaydet(cariId: cari2, tarih: t, sabah: 5, aksam: 0);
+      await expectLater(
+        repo.topluGunlukKaydet(t, [
+          GunlukSutGirdisi(cariId: cari, sabah: 20, aksam: 0),
+          GunlukSutGirdisi(cariId: cari2, sabah: 6, aksam: 4),
+        ], kayitliOgunuKoru: true),
+        throwsA(isA<KayitliOgunHatasi>()),
+      );
+      expect(await repo.getGunluk(cari, t), isNull);
+      expect((await repo.getGunluk(cari2, t))!.sabah, 5);
+    });
+
+    test('Detay → Düzenle (update) kayıtlı öğünü değiştirebilir', () async {
+      await repo.gunlukKaydet(cariId: cari, tarih: t, sabah: 20, aksam: 18, kayitliOgunuKoru: true);
+      final k = (await repo.getGunluk(cari, t))!..sabah = 22;
+      await repo.update(k);
+      expect((await repo.getGunluk(cari, t))!.sabah, 22);
+    });
+  });
+
   test('update: Detay ekranındaki düzenleme toplamı yeniden hesaplar', () async {
     await repo.gunlukKaydet(cariId: cari, tarih: '2026-05-01', sabah: 10, aksam: 10);
     final kayit = (await repo.getGunluk(cari, '2026-05-01'))!;

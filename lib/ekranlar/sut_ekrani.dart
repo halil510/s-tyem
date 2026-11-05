@@ -185,9 +185,12 @@ class _CariKarti extends StatelessWidget {
 
 /// Bir carinin bir günlük süt girişi.
 ///
-/// - Seçilen günde kayıt VARSA alanlar o kayıtla dolar ve kaydetmek onu
-///   GÜNCELLER. Eskiden her kaydet yeni satır ekliyordu; sabah ve akşam
-///   ayrı girilince aynı güne mükerrer kayıt oluşuyordu.
+/// - Seçilen günde GİRİLMİŞ öğün (sabah ya da akşam) KİLİTLİDİR: kutu yerine
+///   "kayıtlı" yazısı görünür, terazi o öğüne uygulanamaz. Yalnız boş öğün
+///   girilir (ör. sabah girilmiş → yalnız akşam). Düzeltme yalnız Cari Detay →
+///   Düzenle'den yapılır (kullanıcı kararı 2026-11-05: kafa karışıklığı olmasın).
+///   Kayıt katmanı da korur: `gunlukKaydet(kayitliOgunuKoru: true)`.
+/// - Bir cari için bir günde tek satır vardır; akşam, sabahın satırına eklenir.
 /// - Geçersiz sayı (ör. "12,5x") 0 kg kaydedilmez; alan hata gösterir.
 /// - Teraziden gelen ağırlık YALNIZCA "Sabaha/Akşama Uygula" ile alana
 ///   yazılır. Eskiden her okuma sabah alanının üzerine otomatik
@@ -211,6 +214,11 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
   String? _aksamHata;
 
   String get _tarihStr => DateFormat('yyyy-MM-dd').format(_seciliTarih);
+
+  /// O gün girilmiş öğünler kilitlidir (yalnız Cari Detay → Düzenle).
+  bool get _sabahKilitli => (_mevcutKayit?.sabah ?? 0) > 0;
+  bool get _aksamKilitli => (_mevcutKayit?.aksam ?? 0) > 0;
+  bool get _gunTamam => _sabahKilitli && _aksamKilitli;
 
   /// Sabah/akşam alanına odaklanınca ekran, alanın ALTINDAKİ KAYDET ve
   /// KAYDET + FİŞ VER düğmeleri de klavyenin üstünde kalacak kadar kayar.
@@ -273,21 +281,27 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
   }
 
   Future<void> _kaydet({bool fisVer = false}) async {
-    final sabah = sayiCoz(_sabahCtrl.text);
-    final aksam = sayiCoz(_aksamCtrl.text);
+    if (_gunTamam) return;
+    // Kilitli öğünün değeri yazıdan değil KAYITTAN alınır (yuvarlama farkı olmasın).
+    final sabah = _sabahKilitli ? _mevcutKayit!.sabah : sayiCoz(_sabahCtrl.text);
+    final aksam = _aksamKilitli ? _mevcutKayit!.aksam : sayiCoz(_aksamCtrl.text);
     setState(() {
       _sabahHata = sabah == null ? 'Geçersiz miktar' : null;
       _aksamHata = aksam == null ? 'Geçersiz miktar' : null;
     });
     if (sabah == null || aksam == null) return;
 
-    if (sabah == 0 && aksam == 0) {
-      if (_mevcutKayit == null) {
-        _snack('Lütfen sabah veya akşam süt miktarını giriniz', renk: Colors.orange);
-        return;
-      }
-      final sil = await _silmeOnayi();
-      if (sil != true) return;
+    final double yeniGirilen = (_sabahKilitli ? 0.0 : sabah) + (_aksamKilitli ? 0.0 : aksam);
+    if (yeniGirilen == 0) {
+      _snack(
+        _sabahKilitli
+            ? 'Lütfen akşam süt miktarını giriniz'
+            : _aksamKilitli
+                ? 'Lütfen sabah süt miktarını giriniz'
+                : 'Lütfen sabah veya akşam süt miktarını giriniz',
+        renk: Colors.orange,
+      );
+      return;
     }
 
     setState(() => _kaydediliyor = true);
@@ -298,12 +312,15 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
         tarih: _tarihStr,
         sabah: sabah,
         aksam: aksam,
+        kayitliOgunuKoru: true,
       );
       ref.veriDegisti();
       if (!mounted) return;
       final mesaj = switch (durum) {
         SutKayitDurumu.eklendi => 'Süt kaydı eklendi (${sayiGoster(sabah + aksam)} kg)',
-        SutKayitDurumu.guncellendi => 'Süt kaydı güncellendi (${sayiGoster(sabah + aksam)} kg)',
+        SutKayitDurumu.guncellendi =>
+          '${_sabahKilitli ? 'Akşam' : 'Sabah'} sütü eklendi (${sayiGoster(yeniGirilen)} kg) · '
+              'günlük ${sayiGoster(sabah + aksam)} kg',
         SutKayitDurumu.silindi => 'Süt kaydı silindi',
         SutKayitDurumu.degismedi => 'Değişiklik yok — kayıt aynı',
       };
@@ -311,6 +328,10 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
       if (fisVer && durum != SutKayitDurumu.silindi) await _fisGoster();
       if (!mounted) return;
       Navigator.pop(context, true);
+    } on KayitliOgunHatasi catch (e) {
+      // Bu arada başka yerden girilmiş olabilir → günü yeniden yükle (kilitlensin).
+      if (mounted) _snack(e.mesaj, renk: Colors.red);
+      if (mounted) await _gunuYukle();
     } on SutKayitHatasi catch (e) {
       if (mounted) _snack(e.mesaj, renk: Colors.red);
     } catch (e) {
@@ -319,24 +340,6 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
       if (mounted) setState(() => _kaydediliyor = false);
     }
   }
-
-  Future<bool?> _silmeOnayi() => showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Kaydı sil'),
-          content: Text(
-            '${DateFormat('dd MMMM yyyy', 'tr_TR').format(_seciliTarih)} tarihli '
-            '${sayiGoster(_mevcutKayit!.toplam)} kg süt kaydı silinsin mi?',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Sil', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      );
 
   void _snack(String msg, {Color renk = Colors.green}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -361,7 +364,8 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
       final v = sayiCoz(c.text);
       return v == null || kurusaYuvarla(v) != kurusaYuvarla(kayitli);
     }
-    return farkli(_sabahCtrl, _mevcutKayit?.sabah ?? 0) || farkli(_aksamCtrl, _mevcutKayit?.aksam ?? 0);
+    return (!_sabahKilitli && farkli(_sabahCtrl, _mevcutKayit?.sabah ?? 0)) ||
+        (!_aksamKilitli && farkli(_aksamCtrl, _mevcutKayit?.aksam ?? 0));
   }
 
   late final _alanDinleyici = Listenable.merge([_sabahCtrl, _aksamCtrl]);
@@ -461,9 +465,18 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  if (_sabahKilitli)
+                    _KilitliOgun(
+                      key: const ValueKey('kilitliSabah'),
+                      etiket: 'Sabah Sütü',
+                      kg: _mevcutKayit!.sabah,
+                      ikon: Icon(Icons.wb_sunny, color: Colors.orange[400]),
+                    )
+                  else
                   TextField(
                     controller: _sabahCtrl,
                     enabled: !_yukleniyor,
+                    autofocus: false,
                     decoration: InputDecoration(
                       labelText: 'Sabah Sütü (kg)',
                       prefixIcon: Icon(Icons.wb_sunny, color: Colors.orange[400]),
@@ -478,6 +491,14 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                     },
                   ),
                   const SizedBox(height: 12),
+                  if (_aksamKilitli)
+                    _KilitliOgun(
+                      key: const ValueKey('kilitliAksam'),
+                      etiket: 'Akşam Sütü',
+                      kg: _mevcutKayit!.aksam,
+                      ikon: Icon(Icons.nightlight_round, color: Colors.indigo[400]),
+                    )
+                  else
                   TextField(
                     controller: _aksamCtrl,
                     enabled: !_yukleniyor,
@@ -502,7 +523,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _kaydediliyor || _yukleniyor ? null : _kaydet,
+                onPressed: _kaydediliyor || _yukleniyor || _gunTamam ? null : _kaydet,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[700],
                   foregroundColor: Colors.white,
@@ -514,7 +535,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.check_circle),
                 label: Text(
-                  _kaydediliyor ? 'Kaydediliyor...' : (_mevcutKayit != null ? 'GÜNCELLE' : 'KAYDET'),
+                  _kaydediliyor ? 'Kaydediliyor...' : 'KAYDET',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
               ),
@@ -523,7 +544,10 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _kaydediliyor || _yukleniyor ? null : () => _kaydet(fisVer: true),
+                // Gün tamamsa yalnız fiş verilir (kayıt değişmez).
+                onPressed: _kaydediliyor || _yukleniyor
+                    ? null
+                    : (_gunTamam ? _fisGoster : () => _kaydet(fisVer: true)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.blue[800],
                   side: BorderSide(color: Colors.blue[700]!, width: 1.5),
@@ -532,7 +556,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                 ),
                 icon: const Icon(Icons.receipt_long_rounded),
                 label: Text(
-                  _mevcutKayit != null ? 'GÜNCELLE + FİŞ VER' : 'KAYDET + FİŞ VER',
+                  _gunTamam ? 'FİŞ VER' : 'KAYDET + FİŞ VER',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -543,16 +567,21 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
             _CanliTeraziKarti(
               agirlikAsync: agirlikAsync,
               durumAsync: durumAsync,
-              onSabahaUygula: (kg) {
-                _sabahCtrl.text = kg;
-                setState(() => _sabahHata = null);
-                _snack('Sabah sütüne $kg kg aktarıldı', renk: Colors.blue[700]!);
-              },
-              onAksamaUygula: (kg) {
-                _aksamCtrl.text = kg;
-                setState(() => _aksamHata = null);
-                _snack('Akşam sütüne $kg kg aktarıldı', renk: Colors.indigo[700]!);
-              },
+              // Kayıtlı öğüne terazi uygulanamaz (düğme kapalı).
+              onSabahaUygula: _sabahKilitli
+                  ? null
+                  : (kg) {
+                      _sabahCtrl.text = kg;
+                      setState(() => _sabahHata = null);
+                      _snack('Sabah sütüne $kg kg aktarıldı', renk: Colors.blue[700]!);
+                    },
+              onAksamaUygula: _aksamKilitli
+                  ? null
+                  : (kg) {
+                      _aksamCtrl.text = kg;
+                      setState(() => _aksamHata = null);
+                      _snack('Akşam sütüne $kg kg aktarıldı', renk: Colors.indigo[700]!);
+                    },
               onBaglanTikla: () => context.push(AppRoutes.terazi),
             ),
             const SizedBox(height: 10),
@@ -598,11 +627,63 @@ class _MevcutKayitBandi extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Bu tarihte kayıt var: sabah ${sayiGoster(kayit.sabah)} kg, '
-              'akşam ${sayiGoster(kayit.aksam)} kg. Kaydederseniz bu kayıt güncellenir.',
+              _metin,
               style: TextStyle(fontSize: 12.5, color: Colors.amber[900]),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  String get _metin {
+    const duzelt = 'Düzeltmek için: Cariler → cari → Detay → Düzenle.';
+    final sabah = kayit.sabah > 0, aksam = kayit.aksam > 0;
+    if (sabah && aksam) {
+      return 'Bu günün sütü tamam: sabah ${sayiGoster(kayit.sabah)} kg, '
+          'akşam ${sayiGoster(kayit.aksam)} kg. $duzelt';
+    }
+    if (sabah) return 'Sabah sütü kayıtlı (${sayiGoster(kayit.sabah)} kg). Yalnız akşam sütü girilebilir. $duzelt';
+    if (aksam) return 'Akşam sütü kayıtlı (${sayiGoster(kayit.aksam)} kg). Yalnız sabah sütü girilebilir. $duzelt';
+    return 'Bu tarihte boş bir süt kaydı var.';
+  }
+}
+
+/// Kayıtlı (kilitli) öğün: düzenlenebilir kutu yerine salt yazı.
+class _KilitliOgun extends StatelessWidget {
+  final String etiket;
+  final double kg;
+  final Widget ikon;
+  const _KilitliOgun({super.key, required this.etiket, required this.kg, required this.ikon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      child: Row(
+        children: [
+          ikon,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(etiket, style: TextStyle(color: Colors.grey[800], fontSize: 15)),
+          ),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('${sayiGoster(kg)} kg',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.green[800])),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.lock, size: 16, color: Colors.green[700]),
+          const SizedBox(width: 4),
+          Text('kayıtlı', style: TextStyle(fontSize: 12, color: Colors.green[700])),
         ],
       ),
     );
@@ -618,8 +699,8 @@ class _MevcutKayitBandi extends StatelessWidget {
 class _CanliTeraziKarti extends StatelessWidget {
   final AsyncValue<String> agirlikAsync;
   final AsyncValue<TeraziBaglantiDurumu> durumAsync;
-  final ValueChanged<String> onSabahaUygula;
-  final ValueChanged<String> onAksamaUygula;
+  final ValueChanged<String>? onSabahaUygula; // null → öğün kayıtlı, düğme kapalı
+  final ValueChanged<String>? onAksamaUygula;
   final VoidCallback onBaglanTikla;
 
   const _CanliTeraziKarti({
@@ -723,7 +804,7 @@ class _CanliTeraziKarti extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => onSabahaUygula(kg),
+                    onPressed: onSabahaUygula == null ? null : () => onSabahaUygula!(kg),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
                       side: const BorderSide(color: Colors.white54),
@@ -736,7 +817,7 @@ class _CanliTeraziKarti extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => onAksamaUygula(kg),
+                    onPressed: onAksamaUygula == null ? null : () => onAksamaUygula!(kg),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
                       side: const BorderSide(color: Colors.white54),

@@ -302,6 +302,8 @@ class _CariHesapEkstresiEkraniState extends ConsumerState<CariHesapEkstresiEkran
         toplamOdeme: ekstre.toplamOdeme,
         toplamTahsilat: ekstre.toplamTahsilat,
         kalanBakiye: ekstre.bakiye,
+        baslangic: ekstre.filtreBaslangic,
+        bitis: ekstre.filtreBitis,
       );
       await ExcelExport.shareFile(file);
     } catch (e) {
@@ -326,6 +328,8 @@ class _CariHesapEkstresiEkraniState extends ConsumerState<CariHesapEkstresiEkran
         toplamOdeme: ekstre.toplamOdeme,
         toplamTahsilat: ekstre.toplamTahsilat,
         kalanBakiye: ekstre.bakiye,
+        baslangic: ekstre.filtreBaslangic,
+        bitis: ekstre.filtreBitis,
       );
       await PdfExport.paylas(file);
     } catch (e) {

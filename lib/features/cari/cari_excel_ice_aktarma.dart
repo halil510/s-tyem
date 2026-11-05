@@ -90,7 +90,7 @@ class CariExcelOkuyucu {
     final v = h?.value;
     if (v == null) return '';
     // Telefon gibi sayılar Excel'de 5551234567.0 olarak gelir.
-    if (v is double && v == v.roundToDouble()) return v.toInt().toString();
+    if (v is DoubleCellValue && v.value == v.value.roundToDouble()) return v.value.toInt().toString();
     return v.toString().trim();
   }
 

@@ -298,17 +298,25 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     final bas = gun.format(aralik.start), bit = gun.format(aralik.end);
     final ad = '${sut ? 'Sut' : 'Yem'}_Raporu_${DateFormat('yyyy_MM_dd').format(DateTime.now())}';
     try {
+      final sutler = sut ? await _sutRepo.getAllInRange(bas, bit) : null;
+      final yemler = sut ? null : await _yemRepo.getAllInRange(bas, bit);
+      // Aktif cariler + bu aralıkta kaydı olan pasif cariler (adıyla görünsün;
+      // eskiden pasif carinin sütü raporda ve GENEL TOPLAM'da hiç yoktu).
+      final kayitli = {...?sutler?.map((s) => s.cariId), ...?yemler?.map((y) => y.cariId)};
+      final cariler = (await _cariRepo.getAll())
+          .where((c) => c.aktif || kayitli.contains(c.id))
+          .toList();
       final file = sut
           ? await ExcelExport.exportSutRaporu(
-              cariler: _cariler,
-              sutler: await _sutRepo.getAllInRange(bas, bit),
+              cariler: cariler,
+              sutler: sutler!,
               startDate: aralik.start,
               endDate: aralik.end,
               raporAdi: ad,
             )
           : await ExcelExport.exportYemRaporu(
-              cariler: _cariler,
-              yemler: await _yemRepo.getAllInRange(bas, bit),
+              cariler: cariler,
+              yemler: yemler!,
               startDate: aralik.start,
               endDate: aralik.end,
               raporAdi: ad,

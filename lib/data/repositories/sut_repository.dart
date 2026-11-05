@@ -12,6 +12,15 @@ class SutKayitHatasi implements Exception {
   String toString() => mesaj;
 }
 
+/// Girilmiş bir öğünün (sabah/akşam) Süt Ekle ya da Hızlı Süt Girişi
+/// üzerinden değiştirilmeye çalışılması. Düzeltme yalnız Cari Detay → Düzenle.
+class KayitliOgunHatasi extends SutKayitHatasi {
+  const KayitliOgunHatasi(super.mesaj);
+}
+
+String _kg(double v) =>
+    v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '').replaceAll('.', ',');
+
 enum SutKayitDurumu { eklendi, guncellendi, silindi, degismedi }
 
 /// Toplu girişte (Hızlı Süt Girişi) tek bir carinin o günkü değerleri.
@@ -146,14 +155,20 @@ class SutRepository {
   /// Bir carinin bir günlük sütünü kaydeder (yoksa ekler, varsa günceller).
   ///
   /// Sabah ve akşam İKİSİ de 0 ise ve kayıt varsa kayıt silinir.
+  ///
+  /// [kayitliOgunuKoru] (Süt Ekle + Hızlı Süt Girişi): o gün GİRİLMİŞ öğün
+  /// (sabah ya da akşam > 0) DEĞİŞTİRİLEMEZ, kayıt silinemez; yalnız boş öğün
+  /// eklenir ([KayitliOgunHatasi]). Düzeltme yalnız Cari Detay → Düzenle ([update]).
   Future<SutKayitDurumu> gunlukKaydet({
     required int cariId,
     required String tarih,
     required double sabah,
     required double aksam,
+    bool kayitliOgunuKoru = false,
   }) {
     return _yaz(
-      (txn) => _gunlukKaydet(txn, cariId: cariId, tarih: tarih, sabah: sabah, aksam: aksam),
+      (txn) => _gunlukKaydet(txn,
+          cariId: cariId, tarih: tarih, sabah: sabah, aksam: aksam, kayitliOgunuKoru: kayitliOgunuKoru),
     );
   }
 
@@ -162,8 +177,9 @@ class SutRepository {
   /// hiç) — yarım kalmış bir toplu giriş müşteri hesaplarını bozamaz.
   Future<TopluSutKayitSonucu> topluGunlukKaydet(
     String tarih,
-    List<GunlukSutGirdisi> girdiler,
-  ) async {
+    List<GunlukSutGirdisi> girdiler, {
+    bool kayitliOgunuKoru = false,
+  }) async {
     _tarihDogrula(tarih);
     for (final g in girdiler) {
       _miktarDogrula(g.sabah, g.aksam);
@@ -173,6 +189,7 @@ class SutRepository {
       for (final g in girdiler) {
         sonuc.ekle(await _gunlukKaydet(
           txn, cariId: g.cariId, tarih: tarih, sabah: g.sabah, aksam: g.aksam,
+          kayitliOgunuKoru: kayitliOgunuKoru,
         ));
       }
     });
@@ -224,6 +241,7 @@ class SutRepository {
     required String tarih,
     required double sabah,
     required double aksam,
+    bool kayitliOgunuKoru = false,
   }) async {
     _tarihDogrula(tarih);
     _miktarDogrula(sabah, aksam);
@@ -252,6 +270,18 @@ class SutRepository {
     }
 
     final id = mevcut['id'] as int;
+    if (kayitliOgunuKoru) {
+      if (bos) return SutKayitDurumu.degismedi; // bu yoldan kayıt silinmez
+      for (final (ad, eski, yeni) in [
+        ('Sabah', (mevcut['sabah'] as num? ?? 0).toDouble(), sabah),
+        ('Akşam', (mevcut['aksam'] as num? ?? 0).toDouble(), aksam),
+      ]) {
+        if (eski > 0 && eski != yeni) {
+          throw KayitliOgunHatasi('$ad sütü bu gün için zaten kayıtlı (${_kg(eski)} kg). '
+              'Değiştirmek için: Cariler → cari → Detay → Düzenle.');
+        }
+      }
+    }
     if (bos) {
       await ex.delete(_tablo, where: 'id = ?', whereArgs: [id]);
       await denetimKaydet(ex, tablo: _tablo, kayitId: id, islem: 'sil', oncekiDeger: mevcut);
