@@ -679,6 +679,12 @@ yeşil tik; öğleden sonra sıfırlansın, akşam rotasında yeniden tik atıls
    uygulama silinirse onlar da gider. Kullanıcı ara sıra "Paylaş" ile dışarı göndermeli. İleride: Supabase'e
    otomatik bulut yedeği ya da "son dış yedek X gün önce" hatırlatması.
 
+7. **Toplu WhatsApp (2026-11-05, kullanıcı kararı: "böyle kalsın"):** her cari için wa.me açılır, gönder tuşuna
+   kullanıcı basar; "gönderildi" sayısı yalnız WhatsApp'ın açıldığını gösterir. Sıralı gönderim ekranı / Business API
+   önerildi, istenmedi — kullanıcı tekrar sormadıkça yeniden önerme.
+8. **Toplu SMS (fikir, 2026-11-05 "şimdilik dursun"):** telefonun SIM'inden otomatik SMS (SEND_SMS, APK'da sorun yok),
+   kısa mesaj + Türkçe harf sadeleştirme (1 SMS = 160 harf; ş/ğ/ı varsa 70), Android 30 SMS/30 dk uyarısı. Kullanıcı isterse yapılır.
+
 ## Sıradaki işler (öneri sırası)
 
 ### D. Ekran taraması önerileri (2026-11-04, kullanıcı onayı bekleniyor)
