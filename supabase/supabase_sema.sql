@@ -2,7 +2,7 @@
 -- SÜTYEM PRO — Supabase (PostgreSQL) şeması
 -- =====================================================================
 -- Kaynak: lib/core/database/migrations/ (SQLite, şu an v11)
--- Bu dosyanın karşılık geldiği yerel şema sürümü: v11
+-- Bu dosyanın karşılık geldiği yerel şema sürümü: v12
 --
 -- GENEL KURAL: Uygulamaya yeni tablo / sütun / index eklendiğinde
 -- (yeni migration yazıldığında) bu dosya AYNI commit'te güncellenir.
@@ -39,7 +39,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- cariler  (v1 + v7: aktif, not_metni)
+-- cariler  (v1 + v7: aktif, not_metni + v12: sira = süt toplama rotası)
 -- ---------------------------------------------------------------------
 create table if not exists public.cariler (
   kullanici_id uuid   not null default auth.uid() references auth.users (id) on delete cascade,
@@ -51,11 +51,13 @@ create table if not exists public.cariler (
   hayvan_turu  text,
   aktif        boolean not null default true,
   not_metni    text,
+  sira         integer check (sira is null or sira >= 1),  -- v12: toplama rotası (null = sırasız)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id)
 );
 create index if not exists idx_cariler_ad_soyad on public.cariler (kullanici_id, ad, soyad);
+create index if not exists idx_cariler_sira on public.cariler (kullanici_id, sira);
 
 -- ---------------------------------------------------------------------
 -- sutler  (v1 + v8: bir cari için günde tek satır)
@@ -370,7 +372,9 @@ end $$;
 -- v9  donemler, donem_hakedisleri, kapalı dönem kilidi (DONEM_KAPALI)
 -- v10 tarih indeksleri: sutler(tarih) [zaten vardı], yemler(tarih), cari_odemeler(tarih)
 -- v11 cari_fiyatlar.ay 'yyyy-MM-dd' de olabilir (ay ortası fiyat); dönem kilidi left(ay, 7)
+-- v12 cariler.sira (süt toplama rotası; 1..N boşluksuz, pasifte null)
 -- 2026-11-04  Dosya ilk kez oluşturuldu (yerel şema v8).
 -- 2026-11-04  v9 eklendi (dönem kapanışı / hakediş).
 -- 2026-11-04  v11 eklendi (o günden itibaren geçerli fiyat).
+-- 2026-11-05  v12 eklendi (cariler.sira — toplama rotası).
 -- =====================================================================

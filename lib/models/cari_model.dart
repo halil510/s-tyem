@@ -8,6 +8,10 @@ class Cari {
   bool aktif;
   String? notMetni;
 
+  /// Süt toplama sırası (rota): 1, 2, 3… — null ise sırasız (en sonda).
+  /// Yalnız `CariRepository.siraAta` / `rotaKaydet` ile değiştirilir.
+  int? sira;
+
   Cari({
     this.id,
     required this.ad,
@@ -17,6 +21,7 @@ class Cari {
     this.hayvanTuru,
     this.aktif = true,
     this.notMetni,
+    this.sira,
   });
 
   String get tamAd => '$ad $soyad'.trim();
@@ -30,6 +35,7 @@ class Cari {
     hayvanTuru: m['hayvan_turu'],
     aktif: (m['aktif'] as int?) != 0,
     notMetni: m['not_metni'],
+    sira: m['sira'] as int?,
   );
 
   Map<String, dynamic> toMap() => {
@@ -41,5 +47,6 @@ class Cari {
     'hayvan_turu': hayvanTuru,
     'aktif': aktif ? 1 : 0,
     'not_metni': notMetni,
+    'sira': sira,
   };
 }

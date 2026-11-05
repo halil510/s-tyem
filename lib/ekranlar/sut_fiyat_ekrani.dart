@@ -185,7 +185,10 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
       ),
       body: _yukleniyor
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          // Tek kaydırılabilir liste: üstteki gün seçici + bilgi + toplu fiyat da kayar
+          // (küçük / yatay ekranda eskiden liste alanı kalmıyor, taşıyordu).
+          : ListView(
+              padding: const EdgeInsets.only(bottom: 16),
               children: [
                 // Geçerlilik başlangıç günü seçici
                 _gunSeciciWidget(),
@@ -220,15 +223,19 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
                 if (_cariler.isNotEmpty) _topluFiyatKarti(),
 
                 // Cari listesi
-                Expanded(
-                  child: _cariler.isEmpty
-                      ? Center(child: Text('Henüz cari yok', style: TextStyle(color: Colors.grey[500])))
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                          itemCount: _cariler.length,
-                          itemBuilder: (ctx, i) => _cariFiyatSatiri(_cariler[i]),
-                        ),
-                ),
+                if (_cariler.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(child: Text('Henüz cari yok', style: TextStyle(color: Colors.grey[500]))),
+                  )
+                else ...[
+                  const SizedBox(height: 4),
+                  for (final c in _cariler)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _cariFiyatSatiri(c),
+                    ),
+                ],
               ],
             ),
     );

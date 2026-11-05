@@ -1,9 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../utils/excel_yedekleme.dart';
@@ -14,6 +12,8 @@ import '../bluetooth/bluetooth_cihaz_secme.dart';
 import '../bluetooth/wifi_transfer_service.dart';
 import '../utils/app_locker.dart';
 import '../data/yedek/yedek_servisi.dart';
+import '../data/yedek/otomatik_yedek.dart';
+import 'otomatik_yedekler_ekrani.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import '../core/providers/database_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -111,16 +111,12 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   Future<void> _dbYedekle() async {
     setState(() => _isProcessing = true);
     try {
-      final dbPath = await getDatabasesPath();
-      final dbFile = File(p.join(dbPath, 'sut_yem.db'));
-
-      if (!await dbFile.exists()) {
-        throw Exception('DB dosyası bulunamadı');
-      }
-
       final tempDir = await getTemporaryDirectory();
       final backupFile = File('${tempDir.path}/sut_yem_backup_${DateTime.now().millisecondsSinceEpoch}.db');
-      await backupFile.writeAsBytes(await dbFile.readAsBytes());
+      // Tutarlı kopya + kopyanın sağlam olduğunu paylaşmadan ÖNCE denetle:
+      // bozuk bir yedek, yedek yokmuş gibi güven verip en kötü anda çıkar.
+      await AppDatabase.instance.tutarliKopyala(backupFile.path);
+      await VeriYonetimiRepository.dbDosyasiniDogrula(backupFile.path);
 
       await Share.shareXFiles(
         [XFile(backupFile.path)], 
@@ -284,6 +280,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
       }
     }
 
+    await OtomatikYedek.islemOncesiAl('json_geri_yukleme');
     _showSnack('Veritabanına uygulanıyor...');
     final ozet = await (await _veriRepo).yedekYukle(veri);
     if (mounted) {
@@ -304,41 +301,15 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     // başlar ve kullanıcı tüm verilerinin gittiğini sanır.
     await VeriYonetimiRepository.dbDosyasiniDogrula(dbFile.path);
 
-    final dbPath = await getDatabasesPath();
-    final mevcutDb = File(p.join(dbPath, 'sut_yem.db'));
+    // 0) Mevcut verinin güvenlik yedeği (Otomatik Yedekler listesinden geri
+    //    alınabilir). Alınamazsa geri yükleme YAPILMAZ.
+    await OtomatikYedek.islemOncesiAl('db_geri_yukleme');
 
-    // 1) Yeni dosya ÖNCE yanına geçici kopyalanır. Eskiden mevcut veritabanı
-    //    silinip SONRA kopyalanıyordu: kopya yarıda kalırsa (yer yok, dosya
-    //    okunamadı) uygulama BOŞ veritabanıyla açılıyordu.
-    final gecici = File('${mevcutDb.path}.geri_yukleme');
-    if (await gecici.exists()) await gecici.delete();
-    await dbFile.copy(gecici.path);
-
-    await AppDatabase.instance.close();
-
-    // 2) Mevcut veritabanının yedeği (geri dönüş için).
-    File? eskiYedek;
-    if (await mevcutDb.exists()) {
-      final docDir = await getApplicationDocumentsDirectory();
-      eskiYedek = await mevcutDb.copy(
-        '${docDir.path}/sut_yem_backup_${DateTime.now().millisecondsSinceEpoch}.db',
-      );
-    }
-
-    // 3) Yer değiştir. Eski veritabanına ait günlük dosyaları yeni dosyaya
-    //    uygulanırsa onu bozar; temizlenir.
+    final docDir = await getApplicationDocumentsDirectory();
     try {
-      for (final ek in const ['-wal', '-shm', '-journal']) {
-        final f = File('${mevcutDb.path}$ek');
-        if (await f.exists()) await f.delete();
-      }
-      if (await mevcutDb.exists()) await mevcutDb.delete();
-      await gecici.rename(mevcutDb.path);
-    } catch (e) {
-      // Geri dön: eski veritabanını yerine koy.
-      if (eskiYedek != null && !await mevcutDb.exists()) await eskiYedek.copy(mevcutDb.path);
-      if (await gecici.exists()) await gecici.delete();
-      _veritabaniniYenidenAc();
+      await _dosyayiDegistir(dbFile, docDir);
+    } catch (_) {
+      _veritabaniniYenidenAc(); // eski dosya yerinde; bağlantıyı tazele
       rethrow;
     }
 
@@ -348,6 +319,30 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     _showSnack('✅ Veritabanı başarıyla geri yüklendi');
     _showRestartDialog();
   }
+
+  Future<void> _dosyayiDegistir(File dbFile, Directory docDir) =>
+      AppDatabase.instance.dosyayiDegistir((yol) async {
+      final mevcutDb = File(yol);
+
+      // 1) Yeni dosya ÖNCE yanına geçici kopyalanır ve diskte tamamlanır.
+      final gecici = File('$yol.geri_yukleme');
+      if (await gecici.exists()) await gecici.delete();
+      await dbFile.copy(gecici.path);
+
+      // 2) Mevcut veritabanının ham kopyası (bağlantı kapalı, tutarlı).
+      if (await mevcutDb.exists()) {
+        await mevcutDb.copy('${docDir.path}/sut_yem_backup_${DateTime.now().millisecondsSinceEpoch}.db');
+      }
+
+      // 3) Tek adımda yer değiştir. Eskiden önce eski dosya SİLİNİP sonra yeni
+      //    dosya taşınıyordu: arada şarj biterse uygulama BOŞ açılıyordu.
+      try {
+        await AppDatabase.dosyayiYerineKoy(gecici, yol);
+      } catch (_) {
+        if (await gecici.exists()) await gecici.delete();
+        rethrow;
+      }
+    });
 
   /// Açık ekranların ve servislerin yeni / geri konan veritabanını
   /// kullanması için veritabanı sağlayıcısını yeniler.
@@ -486,6 +481,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   Future<void> _temizlemeIslemi() async {
     setState(() => _isProcessing = true);
     try {
+      await OtomatikYedek.islemOncesiAl('sut_yem_silme');
       final silinen = await (await _veriRepo).sutVeYemSil();
       if (mounted) {
       veriDegistiBildir(context);
@@ -689,9 +685,9 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildStatItem('Süt Kaydı', stats['sut']!, Icons.local_drink),
-                          _buildStatItem('Yem Kaydı', stats['yem']!, Icons.grass),
-                          _buildStatItem('Cari', stats['cari']!, Icons.people),
+                          Expanded(child: _buildStatItem('Süt Kaydı', stats['sut']!, Icons.local_drink)),
+                          Expanded(child: _buildStatItem('Yem Kaydı', stats['yem']!, Icons.grass)),
+                          Expanded(child: _buildStatItem('Cari', stats['cari']!, Icons.people)),
                         ],
                       ),
                     ],
@@ -706,7 +702,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   }
 
   Widget _buildStatItem(String title, int count, IconData icon) {
-    return Column(
+    return FittedBox(fit: BoxFit.scaleDown, child: Column(
       children: [
         Icon(icon, color: Colors.white, size: 24),
         const SizedBox(height: 4),
@@ -726,7 +722,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
           ),
         ),
       ],
-    );
+    ));
   }
 
   Widget _buildActionButton({
@@ -778,6 +774,17 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
             ),
           ),
         ),
+        _buildActionButton(
+          title: 'Otomatik Güvenlik Yedekleri',
+          subtitle: 'Telefonda kendiliğinden alınan yedekler — geri dön / paylaş',
+          icon: Icons.shield_outlined,
+          color: Colors.teal,
+          onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const OtomatikYedeklerEkrani()));
+            _istatistikYenile();
+          },
+        ),
+        const SizedBox(height: 8),
         _buildActionButton(
           title: 'Bluetooth ile Yedekle',
           subtitle: 'Diğer cihazlarla veri paylaşımı',
@@ -879,11 +886,15 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
             children: [
               Icon(Icons.verified, color: Colors.green),
               SizedBox(width: 8),
-              Text(
-                'LİSANS BİLGİLERİ',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
+              Flexible(
+                child: Text(
+                  'LİSANS BİLGİLERİ',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
                 ),
               ),
             ],

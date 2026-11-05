@@ -18,7 +18,11 @@ import 'package:intl/intl.dart';
 import '../utils/sayi_format.dart';
 import '../services/toplu_mesaj_servisi.dart';
 import 'cari/cari_dialoglari.dart';
+import 'cari/pasif_cariler_ekrani.dart';
+import '../widgetlar/rota_rozeti.dart';
 import 'cari/cari_duzenle.dart';
+import '../data/yedek/otomatik_yedek.dart';
+import '../widgetlar/bekleme_penceresi.dart';
 
 class CariListesi extends ConsumerStatefulWidget {
   const CariListesi({super.key});
@@ -187,7 +191,13 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       await _cariRepo.pasifeAl(cariId);
     } else if (secim == 'sil') {
       try {
+        // Kalıcı silme tüm hesap geçmişini götürür: önce güvenlik yedeği
+        // (alınamazsa silinmez). Hareketsiz cari için gerekmez.
+        if (hareketVar) await OtomatikYedek.islemOncesiAl('cari_silme');
         await _cariRepo.delete(cariId);
+      } on GuvenlikYedegiHatasi catch (e) {
+        _mesajGoster('$e');
+        return;
       } on DonemKapaliHatasi {
         _mesajGoster('Bu carinin kapatılmış dönemlerde kaydı var; kalıcı silinemez. '
             'Hesap geçmişi korunsun diye cariyi "Pasife Al" ile listeden kaldırabilirsiniz.');
@@ -219,44 +229,9 @@ class _CariListesiState extends ConsumerState<CariListesi> {
         ),
       );
 
-  /// Pasife alınmış carileri listeler ve yeniden aktif yapmayı sağlar.
-  Future<void> _pasifCarileriGoster() async {
-    final pasifler = (await _cariRepo.getAll()).where((c) => !c.aktif).toList();
-    if (!mounted) return;
-    final aktifEdilecek = await showModalBottomSheet<Cari>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: pasifler.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(32),
-                child: Text('Pasif cari yok', textAlign: TextAlign.center),
-              )
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  const ListTile(title: Text('Pasif Cariler', style: TextStyle(fontWeight: FontWeight.bold))),
-                  for (final c in pasifler)
-                    ListTile(
-                      leading: const Icon(Icons.person_off_outlined),
-                      title: Text(c.tamAd),
-                      trailing: TextButton(
-                        onPressed: () => Navigator.pop(ctx, c),
-                        child: const Text('Aktif Yap'),
-                      ),
-                    ),
-                ],
-              ),
-      ),
-    );
-    if (aktifEdilecek == null) return;
-    await _cariRepo.aktifYap(aktifEdilecek.id!);
-    ref.veriDegisti();
-    await _verileriYukle();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${aktifEdilecek.tamAd} yeniden aktif')),
-    );
-  }
+  /// Pasif Cariler ekranı (geri getirme orada). Liste veriDegisti ile yenilenir.
+  Future<void> _pasifCarileriGoster() =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const PasifCarilerEkrani()));
 
   // ─── Excel raporları ────────────────────────────────────────────────
 
@@ -298,6 +273,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     final bas = gun.format(aralik.start), bit = gun.format(aralik.end);
     final ad = '${sut ? 'Sut' : 'Yem'}_Raporu_${DateFormat('yyyy_MM_dd').format(DateTime.now())}';
     try {
+      final file = await beklemeyleCalistir(context, 'Rapor hazırlanıyor…', () async {
       final sutler = sut ? await _sutRepo.getAllInRange(bas, bit) : null;
       final yemler = sut ? null : await _yemRepo.getAllInRange(bas, bit);
       // Aktif cariler + bu aralıkta kaydı olan pasif cariler (adıyla görünsün;
@@ -306,7 +282,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
       final cariler = (await _cariRepo.getAll())
           .where((c) => c.aktif || kayitli.contains(c.id))
           .toList();
-      final file = sut
+      return sut
           ? await ExcelExport.exportSutRaporu(
               cariler: cariler,
               sutler: sutler!,
@@ -321,6 +297,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
               endDate: aralik.end,
               raporAdi: ad,
             );
+      });
       await ExcelExport.shareFile(file);
       _mesajGoster('${sut ? 'Süt' : 'Yem'} raporu oluşturuldu');
     } catch (e) {
@@ -698,13 +675,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
             ),
           ],
         ),
-        title: Text(
-          '${cari.ad} ${cari.soyad}',
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-        ),
+        title: RotaliAd(cari, stil: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -717,11 +688,11 @@ class _CariListesiState extends ConsumerState<CariListesi> {
               ),
             ),
             const SizedBox(height: 2),
-            Row(
+            Wrap(
               children: [
                 // Bu ayki süt toplamını göster
                 if (buAykiSutToplam > 0)
-                  Container(
+                  FittedBox(fit: BoxFit.scaleDown, child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.blue[50],
@@ -742,7 +713,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
                         ),
                       ],
                     ),
-                  ),
+                  )),
               ],
             ),
             if (cari.telefon != null && cari.telefon!.isNotEmpty)

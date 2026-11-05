@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/database/app_database.dart';
 import '../data/repositories/veri_yonetimi_repository.dart';
 import '../data/yedek/yedek_servisi.dart';
+import '../data/yedek/otomatik_yedek.dart';
 
 /// Bluetooth / Wi-Fi aktarımı için yedek dosyası oluşturma ve uygulama.
 ///
@@ -36,6 +37,9 @@ class BluetoothUtils {
   /// [YedekHatasi] fırlatır ve hiçbir şeyi silmez.
   static Future<YedekOzeti> applyBackupJsonFile(String path) async {
     final veri = YedekServisi.coz(await File(path).readAsString());
+    // Bu cihazdaki TÜM veri silinip yerine gelen konacak: önce güvenlik yedeği
+    // (alınamazsa aktarım yapılmaz).
+    await OtomatikYedek.islemOncesiAl('cihaz_aktarimi');
     final repo = VeriYonetimiRepository(await AppDatabase.instance.database);
     return repo.yedekYukle(veri, tamamenDegistir: true);
   }

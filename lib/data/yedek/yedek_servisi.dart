@@ -96,8 +96,15 @@ class YedekServisi {
     return veri;
   }
 
-  static Future<String> disaAktarJson(DatabaseExecutor db) async =>
-      jsonEncode(await disaAktar(db));
+  /// [db] bir [Database] ise tablolar TEK transaction içinde okunur: yedek
+  /// alınırken bir kayıt yazılsa bile yedek tutarlı bir anlık görüntüdür
+  /// (ör. süt kaydı var ama ödemesi yarım değil).
+  static Future<String> disaAktarJson(DatabaseExecutor db) async {
+    final veri = db is Database
+        ? await db.transaction((txn) => disaAktar(txn))
+        : await disaAktar(db);
+    return jsonEncode(veri);
+  }
 
   // ──────────────────────────────────────────
   // DOĞRULA / ÇÖZ

@@ -305,12 +305,18 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
                         fontFamily: 'Poppins')),
                 const SizedBox(height: 4),
                 Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('₺${guncel.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          fontFamily: 'Poppins')),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.bottomLeft,
+                      child: Text('₺${guncel.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              fontFamily: 'Poppins')),
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 5, left: 4),
                     child: Text('/kg',
@@ -333,13 +339,16 @@ class _FiyatYonetimEkraniState extends ConsumerState<FiyatYonetimEkrani>
       Row(children: [
         const Icon(Icons.history_rounded, size: 16, color: C.metinUc),
         const SizedBox(width: 6),
-        const Text('Fiyat Geçmişi',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: C.metinIki,
-                fontFamily: 'Poppins')),
-        const Spacer(),
+        const Expanded(
+          child: Text('Fiyat Geçmişi',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: C.metinIki,
+                  fontFamily: 'Poppins')),
+        ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
           decoration: BoxDecoration(

@@ -65,11 +65,29 @@
     kayıt silinmez; yalnız boş öğün girilir. Her tarih için geçerli. Düzeltme YALNIZ Cari Detay → Düzenle
     (`SutRepository.update`). Bu iki ekran `gunlukKaydet` / `topluGunlukKaydet`'i `kayitliOgunuKoru: true`
     ile çağırır → kayıtlı öğün değişirse `KayitliOgunHatasi` (toplu girişte hiçbir satır yazılmaz).
+16. **Süt toplama rotası (`cariler.sira`, migration v12):** aktif carinin toplama sırası 1..N BOŞLUKSUZ.
+    Yalnız `CariRepository.insert(sira:)`, `update(siraGuncelle:, sira:)`, `siraAta`, `rotaKaydet`,
+    `pasifeAl`, `aktifYap(sira:)` değiştirir (araya ekleme sonrakileri kaydırır; pasifte null).
+    `update` `cari.sira`'yı YOK SAYAR. `getAll` rota sırasıyla döner (`rotaSirala`: sıralılar, sonra
+    sırasızlar alfabetik) → Cariler, Süt, Yem, Hızlı Giriş, Ödemeler. Raporlar (Excel, bordro, aylık)
+    alfabetik kalır (`cariSirala`). Listelerde ad önünde `RotaRozeti`.
+17. **Veri güvenliği (şarj biterse / kilitlenirse):**
+    - Riskli her işlemden (süt/yem toplu silme, JSON/.db geri yükleme, cihaz aktarımı, hareketli cari
+      kalıcı silme, güvenlik yedeğine dönüş) ÖNCE `OtomatikYedek.islemOncesiAl('...')` çağrılır; yedek
+      alınamazsa işlem YAPILMAZ. Yeni riskli işlem eklersen bunu da ekle.
+    - Otomatik yedek: `OtomatikYedekleyici` (AnaEkran) açılışta + arka plana geçişte, en çok 4 saatte bir.
+      Klasör `Documents/otomatik_yedekler/`, son 15 otomatik + 10 işlem öncesi. Dosya `.tmp` yazılıp
+      sonra adı değiştirilir (yarım dosya yedek sayılmaz). Yedekleme → "Otomatik Güvenlik Yedekleri".
+    - Veritabanı dosyası YALNIZ `AppDatabase.dosyayiDegistir` + `dosyayiYerineKoy` ile değiştirilir
+      (önce silip sonra taşıma YOK). .db yedeği `tutarliKopyala` ile alınır ve doğrulanır.
+    - Ekleme yapan her kaydet fonksiyonu başında `if (_kaydediliyor) return;` (çift dokunma = mükerrer kayıt).
+    - Hızlı Süt Girişi kaydedilmemiş girişleri SharedPreferences `hizli_sut_taslak`'a yazar; ekrandan
+      normal çıkışta silinir, uygulama ölürse sonraki açılışta geri gelir (kendiliğinden KAYDEDİLMEZ).
 
 ## Testler
 
 ```bash
-flutter test          # 224 test — hepsi geçmeli
+flutter test          # 352 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -95,15 +113,17 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/data/veri_yonetimi_test.dart` | Veri yönetimi repo (sayılar, temizlik + dönem kilidi, .db doğrulama), toplu fiyat (ya hep ya hiç), tarih indeksleri sorgu planında |
 | `test/features/cari_excel_test.dart` | Excel'den cari: rapor biçimi, ayrı Ad/Soyad/Telefon, "Cari Kodu" tuzağı, başlıksız, tekrar, Türkçe İ/ı, ekran akışı |
 | `test/akis_test.dart` | UYGULAMA AKIŞI (AnaEkran): Süt sekmesinde girilen süt → Cariler listesi + detay; yeni/içe alınan cari tüm açık sekmelere düşer; Türkçe arama; Ödemelerde pasif alacaklı |
-| `test/ekran_tarama_test.dart` | TÜM EKRANLAR 360 px'de gerçekçi veriyle açılır (taşma/hata yok); alt panel yazıları; boş veritabanı |
+| `test/ekran_tarama_test.dart` | TÜM EKRANLAR gerçekçi veriyle açılır (taşma/hata yok): 360 px telefon + küçük telefon 320x568, yatay telefon 760x360, tablet dikey 800x1280 / yatay 1280x800, büyük yazı x1.3; alt panel yazıları; boş veritabanı |
 | `test/features/yazici_fiyat_menu_test.dart` | Wi-Fi (TCP) fiş yazdırma, ulaşılamayan yazıcı, kayıtlı yazıcı kilidi, tümüne aynı süt fiyatı, ⋮ menüsü |
 | `test/data/fiyat_toplu_test.dart` | Toplu ay fiyatı (tek sorgu) = eski cari-başına yöntem |
 | `test/features/gunluk_fiyat_test.dart` | Ay ortası fiyat değişikliği (o günden itibaren), sonraki aya devir, kapalı dönem v11 kilidi, yem fiyatı yayma |
 | `test/features/sanal_terazi_test.dart` | SANAL TERAZİ (gerçek TCP) → gerçek terazi servisi → Süt Ekle → KAYDET; bölünen/çoklu satır, farklı terazi biçimleri |
 | `test/features/terazi_veri_cozucu_test.dart` | Tartı satırı çözme, parça birleştirme, satır sonu yok, cihaz kaydı yarışı |
 | `test/features/derin_tarama_test.dart` | Türkçe alfabetik sıralama, aynı isimli cari uyarısı, 0 kg düzenlemede silme |
-| `test/features/excel_rapor_test.dart` | Excel çıktıları geri okunur: boş Sheet1 yok, yuvarlama, pasif cari, yıllık rapor, ekstre dönem neti, hakediş, dosya adı |
+| `test/features/excel_rapor_test.dart` | Excel çıktıları geri okunur: boş Sheet1 yok, süt raporu 2. sayfa "Süt Toplamları", yuvarlama, pasif cari, yıllık rapor, ekstre dönem neti, hakediş, dosya adı |
 | `test/features/pdf_ekstre_test.dart` | Excel/PDF ortak ekstre satırları (sıra, yürüyen bakiye, DÖNEM NETİ), PDF internetsiz oluşur, çok sayfa |
+| `test/features/rota_test.dart` | Toplama rotası: sıra verme/kaydırma (Ahmet Atağ 1 → Ahmet Anıl 2), pasife alma, geri getirme, Cari Ekle/Düzenle/Pasif/Toplama Sırası ekranları |
+| `test/features/veri_guvenligi_test.dart` | Otomatik güvenlik yedeği (tamlık, 4 saat aralık, temizlik, yarım .tmp), toplu silme sonrası geri dönüş, tek adımda .db değiştirme + bekleyen çağrı, tutarlı .db kopyası, Hızlı Süt taslağı, yemde çift dokunma |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -558,6 +578,70 @@ yalnız akşam girilsin; düzeltme Cari Detay'daki Düzenle'den. Karar: Hızlı 
   Detay → Düzenle (`update`) etkilenmez.
 - Supabase SQL: şema değişmedi.
 - Testler: 224/224; `flutter analyze` 0 error.
+
+### 2026-11-05 (5) — Süt toplama rotası, Cari Düzenle yeniden tasarım, Pasif Cariler ekranı
+
+Kullanıcı isteği: süt toplarken listeler uğranan sırayla dizilsin (Ahmet Atağ 1, Ahmet Anıl 2); sıra Cari Ekle ve
+Cari Düzenle'den verilsin; Cari Düzenle ekranı iyileşsin; pasif cari listede görünmesin, ayrı ekrandan geri getirilsin.
+
+- **Migration v12:** `cariler.sira` + `idx_cariler_sira`. Supabase SQL güncel (v12, `check (sira >= 1)`).
+- **Kayıt katmanı** (`cari_repository.dart`): sıra işlemleri tek transaction; 1..N boşluksuz; araya ekleme kaydırır,
+  rota sayısından büyük sıra en sona; pasife alınca rotadan çıkar ve kalanlar yeniden numaralanır.
+- **Ortak form** (`lib/ekranlar/cari/cari_form.dart`): `CariBolumKarti`, `CariMetinAlani`, `HayvanTuruSecici`,
+  `RotaSirasiAlani` (önizleme: "Şu an 1. sırada AHMET ANIL var → 2. sıraya kayar"), `ayniIsimliCariler`/`ayniIsimOnayi`.
+- **Cari Ekle:** aynı görünüm + "Süt Toplama Sırası" bölümü (varsayılan rotanın sonu).
+- **Cari Düzenle (yeniden):** özet başlık (baş harfler, Aktif/Pasif, rota sırası), Kişisel Bilgiler, Hayvan Türü,
+  Süt Toplama Sırası, **Not** (artık düzenlenebilir), **Durum** anahtarı (pasife alma onaylı); Kaydet altta sabit;
+  kaydedilmemiş değişiklik uyarısı; ad değişince aynı isim kontrolü. Bilgiler + sıra + durum tek transaction.
+- **Pasif Cariler** (`pasif_cariler_ekrani.dart`): eski alt pencere yerine ayrı ekran; arama, açık bakiye,
+  "Geri Getir" (rota sırası sorulur), dokununca Cari Düzenle. Giriş: Cariler'deki düğme ve ⋮ menü.
+- **Toplama Sırası (Rota)** (`toplama_sirasi_ekrani.dart`): sürükle-bırak, Kaydet → 1..N. ⋮ menüde.
+- Cariler, Süt, Yem, Hızlı Süt Girişi listelerinde ad önünde mavi sıra rozeti.
+- Ekran taraması: Pasif Cariler + Toplama Sırası eklendi; Cari Düzenle'de Switch dokunma efekti gizleniyordu → düzeltildi.
+- Testler: 237/237; `flutter analyze` 0 error.
+
+### 2026-11-05 (6) — Veri güvenliği derin taraması (şarj biterse / kilitlenirse)
+
+Kullanıcı isteği: süt raporu Excel'i ve genel olarak "mobil şarj biterse, kilitlenirse veri kaybı olmasın" — derin analiz.
+
+Sağlam bulunanlar: her kayıt transaction içinde (yarım kayıt olmaz); açılışta bütünlük denetimi, bozuk dosya
+silinmez kenara alınır; migration hatası veriye dokunmaz; Excel/PDF `flush: true`; süt raporu 100 cari × 365 gün
+bilgisayarda 0,9 sn (doğru, çökmez).
+
+Bulunan ve düzeltilenler:
+- **.db geri yükleme:** önce eski dosya SİLİNİP sonra yenisi taşınıyordu → arada şarj biterse uygulama BOŞ açılırdı.
+  Şimdi tek adımda yer değiştirme (`dosyayiYerineKoy`). Ayrıca değiştirme sırasında başka ekran eski dosyayı yeniden
+  açabiliyordu (yazdıkları silinmiş dosyaya gidiyordu) → `dosyayiDegistir` kilidi.
+- **.db yedeği:** açık veritabanı ham kopyalanıyordu (o an yazılan kayıt / günlükteki kayıtlar eksik kalabilirdi) →
+  `tutarliKopyala` + paylaşmadan önce doğrulama. JSON yedek tek transaction'da okunuyor (tutarlı anlık görüntü).
+- **Hiç otomatik yedek yoktu** → `OtomatikYedek` (kural 17) + Yedekleme'de "Otomatik Güvenlik Yedekleri" ekranı
+  (listele, paylaş, şifreyle geri dön, şimdi yedek al).
+- **Yem KAYDET'e çift dokunma yemi İKİ KEZ yazıyordu** (testle kanıtlandı: 2 kayıt) → koruma. Süt Ekle ve Cari Ekle'ye
+  de aynı koruma; ödeme penceresinde çift dokunma alttaki ekranı kapatıyordu → düzeltildi.
+- **Hızlı Süt Girişi:** tüm rota girilip kaydedilmeden şarj biterse hepsi kayboluyordu → taslak (kural 17).
+- Cariler / Cari Detay Excel raporunda "Rapor hazırlanıyor…" penceresi (`beklemeyleCalistir`): donma sanılmaz,
+  çift dokunmayla iki rapor açılmaz.
+- Testler: 251/251; `flutter analyze` 0 error.
+
+### 2026-11-05 (7) — Tüm cihaz boyutları: küçük telefon, yatay, tablet, büyük yazı
+
+Kullanıcı sorusu: "tüm cihazlarda, mobilde ve tablette ekranlar sıkıntısız mı?" Önceden yalnız 360 px telefon test ediliyordu.
+Ekran taraması 5 boyuta genişletildi (her ekran + ana ekran sekmeleri). Sonuç: **tablet (dikey/yatay) baştan temizdi**;
+küçük telefon (320 px), yatay telefon ve büyük yazıda (x1.3) 15 yerde taşma vardı → hepsi düzeltildi:
+- Uzun ekranlar tek parça kayar hale geldi (üst kart/özet listeyle birlikte kayar): Cari Detay, Ödemeler, Süt Fiyatları,
+  Hızlı Süt Girişi (sütun başlığı ve alt panel sabit kalır).
+- Büyük rakamlar (terazi kg, güncel fiyat, bakiye, hareket tutarı, bu ay kg) kesilmez, dar yerde küçülür (`FittedBox`).
+- Başlık yazıları (Süt Miktarları, terazi durumu, Fiyat Geçmişi, Cari Hesapları, Lisans) gerekirse "…" ile kısalır.
+- Rota rozeti çok dar yerde gizlenir (yalnız ad); Pasif Cariler "Geri Getir" düğmesi sıkılaştırıldı.
+- Yedekleme sayaçları eşit genişlikte ve küçülebilir.
+- **Süt raporu Excel'ine 2. sayfa "Süt Toplamları"** (kullanıcı isteği): her cari tek satır, İsim Soyisim | Toplam (kg),
+  başlıkta tarih aralığı, en altta GENEL TOPLAM; sıra ve rakamlar 1. sayfayla aynı. Excel yedeğindeki süt+yem dosyasında da var.
+- Testler: 352/352; `flutter analyze` 0 error. Yeni ekran eklenince `ekran_tarama_test.dart` listesine eklemek tüm boyutları kapsar.
+
+### 2026-11-05 (8) — Elektrik kesintisi sonrası kontrol + GitHub'a gönderim
+
+- Bilgisayar elektrik kesintisiyle kapandı. (5)–(7) oturumlarının işleri commit edilmemişti; dosyalar sağlam bulundu,
+  352/352 test geçti. Hepsi tek commit'te GitHub'a (`main`) gönderildi. Sıradaki işlere buradan devam.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
@@ -575,6 +659,9 @@ yalnız akşam girilsin; düzeltme Cari Detay'daki Düzenle'den. Karar: Hızlı 
    kopyalayarak) yazar. Sonradan **önceki** bir ayın süt fiyatı değişirse bu ay
    eski kopyayı kullanır. İleride fiyatları ürün bazında ayrı satırlara ayırmak düşünülebilir.
 5. `withOpacity` vb. ~180 adet "info" düzeyinde eski API uyarısı var (çalışmayı etkilemez).
+6. **Telefon dışı yedek yok (2026-11-05):** otomatik yedekler telefonun içinde; telefon kaybolur/bozulur ya da
+   uygulama silinirse onlar da gider. Kullanıcı ara sıra "Paylaş" ile dışarı göndermeli. İleride: Supabase'e
+   otomatik bulut yedeği ya da "son dış yedek X gün önce" hatırlatması.
 
 ## Sıradaki işler (öneri sırası)
 

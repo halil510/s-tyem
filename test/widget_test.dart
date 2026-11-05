@@ -60,6 +60,8 @@ Widget _uygulama(Database db, Widget ekran, {Stream<String>? agirlik, TeraziBagl
 
 void main() {
   setUpAll(initializeTurkishLocale);
+  // Hızlı Süt Girişi taslağı SharedPreferences kullanır; testler birbirine sızmasın.
+  setUp(() => SharedPreferences.setMockInitialValues({}));
 
   late Database db;
   late int ali;

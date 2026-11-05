@@ -55,7 +55,11 @@ class _OdemeAlBottomSheetState extends State<OdemeAlBottomSheet> {
     if (secilen != null) setState(() => _tarih = DateUtils.dateOnly(secilen));
   }
 
+  bool _kapandi = false;
+
   void _onayla() {
+    // Çift dokunma: ikinci pop alttaki ekranı kapatmasın.
+    if (_kapandi) return;
     final tutar = sayiCoz(_tutarCtrl.text);
     if (tutar == null || tutar <= 0) {
       setState(() => _hata = 'Geçerli bir tutar girin');
@@ -66,6 +70,7 @@ class _OdemeAlBottomSheetState extends State<OdemeAlBottomSheet> {
       return;
     }
     final aciklama = _aciklamaCtrl.text.trim();
+    _kapandi = true;
     Navigator.of(context).pop(NakitHareketGirdisi(
       tutar: kurusaYuvarla(tutar),
       tarih: _tarih,

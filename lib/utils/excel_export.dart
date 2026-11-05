@@ -112,7 +112,8 @@ class ExcelExport {
   }) async {
     try {
       final excel = _yeniKitap('Süt Raporu');
-      _sutSayfasi(excel['Süt Raporu'], cariler, sutler, startDate, endDate);
+      final toplamlar = _sutSayfasi(excel['Süt Raporu'], cariler, sutler, startDate, endDate);
+      _sutToplamSayfasi(excel[sutToplamSayfasi], toplamlar, startDate, endDate);
       return await _kaydet(excel, raporAdi);
     } catch (e, st) {
       debugPrint('❌ Süt raporu hatası: $e\n$st');
@@ -120,7 +121,34 @@ class ExcelExport {
     }
   }
 
-  static void _sutSayfasi(
+  /// Süt raporunun 2. sayfası: her cari tek satır, yalnız dönem toplamı.
+  static const sutToplamSayfasi = 'Süt Toplamları';
+
+  /// "Süt Toplamları" sayfası: başlıkta tarih aralığı; İsim Soyisim | Toplam (kg);
+  /// en altta GENEL TOPLAM. Sıra ve rakamlar 1. sayfayla BİREBİR aynıdır.
+  static void _sutToplamSayfasi(
+      Sheet sheet, List<(String, double)> toplamlar, DateTime startDate, DateTime endDate) {
+    final f = DateFormat('dd.MM.yyyy');
+    _yaz(sheet, 0, 0, 'Süt Toplamları — ${f.format(startDate)} - ${f.format(endDate)}',
+        CellStyle(bold: true, fontSize: 13));
+    _basliklar(sheet, 2, ['İsim Soyisim', 'Toplam (kg)']);
+    var satir = 3;
+    var genel = 0.0;
+    for (final (ad, toplam) in toplamlar) {
+      _yaz(sheet, 0, satir, ad, _isimStil);
+      _yaz(sheet, 1, satir, toplam);
+      genel += toplam;
+      satir++;
+    }
+    _yaz(sheet, 0, satir, 'GENEL TOPLAM', _toplamStil);
+    _yaz(sheet, 1, satir, genel, _toplamStil);
+    sheet.setColumnWidth(0, 34);
+    sheet.setColumnWidth(1, 16);
+  }
+
+  /// 1. sayfa (günlük sabah/akşam). Her carinin dönem toplamını, sayfadaki
+  /// sırayla döner (2. sayfa bunu kullanır).
+  static List<(String, double)> _sutSayfasi(
       Sheet sheet, List<Cari> cariler, List<Sut> sutler, DateTime startDate, DateTime endDate) {
     final bas = DateTime(startDate.year, startDate.month, startDate.day);
     final bit = DateTime(endDate.year, endDate.month, endDate.day);
@@ -152,6 +180,7 @@ class ExcelExport {
 
     final gunSabah = List<double>.filled(gunler.length, 0);
     final gunAksam = List<double>.filled(gunler.length, 0);
+    final ozet = <(String, double)>[];
     var satir = 1;
     for (final cari in _carileriTamamla(cariler, tablo.keys)) {
       final kayitlar = tablo[cari.id] ?? const {};
@@ -166,6 +195,7 @@ class ExcelExport {
         toplam += h[0] + h[1];
       }
       _yaz(sheet, 1 + gunler.length * 2, satir, toplam, _toplamStil);
+      ozet.add((cari.tamAd, toplam)); // yuvarlama yazarken (2. sayfa genel toplamı 1. sayfayla aynı)
       satir++;
     }
 
@@ -177,6 +207,7 @@ class ExcelExport {
       genel += gunSabah[i] + gunAksam[i];
     }
     _yaz(sheet, 1 + gunler.length * 2, satir, genel, _toplamStil);
+    return ozet;
   }
 
   // ─── 🐮 YEM RAPORU ─────────────────────────────────────────────────
@@ -270,7 +301,8 @@ class ExcelExport {
     required String raporAdi,
   }) async {
     final excel = _yeniKitap('Süt Raporu');
-    _sutSayfasi(excel['Süt Raporu'], cariler, sutler, startDate, endDate);
+    final toplamlar = _sutSayfasi(excel['Süt Raporu'], cariler, sutler, startDate, endDate);
+    _sutToplamSayfasi(excel[sutToplamSayfasi], toplamlar, startDate, endDate);
     _yemSayfasi(excel['Yem Raporu'], cariler, yemler, startDate, endDate);
     return _kaydet(excel, raporAdi);
   }

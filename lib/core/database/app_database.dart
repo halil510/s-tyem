@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -86,7 +87,14 @@ class AppDatabase {
 
   DatabaseFactory get _fabrika => _factory ?? databaseFactory;
 
+  /// Dosya değiştirilirken (geri yükleme) dolu: bu sırada gelen
+  /// [database] çağrıları bekler, eski dosyayı yeniden AÇMAZ.
+  Future<void>? _degisim;
+
   Future<Database> get database {
+    final degisim = _degisim;
+    // ignore: recursive_getters
+    if (degisim != null) return degisim.then((_) => database);
     final db = _database;
     if (db != null && db.isOpen) return Future.value(db);
     // Aynı anda gelen çağrılar tek bir açılışı paylaşır; hata olursa
@@ -197,6 +205,68 @@ class AppDatabase {
   }
 
   int get schemaVersion => MigrationRunner.targetVersion;
+
+  /// Veritabanının TUTARLI bir kopyasını [hedef]e yazar (.db yedeği).
+  /// Eskiden dosya, açık bağlantı yazarken ham kopyalanıyordu: o an bir kayıt
+  /// yazılıyorsa ya da kayıtlar henüz günlük (-wal) dosyasındaysa yedek eksik
+  /// veya bozuk çıkabiliyordu. Şimdi: günlük ana dosyaya aktarılır, kopya bir
+  /// transaction içinde (bu sırada uygulama yazamaz) alınır.
+  Future<void> tutarliKopyala(String hedef) async {
+    final db = await database;
+    try {
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (_) {
+      // WAL kipinde değilse anlamsız; sorun değil.
+    }
+    final yol = await _yol();
+    await db.transaction((txn) async {
+      await txn.rawQuery('SELECT COUNT(*) FROM sqlite_master');
+      await File(yol).copy(hedef);
+    });
+  }
+
+  /// Veritabanı dosyasını güvenle değiştirir (.db geri yükleme):
+  /// bağlantı kapatılır, [islem] dosya yoluyla çalışır, bu sürede gelen
+  /// tüm [database] çağrıları bekletilir (eskiden bu arada bir ekran eski
+  /// dosyayı yeniden açabiliyor, yazdıkları silinmiş dosyaya gidiyordu).
+  /// Bitince sonraki çağrı yeni dosyayı açar.
+  Future<T> dosyayiDegistir<T>(Future<T> Function(String yol) islem) async {
+    while (_degisim != null) {
+      await _degisim;
+    }
+    final kilit = Completer<void>();
+    _degisim = kilit.future;
+    try {
+      try {
+        await _acilis;
+      } catch (_) {}
+      await close();
+      return await islem(await _yol());
+    } finally {
+      _degisim = null;
+      kilit.complete();
+    }
+  }
+
+  /// [kaynak] dosyasını [hedef]in yerine KOYAR. Hedef önceden silinmez:
+  /// yeniden adlandırma tek adımdır (Android/Linux), şarj biterse ya eski
+  /// ya yeni dosya yerindedir — hiçbir an "dosya yok" olmaz. Eski
+  /// dosyanın günlük ekleri (-wal/-shm/-journal) yeni dosyaya
+  /// uygulanmasın diye önce kaldırılır (bağlantı kapalıyken).
+  static Future<void> dosyayiYerineKoy(File kaynak, String hedef) async {
+    for (final ek in const ['-wal', '-shm', '-journal']) {
+      final f = File('$hedef$ek');
+      if (await f.exists()) await f.delete();
+    }
+    try {
+      await kaynak.rename(hedef);
+    } on FileSystemException {
+      // Windows gibi üzerine yeniden adlandırmaya izin vermeyen sistemler.
+      final h = File(hedef);
+      if (await h.exists()) await h.delete();
+      await kaynak.rename(hedef);
+    }
+  }
 
   Future<void> close() async {
     final db = _database;

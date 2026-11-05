@@ -77,8 +77,13 @@ class _OdeEkraniState extends ConsumerState<OdeEkrani> {
 
               return RefreshIndicator(
                 onRefresh: () async => ref.invalidate(tumKalanBorclarProvider),
-                child: Column(
-                  children: [
+                // Özet + arama listeyle birlikte kayar (yatay telefonda / büyük
+                // yazıda eskiden liste alanı kalmıyor, taşıyordu).
+                child: NestedScrollView(
+                  headerSliverBuilder: (context, _) => [
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
                     _OzetKarti(
                       toplamAlacak: toplamAlacak,
                       toplamBorc: toplamBorc,
@@ -118,14 +123,21 @@ class _OdeEkraniState extends ConsumerState<OdeEkrani> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                       child: Row(
                         children: [
-                          const Text('Cari Hesapları', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                          const Spacer(),
+                          const Expanded(
+                            child: Text('Cari Hesapları',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          ),
                           Text('${filtrelenen.length} cari', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: filtrelenen.isEmpty
+                        ],
+                      ),
+                    ),
+                  ],
+                  body: filtrelenen.isEmpty
                           ? Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -149,8 +161,6 @@ class _OdeEkraniState extends ConsumerState<OdeEkrani> {
                                 );
                               },
                             ),
-                    ),
-                  ],
                 ),
               );
             },
@@ -292,6 +302,7 @@ class _CariOdemeKarti extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
+                flex: 3,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -302,7 +313,8 @@ class _CariOdemeKarti extends StatelessWidget {
                   ],
                 ),
               ),
-              Column(
+              // Büyük bakiye dar ekranda taşmasın: kesilmez, gerekirse küçülür.
+              Flexible(flex: 2, child: FittedBox(fit: BoxFit.scaleDown, child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Container(
@@ -316,7 +328,7 @@ class _CariOdemeKarti extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(alacakliMi ? 'Alacaklı' : (borcluMu ? 'Borçlu' : 'Temiz'), style: TextStyle(fontSize: 10, color: durumRenk)),
                 ],
-              ),
+              ))),
               const SizedBox(width: 4),
               Icon(Icons.chevron_right, color: Colors.grey[400], size: 18),
             ],

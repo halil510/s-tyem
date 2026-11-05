@@ -69,9 +69,15 @@ class HareketKarti extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            '${kredi ? '+' : '-'}${paraFormat.format(hareket.tutar)}',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: renk),
+          // Büyük tutar dar ekranda taşmasın: kesilmez, gerekirse küçülür.
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '${kredi ? '+' : '-'}${paraFormat.format(hareket.tutar)}',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: renk),
+              ),
+            ),
           ),
           if (onSil != null)
             IconButton(

@@ -19,6 +19,7 @@ import '../core/providers/repository_providers.dart';
 import '../core/router/app_router.dart';
 import '../features/terazi/providers/terazi_providers.dart';
 import '../features/terazi/services/terazi_baglanti_durumu.dart';
+import '../widgetlar/rota_rozeti.dart';
 
 /// Süt girişi sekmesi — cari listesi + arama.
 ///
@@ -154,7 +155,7 @@ class _CariKarti extends StatelessWidget {
           decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(12)),
           child: Icon(Icons.water_drop, color: Colors.blue[700], size: 22),
         ),
-        title: Text(cari.tamAd, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        title: RotaliAd(cari, stil: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -281,6 +282,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
   }
 
   Future<void> _kaydet({bool fisVer = false}) async {
+    if (_kaydediliyor) return; // çift dokunma
     if (_gunTamam) return;
     // Kilitli öğünün değeri yazıdan değil KAYITTAN alınır (yuvarlama farkı olmasın).
     final sabah = _sabahKilitli ? _mevcutKayit!.sabah : sayiCoz(_sabahCtrl.text);
@@ -457,7 +459,10 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                     children: [
                       Icon(Icons.water_drop, color: Colors.blue[700], size: 18),
                       const SizedBox(width: 8),
-                      const Text('Süt Miktarları', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const Flexible(
+                        child: Text('Süt Miktarları',
+                            maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      ),
                       if (_yukleniyor) ...[
                         const Spacer(),
                         const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
@@ -758,16 +763,19 @@ class _CanliTeraziKarti extends StatelessWidget {
                   color: durumRengi,
                 ),
               const SizedBox(width: 8),
-              Text(
-                bagli ? 'TERAZİ BAĞLI — CANLI ÖLÇÜM' : durum.gorunenMetin.toUpperCase(),
-                style: TextStyle(
-                  color: bagli ? Colors.white70 : durumRengi,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+              Expanded(
+                child: Text(
+                  bagli ? 'TERAZİ BAĞLI — CANLI ÖLÇÜM' : durum.gorunenMetin.toUpperCase(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: bagli ? Colors.white70 : durumRengi,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
                 ),
               ),
-              const Spacer(),
               if (!bagli)
                 TextButton.icon(
                   onPressed: onBaglanTikla,
@@ -783,13 +791,20 @@ class _CanliTeraziKarti extends StatelessWidget {
             children: [
               Icon(Icons.scale_rounded, color: bagli ? Colors.white : Colors.grey[400], size: 30),
               const SizedBox(width: 10),
-              Text(
-                kg ?? '--.--',
-                style: TextStyle(
-                  color: bagli ? Colors.white : Colors.grey[400],
-                  fontSize: 42,
-                  fontWeight: FontWeight.bold,
-                  height: 1,
+              // Ağırlık asla kesilmez; dar ekranda / büyük yazıda küçülür.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Text(
+                    kg ?? '--.--',
+                    style: TextStyle(
+                      color: bagli ? Colors.white : Colors.grey[400],
+                      fontSize: 42,
+                      fontWeight: FontWeight.bold,
+                      height: 1,
+                    ),
+                  ),
                 ),
               ),
               Padding(
@@ -811,7 +826,7 @@ class _CanliTeraziKarti extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(Icons.wb_sunny_outlined, size: 16),
-                    label: const Text('Sabaha Uygula', style: TextStyle(fontSize: 12)),
+                    label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Sabaha Uygula', style: TextStyle(fontSize: 12))),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -824,7 +839,7 @@ class _CanliTeraziKarti extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(Icons.nightlight_round, size: 16),
-                    label: const Text('Akşama Uygula', style: TextStyle(fontSize: 12)),
+                    label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Akşama Uygula', style: TextStyle(fontSize: 12))),
                   ),
                 ),
               ],

@@ -17,6 +17,9 @@ import '../core/router/app_router.dart';
 import '../features/donem/donem_ekrani.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/cari/cari_excel_ekrani.dart';
+import 'cari/pasif_cariler_ekrani.dart';
+import 'cari/toplama_sirasi_ekrani.dart';
+import '../widgetlar/otomatik_yedekleyici.dart';
 
 class AnaEkran extends StatefulWidget {
   const AnaEkran({super.key});
@@ -58,7 +61,7 @@ class _AnaEkranState extends State<AnaEkran> {
         });
         return child!;
       },
-      child: _sekmeler(context),
+      child: OtomatikYedekleyici(child: _sekmeler(context)),
     );
   }
 
@@ -103,6 +106,8 @@ class _AnaEkranState extends State<AnaEkran> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           itemBuilder: (ctx) => [
             _menuOgesi('hizli_sut', Icons.speed_rounded, Colors.blue[700], 'Hızlı Süt Girişi'),
+            _menuOgesi('rota', Icons.route_outlined, Colors.blue[700], 'Toplama Sırası (Rota)'),
+            _menuOgesi('pasif', Icons.person_off_outlined, Colors.blueGrey[600], 'Pasif Cariler'),
             _menuOgesi('excel_cari', Icons.upload_file_rounded, Colors.green[700], "Excel'den Cari İçeri Al"),
             const PopupMenuDivider(),
             _menuOgesi('sut_fiyat', Icons.water_drop, Colors.blue[700], 'Süt Fiyatları'),
@@ -119,6 +124,10 @@ class _AnaEkranState extends State<AnaEkran> {
           onSelected: (value) {
             if (value == 'hizli_sut') {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const HizliSutGiris()));
+            } else if (value == 'rota') {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ToplamaSirasiEkrani()));
+            } else if (value == 'pasif') {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const PasifCarilerEkrani()));
             } else if (value == 'excel_cari') {
               // İçe alınca veriDegisti → Cariler, Süt, Yem sekmeleri kendiliğinden yenilenir.
               Navigator.push(context, MaterialPageRoute(builder: (_) => const CariExcelIceAktarmaEkrani()));

@@ -56,7 +56,7 @@ void main() {
           endDate: DateTime(2026, 11, 2),
           raporAdi: 'sut');
       final x = _oku(f);
-      expect(x.tables.keys.toList(), ['Süt Raporu']);
+      expect(x.tables.keys.toList(), ['Süt Raporu', 'Süt Toplamları']);
       final r = _satirlar(x, 'Süt Raporu');
       expect(r[0].length, 1 + 2 * 2 + 1);
       expect(r.map((s) => s.first).toList(), [
@@ -66,6 +66,18 @@ void main() {
       expect(r[3].last, 7.0);
       // GENEL TOPLAM = aralıktaki TÜM kayıtlar (0.3 + 15 + 7)
       expect(r[5], ['GENEL TOPLAM', 7.1, 0.2, 10.0, 5.0, 22.3]);
+
+      // 2. sayfa: her cari tek satır, yalnız toplam — 1. sayfayla aynı sıra ve rakam.
+      final t = _satirlar(x, 'Süt Toplamları');
+      expect(t[0].first, 'Süt Toplamları — 01.11.2026 - 02.11.2026');
+      expect(t[2], ['İsim Soyisim', 'Toplam (kg)']);
+      expect(t.sublist(3), [
+        ['ALİ VELİ', 0.3],
+        ['ÇETİN KAYA', 0.0],
+        ['Silinmiş/pasif cari #2', 7.0],
+        ['ZEKİ ÖZ', 15.0],
+        ['GENEL TOPLAM', 22.3],
+      ]);
     });
 
     test('bir yıllık aralık çökmez (702. sütun) ve hızlıdır', () async {
@@ -124,7 +136,7 @@ void main() {
     });
   });
 
-  test('Süt ve yem (Excel yedeği): yalnız iki sayfa', () async {
+  test('Süt ve yem (Excel yedeği): süt, süt toplamları, yem sayfaları', () async {
     final f = await ExcelExport.exportSutVeYemRaporu(
         cariler: [ali],
         sutler: [Sut(cariId: 1, tarih: '2026-11-01', sabah: 3)],
@@ -133,7 +145,7 @@ void main() {
         endDate: DateTime(2026, 11, 30),
         raporAdi: 'ikisi');
     final x = _oku(f);
-    expect(x.tables.keys.toSet(), {'Süt Raporu', 'Yem Raporu'});
+    expect(x.tables.keys.toSet(), {'Süt Raporu', 'Süt Toplamları', 'Yem Raporu'});
     expect(_satirlar(x, 'Süt Raporu').last.last, 3.0);
     expect(_satirlar(x, 'Yem Raporu').last.last, 2.0);
   });

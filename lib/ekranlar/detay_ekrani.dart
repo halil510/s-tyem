@@ -15,6 +15,7 @@ import '../core/providers/veri_surumu_provider.dart';
 import 'detay/kayit_duzenle_dialoglari.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/fis/fis_servisi.dart';
+import '../widgetlar/bekleme_penceresi.dart';
 
 class DetayEkrani extends ConsumerStatefulWidget {
   final Cari cari;
@@ -202,13 +203,13 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     Navigator.pop(context);
     try {
       final cariler = [widget.cari];
-      final file = await ExcelExport.exportSutRaporu(
+      final file = await beklemeyleCalistir(context, 'Rapor hazırlanıyor…', () => ExcelExport.exportSutRaporu(
         cariler: cariler,
         sutler: _sutKayitlari,
         startDate: _selectedRange!.start,
         endDate: _selectedRange!.end,
         raporAdi: '${widget.cari.ad}_${widget.cari.soyad}_Sut_Raporu',
-      );
+      ));
       await ExcelExport.shareFile(file);
     } catch (e) {
       if (mounted) {
@@ -223,13 +224,13 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     Navigator.pop(context);
     try {
       final cariler = [widget.cari];
-      final file = await ExcelExport.exportYemRaporu(
+      final file = await beklemeyleCalistir(context, 'Rapor hazırlanıyor…', () => ExcelExport.exportYemRaporu(
         cariler: cariler,
         yemler: _yemKayitlari,
         startDate: _selectedRange!.start,
         endDate: _selectedRange!.end,
         raporAdi: '${widget.cari.ad}_${widget.cari.soyad}_Yem_Raporu',
-      );
+      ));
       await ExcelExport.shareFile(file);
     } catch (e) {
       if (mounted) {
@@ -301,13 +302,21 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
       ),
       body: _yukleniyor
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildUstBilgiKarti(),
-                _buildIstatistikKartlari(),
-                _buildTabBar(),
-                Expanded(child: _buildTabIcerigi()),
+          // Üst kart + istatistikler listeyle birlikte kayar: küçük / yatay
+          // ekranda ve büyük yazıda eskiden liste alanı eksiye düşüp taşıyordu.
+          : NestedScrollView(
+              headerSliverBuilder: (context, _) => [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      _buildUstBilgiKarti(),
+                      _buildIstatistikKartlari(),
+                      _buildTabBar(),
+                    ],
+                  ),
+                ),
               ],
+              body: _buildTabIcerigi(),
             ),
     );
   }
@@ -594,7 +603,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                 size: 20,
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 10),
             // Orta alan (tarih ve açıklama) – esnek genişlik
             Expanded(
               child: Column(

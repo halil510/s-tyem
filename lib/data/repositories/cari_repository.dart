@@ -13,7 +13,13 @@ class CariRepository {
   final Database db;
   const CariRepository(this.db);
 
-  Future<int> insert(Cari cari) => db.insert('cariler', cari.toMap());
+  /// Yeni cari. [sira] verilirse (aktif cari) toplama rotasında o sıraya
+  /// yerleşir, o sıradaki ve sonrakiler birer kayar. Yeni kimliği döner.
+  Future<int> insert(Cari cari, {int? sira}) => db.transaction((txn) async {
+        final id = await txn.insert('cariler', cari.toMap()..['sira'] = null);
+        if (cari.aktif && sira != null) await _siraAta(txn, id, sira);
+        return id;
+      });
 
   /// Birçok cariyi TEK transaction'da ekler (Excel'den içeri alma): biri
   /// hata verirse hiçbiri eklenmez. Eklenen kayıt sayısını döner.
@@ -32,8 +38,10 @@ class CariRepository {
       'cariler',
       where: sadeceAktif ? 'aktif = 1 OR aktif IS NULL' : null,
     );
-    // Türk alfabesiyle sırala (SQL'in ORDER BY'ı Ç/Ş/Ö/Ü/İ'yi Z'den sonraya atıyordu).
-    return maps.map(Cari.fromMap).toList()..sort(cariSirala);
+    // Süt toplama rotası: önce sırası olanlar (1, 2, 3…), sonra sırasızlar
+    // Türk alfabesiyle (SQL'in ORDER BY'ı Ç/Ş/Ö/Ü/İ'yi Z'den sonraya atıyordu).
+    // Raporlar (Excel, bordro) kendi içinde alfabetik [cariSirala] kullanır.
+    return maps.map(Cari.fromMap).toList()..sort(rotaSirala);
   }
 
   Future<Cari?> getById(int id) async {
@@ -41,8 +49,62 @@ class CariRepository {
     return maps.isNotEmpty ? Cari.fromMap(maps.first) : null;
   }
 
-  Future<int> update(Cari cari) =>
-      db.update('cariler', cari.toMap(), where: 'id = ?', whereArgs: [cari.id]);
+  /// Cari bilgilerini günceller (tek transaction). `cari.sira` YOK SAYILIR:
+  /// sıra yalnız [siraGuncelle] true ise [sira] ile değişir (o sıradakiler
+  /// kayar). Cari pasif yapıldıysa rotadan çıkar, kalanlar yeniden numaralanır.
+  Future<int> update(Cari cari, {bool siraGuncelle = false, int? sira}) => db.transaction((txn) async {
+        final map = cari.toMap()
+          ..remove('id')
+          ..remove('sira');
+        final adet = await txn.update('cariler', map, where: 'id = ?', whereArgs: [cari.id]);
+        if (!cari.aktif) {
+          await _siraAta(txn, cari.id!, null);
+        } else if (siraGuncelle) {
+          await _siraAta(txn, cari.id!, sira);
+        }
+        return adet;
+      });
+
+  // ─── Süt toplama rotası ─────────────────────────────────────────────
+
+  /// Cariyi rotada [sira]'ya yerleştirir (1 = ilk). O sıradaki ve sonraki
+  /// cariler birer kayar; numaralar 1..N boşluksuz kalır. [sira] null →
+  /// cari rotadan çıkar (sırasız, listede en sonda). Rotadaki sayıdan büyük
+  /// bir sıra en sona yerleştirir.
+  Future<void> siraAta(int cariId, int? sira) => db.transaction((txn) => _siraAta(txn, cariId, sira));
+
+  /// Rotayı verilen sırayla baştan yazar (Toplama Sırası ekranı, sürükle-bırak):
+  /// [cariIdleri][0] → 1, [1] → 2 … Listede olmayan cariler sırasız kalır.
+  Future<void> rotaKaydet(List<int> cariIdleri) => db.transaction((txn) async {
+        await txn.update('cariler', {'sira': null});
+        await _numarala(txn, cariIdleri);
+      });
+
+  /// Rotadaki (aktif, sıralı) cari sayısı.
+  Future<int> rotadakiSayi() async =>
+      Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM cariler WHERE sira IS NOT NULL AND (aktif = 1 OR aktif IS NULL)')) ??
+      0;
+
+  static Future<void> _siraAta(Transaction txn, int cariId, int? sira) async {
+    final satirlar = await txn.query('cariler',
+        columns: ['id'],
+        where: 'sira IS NOT NULL AND (aktif = 1 OR aktif IS NULL) AND id != ?',
+        whereArgs: [cariId],
+        orderBy: 'sira, id');
+    final idler = [for (final s in satirlar) s['id'] as int];
+    await txn.update('cariler', {'sira': null}, where: 'id = ?', whereArgs: [cariId]);
+    if (sira != null) idler.insert((sira - 1).clamp(0, idler.length), cariId);
+    await _numarala(txn, idler);
+  }
+
+  static Future<void> _numarala(Transaction txn, List<int> idler) async {
+    final b = txn.batch();
+    for (var i = 0; i < idler.length; i++) {
+      b.update('cariler', {'sira': i + 1}, where: 'id = ?', whereArgs: [idler[i]]);
+    }
+    await b.commit(noResult: true);
+  }
 
   /// Cariyi KALICI olarak siler. DİKKAT: yabancı anahtarlar `ON DELETE
   /// CASCADE` olduğundan carinin tüm süt, yem, ödeme ve fiyat kayıtları da
@@ -63,11 +125,20 @@ class CariRepository {
 
   /// Cariyi silmek yerine pasife alır — geçmiş kayıtlar (süt, yem,
   /// ödeme) korunur, sadece aktif listelerden gizlenir.
-  Future<int> pasifeAl(int id) =>
-      db.update('cariler', {'aktif': 0}, where: 'id = ?', whereArgs: [id]);
+  /// Pasif cari rotadan çıkar; kalanlar yeniden numaralanır.
+  Future<int> pasifeAl(int id) => db.transaction((txn) async {
+        final adet = await txn.update('cariler', {'aktif': 0}, where: 'id = ?', whereArgs: [id]);
+        await _siraAta(txn, id, null);
+        return adet;
+      });
 
-  Future<int> aktifYap(int id) =>
-      db.update('cariler', {'aktif': 1}, where: 'id = ?', whereArgs: [id]);
+  /// Pasif cariyi geri getirir. [sira] verilirse rotada o sıraya girer,
+  /// verilmezse sırasız (listede en sonda) kalır.
+  Future<int> aktifYap(int id, {int? sira}) => db.transaction((txn) async {
+        final adet = await txn.update('cariler', {'aktif': 1}, where: 'id = ?', whereArgs: [id]);
+        if (sira != null) await _siraAta(txn, id, sira);
+        return adet;
+      });
 
   Future<List<Cari>> ara(String sorgu) async {
     final maps = await db.query(
@@ -79,7 +150,17 @@ class CariRepository {
   }
 }
 
-/// Carileri ad, sonra soyad sırasıyla Türk alfabesine göre dizer.
+/// Süt toplama rotası: sırası olanlar (1, 2, 3…) önce, sırasızlar sonra
+/// alfabetik. Pasiflerin sırası yoktur. Süt, Yem, Hızlı Giriş, Cariler listeleri.
+int rotaSirala(Cari a, Cari b) {
+  final sa = a.aktif ? a.sira : null, sb = b.aktif ? b.sira : null;
+  if (sa != null && sb != null && sa != sb) return sa.compareTo(sb);
+  if (sa != null && sb == null) return -1;
+  if (sa == null && sb != null) return 1;
+  return cariSirala(a, b);
+}
+
+/// Carileri ad, sonra soyad sırasıyla Türk alfabesine göre dizer (raporlar).
 int cariSirala(Cari a, Cari b) {
   final ad = turkceKarsilastir(a.ad, b.ad);
   return ad != 0 ? ad : turkceKarsilastir(a.soyad, b.soyad);

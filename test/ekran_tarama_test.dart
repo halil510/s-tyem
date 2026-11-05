@@ -9,6 +9,8 @@ import 'package:sutyem_pro/core/providers/database_provider.dart';
 import 'package:sutyem_pro/ekranlar/ana_ekran.dart';
 import 'package:sutyem_pro/ekranlar/app_activation_screen.dart';
 import 'package:sutyem_pro/ekranlar/cari/cari_duzenle.dart';
+import 'package:sutyem_pro/ekranlar/cari/pasif_cariler_ekrani.dart';
+import 'package:sutyem_pro/ekranlar/cari/toplama_sirasi_ekrani.dart';
 import 'package:sutyem_pro/ekranlar/cari_ekle.dart';
 import 'package:sutyem_pro/ekranlar/detay_ekrani.dart';
 import 'package:sutyem_pro/ekranlar/fiyat_hesaplama_ekrani.dart';
@@ -19,6 +21,7 @@ import 'package:sutyem_pro/ekranlar/sut_fiyat_ekrani.dart';
 import 'package:sutyem_pro/ekranlar/yedekleme_ekrani.dart';
 import 'package:sutyem_pro/ekranlar/yem_ekrani.dart';
 import 'package:sutyem_pro/ekranlar/yem_fiyat_ekrani.dart';
+import 'package:sutyem_pro/ekranlar/otomatik_yedekler_ekrani.dart';
 import 'package:sutyem_pro/features/cari/cari_excel_ekrani.dart';
 import 'package:sutyem_pro/features/cari_hesap/screens/cari_hesap_ekstresi_ekrani.dart';
 import 'package:sutyem_pro/features/donem/donem_ekrani.dart';
@@ -70,7 +73,15 @@ Future<void> veriHazirla() async {
       'aciklama': 'Elden ödeme, uzun bir açıklama metni ekrana sığıyor mu',
     });
   }
-  ali = Cari(id: idler[1], ad: 'MEHMET ALİ', soyad: 'UZUNİSİMLİOĞULLARI BÜYÜKÇEKMECELİ', telefon: '05551234567');
+  // Toplama rotası + bir pasif cari (rozetler, Pasif Cariler, Toplama Sırası).
+  for (var i = 0; i < idler.length; i++) {
+    await db.update('cariler', {'sira': 98 + i}, where: 'id = ?', whereArgs: [idler[i]]);
+  }
+  final pasif = await cariEkle(db, ad: 'HÜSEYİN HASAN', soyad: 'PASİFOĞULLARI UZUNSOYADLI');
+  await db.update('cariler', {'aktif': 0, 'telefon': '05559998877'}, where: 'id = ?', whereArgs: [pasif]);
+  await db.insert('cari_odemeler', {'cari_id': pasif, 'tarih': f.format(n), 'islem_turu': 'odeme', 'toplam_tutar': 98765.43});
+  ali = Cari(
+      id: idler[1], ad: 'MEHMET ALİ', soyad: 'UZUNİSİMLİOĞULLARI BÜYÜKÇEKMECELİ', telefon: '05551234567', sira: 99);
 }
 
 Widget uygulama(Widget ekran) => ProviderScope(
@@ -146,6 +157,9 @@ void main() {
     'Fiş Yazıcısı': () => const FisYaziciAyarlariEkrani(),
     'Excel\'den Cari Al': () => const CariExcelIceAktarmaEkrani(),
     'Yedekleme': () => const YedeklemeEkrani(),
+    'Pasif Cariler': () => const PasifCarilerEkrani(),
+    'Toplama Sırası (Rota)': () => const ToplamaSirasiEkrani(),
+    'Otomatik Güvenlik Yedekleri': () => const OtomatikYedeklerEkrani(),
   };
 
   for (final e in ekranlar.entries) {
@@ -215,4 +229,51 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 5));
   });
+
+  // ─── Farklı cihaz boyutları (2026-11-05): küçük telefon, yatay, tablet, büyük yazı ───
+  const boyutlar = <String, (Size, double)>{
+    'küçük telefon 320x568': (Size(320, 568), 1.0),
+    'telefon yatay 760x360': (Size(760, 360), 1.0),
+    'tablet dikey 800x1280': (Size(800, 1280), 1.0),
+    'tablet yatay 1280x800': (Size(1280, 800), 1.0),
+    'büyük yazı 360x760 x1.3': (Size(360, 760), 1.3),
+  };
+  for (final b in boyutlar.entries) {
+    group('cihaz: ${b.key}', () {
+      Future<void> boyutla(WidgetTester tester) async {
+        await tester.binding.setSurfaceSize(b.value.$1);
+        tester.platformDispatcher.textScaleFactorTestValue = b.value.$2;
+        addTearDown(() {
+          tester.binding.setSurfaceSize(null);
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+      }
+
+      for (final e in ekranlar.entries) {
+        testWidgets(e.key, (tester) async {
+          await boyutla(tester);
+          await ekranAc(tester, e.value());
+        });
+      }
+      testWidgets('ana ekran sekmeleri', (tester) async {
+        await boyutla(tester);
+        await tester.pumpWidget(uygulama(const AnaEkran()));
+        for (final ad in ['Özet', 'Cariler', 'Süt', 'Yem', 'Ödemeler']) {
+          await tester.tap(find.descendant(of: find.byKey(const ValueKey('altPanel')), matching: find.text(ad)));
+          for (var i = 0; i < 30; i++) {
+            await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 15)));
+            await tester.pump();
+          }
+          final hata = tester.takeException();
+          if (hata != null) {
+            // ignore: avoid_print
+            print(hata is FlutterError ? hata.toStringDeep() : '$hata');
+          }
+          expect(hata, isNull, reason: '$ad sekmesi');
+        }
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 5));
+      });
+    });
+  }
 }

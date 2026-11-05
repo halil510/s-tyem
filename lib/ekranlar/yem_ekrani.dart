@@ -12,6 +12,7 @@ import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import '../utils/sayi_format.dart';
 import '../widgetlar/kaydedilmemis_koruma.dart';
+import '../widgetlar/rota_rozeti.dart';
 
 /// Yem girişi sekmesi — cari listesi + arama.
 ///
@@ -132,7 +133,7 @@ class _CariKarti extends StatelessWidget {
           decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(12)),
           child: Icon(Icons.grass, color: Colors.green[700], size: 22),
         ),
-        title: Text(cari.tamAd, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        title: RotaliAd(cari, stil: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         subtitle: Text(cari.hayvanTuru ?? 'Belirtilmemiş', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
         trailing: ElevatedButton(
           onPressed: () => _girisSayfasinaGit(context),
@@ -182,6 +183,8 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
   double get _toplam => _parse(_sutCtrl.text) + _parse(_besiCtrl.text) + _parse(_bBasCtrl.text) + _parse(_bBuyCtrl.text) + _parse(_kuzuCtrl.text) + _parse(_tavukCtrl.text);
 
   Future<void> _kaydet() async {
+    // Çift dokunma: aynı yem İKİ KEZ yazılıp cariye iki kat borç çıkmasın.
+    if (_kaydediliyor) return;
     if (_gecersizAlanVar) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Geçersiz miktar var, lütfen kontrol edin'), backgroundColor: Colors.red),

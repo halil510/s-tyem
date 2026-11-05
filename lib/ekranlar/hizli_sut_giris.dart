@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/turkce.dart';
 import '../features/donem/donem_kapali_bandi.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
@@ -11,6 +15,7 @@ import '../models/cari_model.dart';
 import '../models/sut_model.dart';
 import '../utils/sayi_format.dart';
 import '../widgetlar/kaydedilmemis_koruma.dart';
+import '../widgetlar/rota_rozeti.dart';
 
 /// Tüm aktif cariler için tek ekrandan, bir günün sabah/akşam sütü.
 ///
@@ -22,6 +27,9 @@ import '../widgetlar/kaydedilmemis_koruma.dart';
 ///   değiştirilemez, silinemez; yalnız boş öğün girilir. Düzeltme yalnız
 ///   Cari Detay → Düzenle (kullanıcı kararı 2026-11-05). Kayıt katmanı da
 ///   korur: `topluGunlukKaydet(kayitliOgunuKoru: true)`.
+/// - Kaydedilmemiş girişler TASLAK olarak telefona yazılır (her değişiklikte
+///   ve uygulama arka plana geçince). Şarj biter / uygulama kapanırsa bir
+///   sonraki açılışta geri gelir. Bilerek "Kaydetmeden Çık" denirse silinir.
 class HizliSutGiris extends ConsumerStatefulWidget {
   const HizliSutGiris({super.key});
 
@@ -29,7 +37,10 @@ class HizliSutGiris extends ConsumerStatefulWidget {
   ConsumerState<HizliSutGiris> createState() => _HizliSutGirisState();
 }
 
-class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
+class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindingObserver {
+  static const taslakAnahtari = 'hizli_sut_taslak';
+  Timer? _taslakZamanlayici;
+  bool _kapandi = false;
   final _tarihFormat = DateFormat('yyyy-MM-dd');
   final _aramaCtrl = TextEditingController();
   final Map<int, TextEditingController> _sabahCtrl = {};
@@ -46,11 +57,100 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ilkYukleme();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Arka plana geçerken (ekran kilidi, başka uygulama, şarj uyarısı) beklemeden yaz.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _taslakZamanlayici?.cancel();
+      _taslakYaz();
+    }
+  }
+
+  // ─── Taslak (kaydedilmemiş girişlerin telefonda saklanması) ─────────
+
+  void _taslakPlanla() {
+    if (_kapandi || _yukleniyor) return;
+    _taslakZamanlayici?.cancel();
+    _taslakZamanlayici = Timer(const Duration(milliseconds: 700), _taslakYaz);
+  }
+
+  /// Yalnız kilitli OLMAYAN ve dolu alanlar; hiç yoksa null.
+  Map<String, Object>? _taslakVerisi() {
+    final sabah = <String, String>{}, aksam = <String, String>{};
+    for (final cari in _cariler) {
+      final id = cari.id!;
+      final k = _mevcutKayitlar[id];
+      final s = _sabahCtrl[id]!.text.trim(), a = _aksamCtrl[id]!.text.trim();
+      if ((k?.sabah ?? 0) <= 0 && s.isNotEmpty) sabah['$id'] = s;
+      if ((k?.aksam ?? 0) <= 0 && a.isNotEmpty) aksam['$id'] = a;
+    }
+    if (sabah.isEmpty && aksam.isEmpty) return null;
+    return {'tarih': _tarihFormat.format(_tarih), 'sabah': sabah, 'aksam': aksam};
+  }
+
+  Future<void> _taslakYaz() async {
+    if (_kapandi || _yukleniyor) return;
+    final veri = _taslakVerisi();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (veri == null) {
+        await prefs.remove(taslakAnahtari);
+      } else {
+        await prefs.setString(taslakAnahtari, jsonEncode(veri));
+      }
+    } catch (_) {
+      // Taslak en iyi çabadır; asıl kayıt KAYDET ile veritabanına yazılır.
+    }
+  }
+
+  static Future<({DateTime tarih, Map<String, dynamic> sabah, Map<String, dynamic> aksam})?> _taslakOku() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ham = prefs.getString(taslakAnahtari);
+      if (ham == null) return null;
+      final v = jsonDecode(ham) as Map<String, dynamic>;
+      return (
+        tarih: DateTime.parse(v['tarih'] as String),
+        sabah: (v['sabah'] as Map).cast<String, dynamic>(),
+        aksam: (v['aksam'] as Map).cast<String, dynamic>(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Taslaktaki değerleri boş ve kilitsiz alanlara koyar; kaç alan dolduğunu döner.
+  int _taslagiUygula(Map<String, dynamic> sabah, Map<String, dynamic> aksam) {
+    var n = 0;
+    for (final cari in _cariler) {
+      final id = cari.id!;
+      final k = _mevcutKayitlar[id];
+      final s = sabah['$id'], a = aksam['$id'];
+      if (s is String && (k?.sabah ?? 0) <= 0 && _sabahCtrl[id]!.text.isEmpty) {
+        _sabahCtrl[id]!.text = s;
+        n++;
+      }
+      if (a is String && (k?.aksam ?? 0) <= 0 && _aksamCtrl[id]!.text.isEmpty) {
+        _aksamCtrl[id]!.text = a;
+        n++;
+      }
+    }
+    return n;
+  }
+
+  @override
   void dispose() {
+    // Ekrandan normal çıkış = ya kaydedildi ya da bilerek "Kaydetmeden Çık"
+    // denildi → taslak silinir. (Şarj biterse / sistem kapatırsa dispose
+    // çağrılmaz, taslak kalır.)
+    _kapandi = true;
+    _taslakZamanlayici?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    SharedPreferences.getInstance().then((p) => p.remove(taslakAnahtari)).catchError((_) => false);
     // Her cari için oluşturulan controller'lar temizlenmezse bellek sızar.
     for (final c in [..._sabahCtrl.values, ..._aksamCtrl.values]) {
       c.dispose();
@@ -64,10 +164,25 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
       final cariRepo = await ref.read(cariRepositoryProvider.future);
       _cariler = await cariRepo.getAll(sadeceAktif: true);
       for (final cari in _cariler) {
-        _sabahCtrl[cari.id!] = TextEditingController();
-        _aksamCtrl[cari.id!] = TextEditingController();
+        _sabahCtrl[cari.id!] = TextEditingController()..addListener(_taslakPlanla);
+        _aksamCtrl[cari.id!] = TextEditingController()..addListener(_taslakPlanla);
       }
+      // Önceki oturumdan kalan (kaydedilmeden kapanmış) taslak varsa o güne aç.
+      // Taslak okunamazsa (ayar deposu takılırsa) ekran yine açılır.
+      final taslak = await _taslakOku().timeout(const Duration(seconds: 2), onTimeout: () => null);
+      final bugun = DateUtils.dateOnly(DateTime.now());
+      if (taslak != null && !taslak.tarih.isAfter(bugun)) _tarih = DateUtils.dateOnly(taslak.tarih);
       await _gunuYukle();
+      if (taslak != null && mounted) {
+        final n = _taslagiUygula(taslak.sabah, taslak.aksam);
+        if (n > 0) {
+          _snack(
+            '${DateFormat('dd.MM.yyyy').format(_tarih)} için KAYDEDİLMEMİŞ $n giriş geri getirildi. '
+            'Kontrol edip kaydedin.',
+            Colors.orange[800]!,
+          );
+        }
+      }
     } catch (e) {
       _snack('Veriler yüklenemedi: $e', Colors.red);
       if (mounted) setState(() => _yukleniyor = false);
@@ -245,8 +360,16 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
           ),
         ],
       ),
+      // Tarih + arama listeyle birlikte kayar; sütun başlığı ve alt panel sabit.
+      // (Yatay telefonda eskiden liste alanı kalmıyor, taşıyordu.)
       body: Column(
         children: [
+          Expanded(
+            child: NestedScrollView(
+              headerSliverBuilder: (context, _) => [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
           _TarihKarti(tarih: _tarih, onDegistir: _yukleniyor ? null : _tarihSec),
           DonemKapaliBandi(tarih: _tarih, margin: const EdgeInsets.fromLTRB(16, 0, 16, 8)),
           Padding(
@@ -270,9 +393,12 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
               onChanged: (v) => setState(() => _arama = v.trim()),
             ),
           ),
-          const _BaslikSatiri(),
-          Expanded(
-            child: _yukleniyor
+                    ],
+                  ),
+                ),
+                const SliverPersistentHeader(pinned: true, delegate: _BaslikSabiti()),
+              ],
+              body: _yukleniyor
                 ? const Center(child: CircularProgressIndicator())
                 : gorunen.isEmpty
                     ? Center(child: Text(_cariler.isEmpty ? 'Aktif cari yok' : 'Cari bulunamadı'))
@@ -293,6 +419,7 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> {
                           );
                         },
                       ),
+            ),
           ),
           _AltPanel(
             kayitliSayisi: _mevcutKayitlar.length,
@@ -331,6 +458,30 @@ class _TarihKarti extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Sütun başlığı ("Cari / Sabah / Akşam") liste kayarken üstte sabit kalır.
+class _BaslikSabiti extends SliverPersistentHeaderDelegate {
+  const _BaslikSabiti();
+  static const _yukseklik = 44.0;
+
+  @override
+  double get minExtent => _yukseklik;
+  @override
+  double get maxExtent => _yukseklik;
+
+  // Sabit yükseklik: çok büyük yazı ayarında başlık taşmasın diye 1.5 kat ile sınırlı.
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.5,
+          child: const Align(alignment: Alignment.centerLeft, child: _BaslikSatiri()),
+        ),
+      );
+
+  @override
+  bool shouldRebuild(covariant _BaslikSabiti oldDelegate) => false;
 }
 
 class _BaslikSatiri extends StatelessWidget {
@@ -439,9 +590,7 @@ class _CariSatiri extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(cari.tamAd,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      overflow: TextOverflow.ellipsis),
+                  RotaliAd(cari, stil: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   const SizedBox(height: 2),
                   Text(
                     mevcutKayit != null
