@@ -84,10 +84,13 @@
     - Hızlı Süt Girişi kaydedilmemiş girişleri SharedPreferences `hizli_sut_taslak`'a yazar; ekrandan
       normal çıkışta silinir, uygulama ölürse sonraki açılışta geri gelir (kendiliğinden KAYDEDİLMEZ).
 
+18. **Süt sekmesi "alındı" tiki** saklanmaz, bugünkü süt satırından hesaplanır (`sut_toplama_durumu.dart`):
+    saat < 12 → sabah kg > 0, sonra → akşam kg > 0. Saat ayrımı `aksamBaslangicSaati`. Yalnız Süt sekmesinde.
+
 ## Testler
 
 ```bash
-flutter test          # 352 test — hepsi geçmeli
+flutter test          # 357 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -123,6 +126,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/excel_rapor_test.dart` | Excel çıktıları geri okunur: boş Sheet1 yok, süt raporu 2. sayfa "Süt Toplamları", yuvarlama, pasif cari, yıllık rapor, ekstre dönem neti, hakediş, dosya adı |
 | `test/features/pdf_ekstre_test.dart` | Excel/PDF ortak ekstre satırları (sıra, yürüyen bakiye, DÖNEM NETİ), PDF internetsiz oluşur, çok sayfa |
 | `test/features/rota_test.dart` | Toplama rotası: sıra verme/kaydırma (Ahmet Atağ 1 → Ahmet Anıl 2), pasife alma, geri getirme, Cari Ekle/Düzenle/Pasif/Toplama Sırası ekranları |
+| `test/features/sut_alindi_tik_test.dart` | Süt sekmesi yeşil tik: 12:00 öncesi sabah / sonrası akşam, sayaç, dünkü kayıt bugüne tik vermez |
 | `test/features/veri_guvenligi_test.dart` | Otomatik güvenlik yedeği (tamlık, 4 saat aralık, temizlik, yarım .tmp), toplu silme sonrası geri dönüş, tek adımda .db değiştirme + bekleyen çağrı, tutarlı .db kopyası, Hızlı Süt taslağı, yemde çift dokunma |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
@@ -642,6 +646,18 @@ küçük telefon (320 px), yatay telefon ve büyük yazıda (x1.3) 15 yerde taş
 
 - Bilgisayar elektrik kesintisiyle kapandı. (5)–(7) oturumlarının işleri commit edilmemişti; dosyalar sağlam bulundu,
   352/352 test geçti. Hepsi tek commit'te GitHub'a (`main`) gönderildi. Sıradaki işlere buradan devam.
+
+### 2026-11-05 (9) — Süt sekmesinde "alındı" yeşil tiki
+
+Kullanıcı isteği: süt toplarken Süt sekmesindeki cari listesinde (Cariler sekmesinde DEĞİL) sütü alınan cariye
+yeşil tik; öğleden sonra sıfırlansın, akşam rotasında yeniden tik atılsın.
+- `lib/features/sut/sut_toplama_durumu.dart`: `toplamaOgunu` (saat < 12 → sabah, sonra akşam; `aksamBaslangicSaati`),
+  `ogunAlindi`, `gunlukSutlerProvider(tarih)` (veriSurumu izler), `simdiProvider` (testte sabit saat).
+- Tik **ayrıca kaydedilmez**: bugünkü süt satırının sabah/akşam kg'ından hesaplanır → "sıfırlama" kendiliğinden,
+  uygulama kapanıp açılsa da doğru. Veritabanı/Supabase şeması DEĞİŞMEDİ.
+- Kartta: soldaki damla yerine yeşil kutuda beyaz ✓, kart yeşil çerçeve, "Sabah alındı · 40 kg". Listenin üstünde
+  "Sabah toplaması · 5 / 12 alındı" (hepsi alınınca yeşil). Sekme açık kalırsa 30 sn'de bir saat kontrolü (12:00 / gece yarısı).
+- Test: `test/features/sut_alindi_tik_test.dart`. Testler: 357/357; `flutter analyze` 0 error.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/cari/providers/cari_providers.dart';
+import '../features/sut/sut_toplama_durumu.dart';
 import '../utils/turkce.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -36,8 +39,24 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
   String _aramaMetni = '';
   final TextEditingController _aramaCtrl = TextEditingController();
 
+  /// Sekme bellekte açık kalır: saat 12'yi (sabah → akşam) ya da gece yarısını
+  /// (yeni gün) geçince tikler kendiliğinden değişsin diye dakikada bir bakılır.
+  Timer? _saatTimer;
+  String? _sonDurum;
+
+  @override
+  void initState() {
+    super.initState();
+    _saatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      final an = ref.read(simdiProvider)();
+      final durum = '${gunAnahtari(an)}-${toplamaOgunu(an).name}';
+      if (_sonDurum != null && durum != _sonDurum && mounted) setState(() {});
+    });
+  }
+
   @override
   void dispose() {
+    _saatTimer?.cancel();
     _aramaCtrl.dispose();
     super.dispose();
   }
@@ -49,6 +68,12 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
   @override
   Widget build(BuildContext context) {
     final carilerAsync = ref.watch(aktifCarilerProvider);
+    final an = ref.watch(simdiProvider)();
+    final gun = gunAnahtari(an);
+    final ogun = toplamaOgunu(an);
+    _sonDurum = '$gun-${ogun.name}';
+    // Yüklenirken tikler boş görünür; liste beklemez.
+    final bugunkuler = ref.watch(gunlukSutlerProvider(gun)).valueOrNull ?? const <int, Sut>{};
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFF),
@@ -99,15 +124,27 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
                       ),
                     );
                   }
+                  final alinan = cariler.where((c) => ogunAlindi(bugunkuler[c.id], ogun)).length;
                   return RefreshIndicator(
-                    onRefresh: () async => ref.invalidate(aktifCarilerProvider),
+                    onRefresh: () async {
+                      ref.invalidate(aktifCarilerProvider);
+                      ref.invalidate(gunlukSutlerProvider(gun));
+                    },
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      itemCount: filtrelenen.length,
-                      itemBuilder: (ctx, i) => _CariKarti(
-                        cari: filtrelenen[i],
-                        onKaydedildi: () => ref.invalidate(aktifCarilerProvider),
-                      ),
+                      itemCount: filtrelenen.length + 1,
+                      itemBuilder: (ctx, i) {
+                        if (i == 0) {
+                          return _ToplamaOzeti(ogun: ogun, alinan: alinan, toplam: cariler.length);
+                        }
+                        final cari = filtrelenen[i - 1];
+                        return _CariKarti(
+                          cari: cari,
+                          ogun: ogun,
+                          ogunKg: ogunKg(bugunkuler[cari.id], ogun),
+                          onKaydedildi: () => ref.invalidate(aktifCarilerProvider),
+                        );
+                      },
                     ),
                   );
                 },
@@ -121,10 +158,58 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
   }
 }
 
+/// Listenin üstünde: "Sabah toplaması · 5 / 12 alındı".
+class _ToplamaOzeti extends StatelessWidget {
+  final ToplamaOgunu ogun;
+  final int alinan;
+  final int toplam;
+  const _ToplamaOzeti({required this.ogun, required this.alinan, required this.toplam});
+
+  @override
+  Widget build(BuildContext context) {
+    final bitti = toplam > 0 && alinan >= toplam;
+    return Container(
+      key: const ValueKey('toplamaOzeti'),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bitti ? Colors.green[50] : Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(ogun == ToplamaOgunu.sabah ? Icons.wb_sunny_outlined : Icons.nights_stay_outlined,
+              size: 20, color: bitti ? Colors.green[700] : Colors.blue[700]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('${ogunAdi(ogun)} toplaması',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[800])),
+          ),
+          Icon(Icons.check_circle, size: 18, color: Colors.green[600]),
+          const SizedBox(width: 4),
+          Text('$alinan / $toplam alındı',
+              style: TextStyle(fontWeight: FontWeight.bold, color: bitti ? Colors.green[800] : Colors.grey[800])),
+        ],
+      ),
+    );
+  }
+}
+
 class _CariKarti extends StatelessWidget {
   final Cari cari;
+  final ToplamaOgunu ogun;
+  /// Bugün bu öğünde alınan kg (0 = henüz alınmadı).
+  final double ogunKg;
   final VoidCallback onKaydedildi;
-  const _CariKarti({required this.cari, required this.onKaydedildi});
+  const _CariKarti({
+    required this.cari,
+    required this.ogun,
+    required this.ogunKg,
+    required this.onKaydedildi,
+  });
+
+  bool get _alindi => ogunKg > 0;
 
   Future<void> _girisSayfasinaGit(BuildContext context) async {
     final result = await Navigator.push(
@@ -137,10 +222,12 @@ class _CariKarti extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: ValueKey('sutKarti-${cari.id}'),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _alindi ? const Color(0xFFF1FBF3) : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: _alindi ? Border.all(color: Colors.green.shade300, width: 1.5) : null,
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       // ListTile dokunma efekti en yakın Material'a çizilir; renkli Container
@@ -149,16 +236,28 @@ class _CariKarti extends StatelessWidget {
         type: MaterialType.transparency,
         child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(12)),
-          child: Icon(Icons.water_drop, color: Colors.blue[700], size: 22),
-        ),
+        leading: _alindi
+            ? Container(
+                key: ValueKey('alindiTik-${cari.id}'),
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: Colors.green[600], borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.check_rounded, color: Colors.white, size: 32),
+              )
+            : Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(12)),
+                child: Icon(Icons.water_drop, color: Colors.blue[700], size: 22),
+              ),
         title: RotaliAd(cari, stil: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_alindi)
+              Text('${ogunAdi(ogun)} alındı · ${sayiGoster(ogunKg)} kg',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.green[800], fontSize: 12, fontWeight: FontWeight.w600)),
             Text(cari.hayvanTuru ?? 'Belirtilmemiş', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
             if (cari.telefon != null && cari.telefon!.isNotEmpty)
               Text(cari.telefon!, style: TextStyle(fontSize: 11, color: Colors.grey[400])),
