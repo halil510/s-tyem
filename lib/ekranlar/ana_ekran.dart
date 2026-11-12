@@ -17,6 +17,7 @@ import '../core/router/app_router.dart';
 import '../features/donem/donem_ekrani.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/cari/cari_excel_ekrani.dart';
+import '../features/raporlar/rapor_ekrani.dart';
 import 'cari/pasif_cariler_ekrani.dart';
 import 'cari/toplama_sirasi_ekrani.dart';
 import '../widgetlar/otomatik_yedekleyici.dart';
@@ -113,6 +114,7 @@ class _AnaEkranState extends State<AnaEkran> {
             _menuOgesi('sut_fiyat', Icons.water_drop, Colors.blue[700], 'Süt Fiyatları'),
             _menuOgesi('yem_fiyat', Icons.grass, Colors.green[700], 'Yem Fiyatları'),
             _menuOgesi('fiyat_gecmisi', Icons.trending_up_rounded, Colors.indigo[700], 'Piyasa Fiyat Notları'),
+            _menuOgesi('raporlar', Icons.insights_rounded, Colors.indigo[700], 'Raporlar'),
             _menuOgesi('aylik_hesaplama', Icons.calculate_outlined, Colors.deepPurple[700], 'Aylık Hesaplama & Rapor'),
             _menuOgesi('donem', Icons.lock_clock_outlined, Colors.brown[700], 'Dönem Kapanışı & Hakediş'),
             const PopupMenuDivider(),
@@ -134,6 +136,7 @@ class _AnaEkranState extends State<AnaEkran> {
             } else if (value == 'sut_fiyat') Navigator.push(context, MaterialPageRoute(builder: (_) => const SutFiyatEkrani()));
             else if (value == 'yem_fiyat') Navigator.push(context, MaterialPageRoute(builder: (_) => const YemFiyatEkrani()));
             else if (value == 'fiyat_gecmisi') Navigator.push(context, MaterialPageRoute(builder: (_) => const FiyatYonetimEkrani()));
+            else if (value == 'raporlar') Navigator.push(context, MaterialPageRoute(builder: (_) => const RaporAnaEkrani()));
             else if (value == 'aylik_hesaplama') Navigator.push(context, MaterialPageRoute(builder: (_) => const FiyatHesaplamaEkrani()));
             else if (value == 'donem') Navigator.push(context, MaterialPageRoute(builder: (_) => const DonemEkrani()));
             else if (value == 'terazi') context.push(AppRoutes.terazi);

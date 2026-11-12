@@ -658,6 +658,26 @@ yeşil tik; öğleden sonra sıfırlansın, akşam rotasında yeniden tik atıls
 - Kartta: soldaki damla yerine yeşil kutuda beyaz ✓, kart yeşil çerçeve, "Sabah alındı · 40 kg". Listenin üstünde
   "Sabah toplaması · 5 / 12 alındı" (hepsi alınınca yeşil). Sekme açık kalırsa 30 sn'de bir saat kontrolü (12:00 / gece yarısı).
 - Test: `test/features/sut_alindi_tik_test.dart`. Testler: 357/357; `flutter analyze` 0 error.
+
+### 2026-11-12 — Raporlar ekranı (B7, Fırın ERP'deki yapıdan)
+
+Kullanıcı isteği: "Fırın ERP'deki raporlar gibi süt-yem'de de raporlar ekranı". ⋮ menü → **Raporlar**
+("Aylık Hesaplama & Rapor"un üstünde; o ekran ve Dönem/Hakediş aynen duruyor).
+- `lib/features/raporlar/`: `rapor_modeli.dart` (`RaporTablosu`, `RaporSutun` + `toplanir`, `RaporTuru` enum, Türkçe
+  `kgYaz`/`tlYaz`/`hucreMetni`), `rapor_servisi.dart` (yalnız repository'lerden okur — SQL yok, kural 10),
+  `rapor_disa_aktarim.dart` (Excel sayı hücreli + toplam, PDF DejaVu internetsiz, Yazdır, Paylaş),
+  `rapor_ekrani.dart` (gruplu liste; Bugün / Bu ay / Geçen ay / Bu yıl / özel tarih; aranabilir cari seçici,
+  pasifler dahil; tablo yatay kaydırmalı, sarı toplam satırı, altta not; `raporProvider` veriSurumu izler).
+- 12 rapor: SÜT — Süt Girişleri (gün gün), Günlük Toplam Süt, Cari Bazlı Süt, Aylık Süt Karşılaştırması;
+  YEM — Yem Teslimleri (6 tür), Yem Türü Bazlı, Cari Bazlı Yem; HESAP — Cari Hesap Özeti (dönem + genel bakiye),
+  Bakiye Listesi (bitiş tarihi itibarıyla, alacaklı/borçlu ayrı sütun), Ödeme ve Tahsilatlar, Cari Ekstre (devir +
+  yürüyen bakiye); KONTROL — Fiyatı Eksik Kayıtlar (kg var, fiyat yok → 0 TL sayılanlar).
+- Tutarlar ekstreyle AYNI fonksiyonlardan (`sutTutari`, `yemTutari`, `CariFiyatLookup` — KAYDIN GÜNÜNDEKİ fiyat).
+  Raporlar alfabetik (`cariSirala`, kural 16). Pasif/silinmiş carinin kaydı da rapora girer.
+- "Yem Türü Bazlı" tutarları satır satır yuvarlanmadığından genel toplam birkaç kuruş farklı olabilir (raporda not var).
+- Veritabanı / Supabase şeması DEĞİŞMEDİ. Test: `test/features/rapor_test.dart` (9: ay ortası fiyat, ekstre ve
+  tumKalanBorclar ile kuruşu kuruşuna aynı, bakiye listesi tarihli, ekstre devir/yürüyen, eksik fiyat, yenilenme,
+  Excel/PDF, 360 px'te 12 raporun hepsi hatasız). Testler: **366/366**.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
@@ -721,7 +741,7 @@ yeşil tik; öğleden sonra sıfırlansın, akşam rotasında yeniden tik atıls
 - [x] B4. Aylık dönem kapanışı + hakediş bordrosu + DB seviyesinde kilit (migration v9). Ayrıntı: oturum günlüğü (7).
 - [ ] B5. Kesintiler (stopaj vb. — oranlar ayarlanabilir) + müstahsil makbuzu çıktısı.
 - [ ] B6. Yem stok/depo (alış, tedarikçi, stok, kritik stok uyarısı).
-- [ ] B7. Raporlar merkezi (günlük, aylık üretici, bakiye listesi, yem satış; PDF/Excel/WhatsApp).
+- [x] B7. Raporlar merkezi — 12 rapor, Excel/PDF/Yazdır/Paylaş (WhatsApp paylaşım menüsünden). Ayrıntı: oturum günlüğü 2026-11-12.
 - [x] B8. Üretici fişi: Bluetooth termal yazıcı (ayrı kanal, teraziyi koparmaz) + WhatsApp. Ayrıntı: oturum günlüğü (8). **Gerçek yazıcıyla denenmedi.**
 - [ ] B9. İşlem geçmişi ekranı (denetim izi).
 - [ ] B10. Ayarlar (işletme bilgisi, şifre, dönem tipi, kesinti oranları, otomatik yedek).
