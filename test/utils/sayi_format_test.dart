@@ -48,9 +48,14 @@ void main() {
 
     test('REGRESYON: toplam tek haneye yuvarlanmaz (47.8 + 30.54 = 78.34)', () {
       expect(sayiGoster(47.8 + 30.54), '78.34');
-      expect(sayiGoster(12.001), '12', reason: 'eskiden "12.0" çıkıyordu');
+      expect(sayiGoster(12.0001), '12', reason: 'eskiden "12.0" çıkıyordu; kayan nokta artığı gizlenir');
       expect(sayiGoster(25.0), '25');
-      expect(sayiGoster(-0.001), '0');
+      expect(sayiGoster(-0.0001), '0');
+      // 2026-11-13: gerçek 3 haneli kg (terazi 12,345) artık 2 haneye yuvarlanmaz.
+      expect(sayiGoster(12.345), '12.345');
+      expect(sayiGirdi(12.345), '12,345');
+      expect(sayiCoz(sayiGirdi(12.345)), 12.345, reason: 'kutuya geri yazılan değer birebir aynı okunur');
+      expect(sayiCoz(sayiGirdi(1500)), 1500);
     });
   });
 }

@@ -38,8 +38,8 @@ class CariExcelHatasi implements Exception {
   String toString() => mesaj;
 }
 
-/// Karşılaştırma anahtarı: Türkçe küçük harf + tek boşluk.
-String adAnahtari(String tamAd) => turkceKucuk(tamAd.trim().replaceAll(RegExp(r'\s+'), ' '));
+/// Karşılaştırma anahtarı: Türkçe küçük harf + tek boşluk + ASCII katlama ("ALI VELI" = "ALİ VELİ").
+String adAnahtari(String tamAd) => asciiKatla(tamAd.trim().replaceAll(RegExp(r'\s+'), ' '));
 
 /// "MEHMET ALİ YILMAZ" → ad "MEHMET ALİ", soyad "YILMAZ".
 /// Tek kelimeyse soyad boş kalır.
@@ -97,10 +97,11 @@ class CariExcelOkuyucu {
   /// İsim sütunu sanılmaması gereken başlık kelimeleri ("Cari Kodu", "Müşteri No"…).
   static const _isimDegil = {'kod', 'kodu', 'no', 'numara', 'numarası', 'id', 'bakiye', 'tutar', 'borç', 'alacak'};
 
+  /// Başlık ASCII'ye katlanarak karşılaştırılır: "ISIM SOYISIM" / "ADI SOYADI" de tanınır.
   static bool _eslesir(String baslik, List<String> kaliplar) {
-    final b = turkceKucuk(baslik).replaceAll(RegExp(r'[^a-zçğıöşü ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (b.split(' ').any(_isimDegil.contains)) return false;
-    return kaliplar.any((k) => b == k || b.startsWith('$k ') || b.endsWith(' $k') || b.contains(' $k '));
+    final b = asciiKatla(baslik).replaceAll(RegExp(r'[^a-z ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (b.split(' ').any((k) => _isimDegil.map(asciiKatla).contains(k))) return false;
+    return kaliplar.map(asciiKatla).any((k) => b == k || b.startsWith('$k ') || b.endsWith(' $k') || b.contains(' $k '));
   }
 
   static const _tamAdKaliplari = [
@@ -130,8 +131,9 @@ class CariExcelOkuyucu {
       final soyad = bul(_soyadKaliplari);
       final tamAd = bul(_tamAdKaliplari);
       // "Ad Soyad" tek başlıksa soyad kalıbı da ona uyar; ayrı sütun sayılmaz.
-      final ad = soyad != null && soyad != tamAd ? bul(_adKaliplari) : null;
-      if (tamAd != null || (ad != null && soyad != null)) {
+      // Tek başına "Ad" başlığı (soyad sütunu yok) da ad soyad sütunu sayılır.
+      final ad = soyad == null || soyad != tamAd ? bul(_adKaliplari) : null;
+      if (tamAd != null || ad != null) {
         baslikSatiri = r;
         if (ad != null && soyad != null && ad != soyad && tamAd != ad) {
           adSut = ad;

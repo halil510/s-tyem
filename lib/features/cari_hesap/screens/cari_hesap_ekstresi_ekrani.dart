@@ -410,9 +410,13 @@ class _BakiyeOzetKarti extends StatelessWidget {
     final alacakliMi = ekstre.alacakliMi;
     final kapaliMi = ekstre.hesapKapaliMi;
     final renk = kapaliMi ? AppColors.textHint : (alacakliMi ? AppColors.info : AppColors.warning);
-    final etiket = kapaliMi
-        ? 'Hesap Kapalı'
-        : (alacakliMi ? 'Cari Alacaklı — Ödenecek' : 'Cari Borçlu — Tahsil Edilecek');
+    // Tarih filtreliyken rakam DÖNEM NETİDİR; "Ödenecek / Tahsil Edilecek" demek cari genelde
+    // tersi durumdayken yanıltıyordu → filtrede tarafsız dönem ifadesi.
+    final etiket = ekstre.filtreliMi
+        ? (kapaliMi ? 'Dönemde Net Hareket Yok' : (alacakliMi ? 'Dönemde Cari Lehine' : 'Dönemde Cari Aleyhine'))
+        : kapaliMi
+            ? 'Hesap Kapalı'
+            : (alacakliMi ? 'Cari Alacaklı — Ödenecek' : 'Cari Borçlu — Tahsil Edilecek');
 
     return Container(
       padding: const EdgeInsets.all(20),

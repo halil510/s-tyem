@@ -181,7 +181,7 @@ class _CariDuzenleState extends ConsumerState<CariDuzenle> {
                           etiket: 'Soyad',
                           ikon: Icons.badge_outlined,
                           buyukHarf: TextCapitalization.characters,
-                          dogrula: (v) => zorunlu(v, 'Soyad'),
+                          // Soyad isteğe bağlı: Excel'den tek kelimelik isimle gelen cari düzenlenebilmeli.
                         ),
                         const SizedBox(height: 12),
                         CariMetinAlani(

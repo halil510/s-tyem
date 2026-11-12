@@ -61,11 +61,12 @@ class _OdemeAlBottomSheetState extends State<OdemeAlBottomSheet> {
     // Çift dokunma: ikinci pop alttaki ekranı kapatmasın.
     if (_kapandi) return;
     final tutar = sayiCoz(_tutarCtrl.text);
-    if (tutar == null || tutar <= 0) {
+    if (tutar == null || kurusaYuvarla(tutar) <= 0) {
+      // "0,001" kuruşa yuvarlanınca 0 TL olur → 0 TL'lik hareket yazılmasın.
       setState(() => _hata = 'Geçerli bir tutar girin');
       return;
     }
-    if (widget.maksimumTutar != null && tutar > widget.maksimumTutar!) {
+    if (widget.maksimumTutar != null && kurusaYuvarla(tutar) > kurusaYuvarla(widget.maksimumTutar!)) {
       setState(() => _hata = 'Tutar kalan bakiyeden büyük olamaz');
       return;
     }

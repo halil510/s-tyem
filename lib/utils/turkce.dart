@@ -9,7 +9,10 @@ String turkceKucuk(String s) => s.replaceAll('İ', 'i').replaceAll('I', 'ı').to
 bool aramaEslesir(String metin, String sorgu) {
   String n(String s) => turkceKucuk(s.trim().replaceAll(RegExp(r'\s+'), ' '));
   final q = n(sorgu);
-  return q.isEmpty || n(metin).contains(q);
+  if (q.isEmpty || n(metin).contains(q)) return true;
+  // Sorgu Türkçe harf İÇERMİYORSA ASCII katlı da bakılır: "halil" araması ASCII yazılmış
+  // "HALIL"i (halıl) de bulur. Türkçe harfle yazılmış sorgu ("alı") kesin eşleşme ister.
+  return asciiKatla(q) == q && asciiKatla(n(metin)).contains(q);
 }
 
 const _alfabe = 'abcçdefgğhıijklmnoöprsştuüvwxyz';
@@ -35,4 +38,17 @@ int turkceKarsilastir(String a, String b) {
     return ix.compareTo(iy);
   }
   return x.length.compareTo(y.length);
+}
+
+/// İsim/başlık karşılaştırma anahtarı: Türkçe küçük harf + Türkçe harfler ASCII'ye katlanır
+/// (ı→i, ş→s, ğ→g, ç→c, ö→o, ü→u). Excel listeleri çoğu zaman Türkçe karakter olmadan
+/// gelir: "ALI VELI" kayıtlı "ALİ VELİ" ile, "ISIM SOYISIM" başlığı "isim soyisim" ile eşleşir.
+String asciiKatla(String s) {
+  const harita = {'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'ö': 'o', 'ü': 'u'};
+  final k = turkceKucuk(s);
+  final b = StringBuffer();
+  for (final ch in k.split('')) {
+    b.write(harita[ch] ?? ch);
+  }
+  return b.toString();
 }

@@ -52,8 +52,8 @@ class _SutDuzenleDialogState extends ConsumerState<SutDuzenleDialog> {
   @override
   void initState() {
     super.initState();
-    _sabahController.text = sayiGoster(widget.sut.sabah);
-    _aksamController.text = sayiGoster(widget.sut.aksam);
+    _sabahController.text = sayiGirdi(widget.sut.sabah);
+    _aksamController.text = sayiGirdi(widget.sut.aksam);
   }
 
   @override
@@ -177,12 +177,12 @@ class _YemDuzenleDialogState extends ConsumerState<YemDuzenleDialog> {
   @override
   void initState() {
     super.initState();
-    _sutController.text = sayiGoster(widget.yem.sutYemi);
-    _besiController.text = sayiGoster(widget.yem.besiYemi);
-    _bBasController.text = sayiGoster(widget.yem.bBaslangic);
-    _bBuyController.text = sayiGoster(widget.yem.bBuyutme);
-    _kuzuController.text = sayiGoster(widget.yem.kuzuYemi);
-    _tavukController.text = sayiGoster(widget.yem.tavukYemi);
+    _sutController.text = sayiGirdi(widget.yem.sutYemi);
+    _besiController.text = sayiGirdi(widget.yem.besiYemi);
+    _bBasController.text = sayiGirdi(widget.yem.bBaslangic);
+    _bBuyController.text = sayiGirdi(widget.yem.bBuyutme);
+    _kuzuController.text = sayiGirdi(widget.yem.kuzuYemi);
+    _tavukController.text = sayiGirdi(widget.yem.tavukYemi);
   }
 
   @override

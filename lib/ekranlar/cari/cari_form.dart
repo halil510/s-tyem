@@ -240,7 +240,7 @@ class RotaSirasiAlani extends ConsumerWidget {
 /// Aynı ad-soyadla (Türkçe harf ve boşluk farkı gözetmeden) kayıtlı cariler.
 /// [haricId]: düzenlenen carinin kendisi sayılmaz.
 Future<List<Cari>> ayniIsimliCariler(CariRepository repo, String ad, String soyad, {int? haricId}) async {
-  String anahtar(String a, String s) => turkceKucuk('$a $s'.trim().replaceAll(RegExp(r'\s+'), ' '));
+  String anahtar(String a, String s) => asciiKatla('$a $s'.trim().replaceAll(RegExp(r'\s+'), ' '));
   final aranan = anahtar(ad, soyad);
   return (await repo.getAll()).where((c) => c.id != haricId && anahtar(c.ad, c.soyad) == aranan).toList();
 }

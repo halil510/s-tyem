@@ -171,9 +171,12 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindi
       // Taslak okunamazsa (ayar deposu takılırsa) ekran yine açılır.
       final taslak = await _taslakOku().timeout(const Duration(seconds: 2), onTimeout: () => null);
       final bugun = DateUtils.dateOnly(DateTime.now());
-      if (taslak != null && !taslak.tarih.isAfter(bugun)) _tarih = DateUtils.dateOnly(taslak.tarih);
+      // İLERİ tarihli taslak (telefon saati geri alınmış) BUGÜNE uygulanmaz; taslak silinmez, saat
+      // düzelince kendi gününde geri gelir.
+      final taslakGecerli = taslak != null && !DateUtils.dateOnly(taslak.tarih).isAfter(bugun);
+      if (taslakGecerli) _tarih = DateUtils.dateOnly(taslak.tarih);
       await _gunuYukle();
-      if (taslak != null && mounted) {
+      if (taslakGecerli && mounted) {
         final n = _taslagiUygula(taslak.sabah, taslak.aksam);
         if (n > 0) {
           _snack(
@@ -201,8 +204,8 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindi
         _hataliSatirlar.clear();
         for (final cari in _cariler) {
           final k = kayitlar[cari.id!];
-          _sabahCtrl[cari.id!]!.text = k != null && k.sabah > 0 ? sayiGoster(k.sabah) : '';
-          _aksamCtrl[cari.id!]!.text = k != null && k.aksam > 0 ? sayiGoster(k.aksam) : '';
+          _sabahCtrl[cari.id!]!.text = k != null && k.sabah > 0 ? sayiGirdi(k.sabah) : '';
+          _aksamCtrl[cari.id!]!.text = k != null && k.aksam > 0 ? sayiGirdi(k.aksam) : '';
         }
       });
     } catch (e) {
@@ -276,11 +279,15 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindi
       _snack('Kaydedilecek değişiklik yok.', Colors.blueGrey);
       return;
     }
+    // Bildirici AWAIT'TEN ÖNCE alınır: kayıt sürerken geri tuşuyla ekran kapanırsa `ref` artık
+    // kullanılamaz; kayıt yine yazılır ve bağlı ekranlar (tik, bakiye, Özet) yenilenmeliydi.
+    final veriBildir = ref.read(veriSurumuProvider.notifier);
     setState(() => _kaydediliyor = true);
     try {
       final repo = await ref.read(sutRepositoryProvider.future);
       final sonuc = await repo.topluGunlukKaydet(_tarihFormat.format(_tarih), girdiler, kayitliOgunuKoru: true);
-      ref.veriDegisti();
+      veriBildir.state++;
+      if (!mounted) return;
       final parcalar = [
         if (sonuc.eklenen > 0) '${sonuc.eklenen} yeni',
         if (sonuc.guncellenen > 0) '${sonuc.guncellenen} öğün eklendi',
@@ -422,7 +429,8 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindi
             ),
           ),
           _AltPanel(
-            kayitliSayisi: _mevcutKayitlar.length,
+            // Yalnız LİSTEDEKİ (aktif) cariler sayılır; o gün kaydı olan pasif cari "Kayıtlı/Boş"u bozmasın.
+            kayitliSayisi: _cariler.where((c) => _mevcutKayitlar.containsKey(c.id)).length,
             cariSayisi: _cariler.length,
             gunlukToplamKg: _gunlukToplamKg,
             kaydediliyor: _kaydediliyor,

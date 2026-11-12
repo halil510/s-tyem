@@ -184,19 +184,21 @@ class _PasifKart extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: bakiye > 0 ? Colors.blue[800] : Colors.orange[800]),
                       ),
+                    // Buton ismin ALTINDA, sağa yaslı: 360 px + büyük yazıda yan yana sığmıyordu (taşma).
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.tonalIcon(
+                        onPressed: onGeriGetir,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.restore, size: 18),
+                        label: const Text('Geri Getir'),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.tonalIcon(
-                onPressed: onGeriGetir,
-                // Dar telefonda / büyük yazıda isim alanına yer kalsın.
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  visualDensity: VisualDensity.compact,
-                ),
-                icon: const Icon(Icons.restore, size: 18),
-                label: const Text('Geri Getir'),
               ),
             ],
           ),

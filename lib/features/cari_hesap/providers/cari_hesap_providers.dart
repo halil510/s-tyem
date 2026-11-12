@@ -267,11 +267,30 @@ final aylikOzetProvider = FutureProvider.autoDispose
   final yemRepo = await ref.watch(yemRepositoryProvider.future);
   final fiyatRepo = await ref.watch(cariFiyatRepositoryProvider.future);
   final odemeRepo = await ref.watch(cariOdemeRepositoryProvider.future);
-  final bakiyeler = await ref.watch(tumKalanBorclarProvider.future);
 
   final bas = '$ay-01';
   final bit = '$ay-31';
   final lookup = CariFiyatLookup(await fiyatRepo.getTumFiyatlar());
+
+  // Genel bakiye AY SONU itibarıyla (Raporlar → Cari Hesap Özeti ile aynı). Eskiden bugünkü
+  // bakiye kullanılıyordu: geçmiş bir ayın özeti / WhatsApp mesajı sonraki ayların süt, yem ve
+  // tahsilatını da içeriyordu. ('$ay-32' ayın her gün/saat damgasından büyüktür → ayın tamamı dahil.)
+  final aySonu = '$ay-32';
+  final bakiyeHam = <int, double>{};
+  void bEkle(int id, double v) => bakiyeHam[id] = (bakiyeHam[id] ?? 0) + v;
+  for (final s in await sutRepo.getAllInRange(_tumZamanlarBaslangic, aySonu)) {
+    bEkle(s.cariId, sutTutari(s, lookup.fiyatIcin(s.cariId, s.tarih)));
+  }
+  for (final y in await yemRepo.getAllInRange(_tumZamanlarBaslangic, aySonu)) {
+    bEkle(y.cariId, -yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih)));
+  }
+  final odemeler = await odemeRepo.getTumOdemeTahsilatlar();
+  for (final o in odemeler) {
+    if (o.tarih.compareTo(aySonu) >= 0) continue;
+    final t = kurusaYuvarla(o.toplamTutar);
+    bEkle(o.cariId, o.islemTuru == 'tahsilat' ? t : -t);
+  }
+  final bakiyeler = bakiyeHam.map((id, b) => MapEntry(id, kurusaYuvarla(b)));
 
   final sutKg = <int, double>{}, sutTl = <int, double>{};
   final yemKg = <int, double>{}, yemTl = <int, double>{};
@@ -294,7 +313,7 @@ final aylikOzetProvider = FutureProvider.autoDispose
     ekle(yemKg, y.cariId, y.toplam);
     ekle(yemTl, y.cariId, tutar);
   }
-  for (final o in await odemeRepo.getTumOdemeTahsilatlar()) {
+  for (final o in odemeler) {
     if (!o.tarih.startsWith(ay)) continue;
     ekle(o.islemTuru == 'tahsilat' ? tahsilat : odeme, o.cariId, kurusaYuvarla(o.toplamTutar));
   }

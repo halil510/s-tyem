@@ -511,11 +511,9 @@ class _CariListesiState extends ConsumerState<CariListesi> {
     final koyunSayisi = _cariler.where((c) => c.hayvanTuru == 'Koyun').length;
     final tavukSayisi = _cariler.where((c) => c.hayvanTuru == 'Tavuk').length;
 
-    // Toplam süt miktarını hesapla
-    final toplamSutMiktari = _hayvanTuruneGoreToplamSut.values.fold(
-      0.0, 
-      (sum, value) => sum + (value ?? 0.0)
-    );
+    // Toplam süt: TÜM carilerin bu ayki sütü (hayvan türü boş / "Belirtilmemiş" cariler dahil;
+    // eskiden yalnız türü bilinen carilerin toplamı alınıyordu).
+    final toplamSutMiktari = _aylikSutToplamlari.values.fold(0.0, (sum, value) => sum + value);
 
     // Kompakt, eşit yükseklikte kartlar (ikon solda, sayı + başlık sağda).
     return SingleChildScrollView(

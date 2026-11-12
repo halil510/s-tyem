@@ -107,7 +107,7 @@
 ## Testler
 
 ```bash
-flutter test          # 457 test — hepsi geçmeli
+flutter test          # 524 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -780,6 +780,29 @@ Kullanıcı: "Bluetooth'ta yazıcı bulmuyor; terazide Bluetooth bir sürü isim
   Terazi BLE adı `platformName` boşsa `advName` (yayın adı).
 - Test: `test/features/bt_arama_test.dart` (3; sahte Android kanalıyla arama → PT-210 üstte → kaydedilir; 360 px'te
   etiket taşıyordu → alt satıra alındı). **457/457**. Yalnız BLE (klasik değil) yazıcılar hâlâ desteklenmiyor.
+
+### 2026-11-13 — Süt ve cari DERİN DENETİMİ (çoklu asistan) · sürüm 1.2.5+14
+Kullanıcı: "süt ve cari bu kısmı analiz edelim derin". Asistanlar 21 hatayı "BUG:" testiyle kanıtladı
+(`test/ajan_sut_cari/`, 67 test; düzelenler "DÜZELTİLDİ:" adını aldı). Hepsi düzeltildi:
+- **Sayı:** `sayiCoz("1.500")` artık `null` (belirsiz binlik; eskiden 1,5 → 1.500 TL ödeme 1,50 TL yazılıyordu);
+  bozuk binlik "1.2,3" `null`. `sayiGoster` 3 haneye kadar (12,345 kg). Kutuya geri yazmak için YENİ `sayiGirdi`
+  (virgüllü, `sayiCoz` ile birebir) — Düzenle'de dokunulmayan öğün artık 2 haneye yuvarlanmıyor.
+- **Süt Fiyatı:** fiyatı DEĞİŞMEYEN cariye seçilen günden "hayalet" satır yazılmaz (eski koşul hiç doğru olmuyordu;
+  sonradan yapılan ay başı değişikliği o günden sonra geçersiz kalıyordu).
+- **Aylık Hesaplama / WhatsApp:** "Genel bakiye" AY SONU itibarıyla (Raporlar → Cari Hesap Özeti ile aynı);
+  eskiden sonraki ayların hareketleri de giriyordu.
+- **Ekstre:** tarih filtreliyken etiket tarafsız ("Dönemde Cari Lehine/Aleyhine"); Excel'de "DÖNEM NETİ (dönemin net etkisi)".
+- **Ödeme/Tahsilat formu:** kuruşa yuvarlanınca 0 olan tutar ("0,001") reddedilir; azami tutar kuruşla karşılaştırılır.
+- **Cari:** kalıcı silmede rota 1..N yeniden numaralanır; Cari Düzenle'de soyad isteğe bağlı (Excel'den soyadsız gelen
+  cari düzenlenebilir; Cari Ekle'de hâlâ zorunlu); Cariler "Süt Toplam" tüm carileri sayar (hayvan türü boş olanlar dahil);
+  Pasif Cariler kartında "Geri Getir" ismin altına alındı (taşma).
+- **Türkçe/ASCII:** `asciiKatla` (turkce.dart). Excel'de "ALI VELI" = kayıtlı "ALİ VELİ" (çift cari olmaz), "ISIM SOYISIM"
+  ve tek "Ad" başlığı tanınır; aynı isim uyarısı ASCII'yi de yakalar. Arama: sorgu Türkçe harf İÇERMİYORSA ASCII katlı
+  bakılır ("halil" → "HALIL"); Türkçe harfli sorgu kesin eşleşir ("alı" ≠ "ALİ").
+- **Süt ekranları:** KAYDET sürerken geri tuşu → kayıt yazılır VE veri sürümü artar (bildirici await'ten önce alınır);
+  ileri tarihli taslak bugüne uygulanmaz; Hızlı Süt "Kayıtlı/Boş" yalnız aktif carileri sayar; Süt Ekle'de tarih
+  değişince kaydedilmemiş miktar için onay sorulur; Süt sekmesi özet satırı 360 px ×1.5'te taşmıyor.
+- **524/524** test geçti; `dart analyze` 0 hata.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"

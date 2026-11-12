@@ -188,8 +188,15 @@ class _ToplamaOzeti extends StatelessWidget {
           ),
           Icon(Icons.check_circle, size: 18, color: Colors.green[600]),
           const SizedBox(width: 4),
-          Text('$alinan / $toplam alındı',
-              style: TextStyle(fontWeight: FontWeight.bold, color: bitti ? Colors.green[800] : Colors.grey[800])),
+          // Flexible + küçültme: dar ekran / büyük yazıda sayaç sağdan taşmasın (sayı hep okunur).
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text('$alinan / $toplam alındı',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: bitti ? Colors.green[800] : Colors.grey[800])),
+            ),
+          ),
         ],
       ),
     );
@@ -356,8 +363,8 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
       if (!mounted) return;
       setState(() {
         _mevcutKayit = kayit;
-        _sabahCtrl.text = kayit != null && kayit.sabah > 0 ? sayiGoster(kayit.sabah) : '';
-        _aksamCtrl.text = kayit != null && kayit.aksam > 0 ? sayiGoster(kayit.aksam) : '';
+        _sabahCtrl.text = kayit != null && kayit.sabah > 0 ? sayiGirdi(kayit.sabah) : '';
+        _aksamCtrl.text = kayit != null && kayit.aksam > 0 ? sayiGirdi(kayit.aksam) : '';
         _sabahHata = _aksamHata = null;
       });
     } catch (e) {
@@ -406,6 +413,9 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
       return;
     }
 
+    // Bildirici AWAIT'TEN ÖNCE alınır: kayıt sürerken geri tuşuyla ekran kapanırsa `ref` artık
+    // kullanılamaz; kayıt yine yazılır ve bağlı ekranlar (tik, bakiye, Özet) yenilenmeliydi.
+    final veriBildir = ref.read(veriSurumuProvider.notifier);
     setState(() => _kaydediliyor = true);
     try {
       final repo = await ref.read(sutRepositoryProvider.future);
@@ -416,7 +426,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
         aksam: aksam,
         kayitliOgunuKoru: true,
       );
-      ref.veriDegisti();
+      veriBildir.state++;
       if (!mounted) return;
       final mesaj = switch (durum) {
         SutKayitDurumu.eklendi => 'Süt kaydı eklendi (${sayiGoster(sabah + aksam)} kg)',
@@ -469,6 +479,18 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
     return (!_sabahKilitli && farkli(_sabahCtrl, _mevcutKayit?.sabah ?? 0)) ||
         (!_aksamKilitli && farkli(_aksamCtrl, _mevcutKayit?.aksam ?? 0));
   }
+
+  Future<bool?> _tarihDegisimOnayi() => showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Kaydedilmemiş miktar'),
+          content: const Text('Girdiğiniz miktar kaydedilmedi. Tarih değişirse bu giriş kaybolur.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kaydetmeden Devam')),
+          ],
+        ),
+      );
 
   late final _alanDinleyici = Listenable.merge([_sabahCtrl, _aksamCtrl]);
 
@@ -534,11 +556,20 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: _kartStili,
               child: TarihSecici(
+                // Anahtar: vazgeçilince seçici eski güne geri döner (kendi iç durumunu tutar).
+                key: ValueKey(_seciliTarih),
                 baslangicTarihi: _seciliTarih,
                 showRange: false,
                 sonTarih: DateUtils.dateOnly(DateTime.now()),
-                onTarihSecildi: (bas, _) {
-                  _seciliTarih = DateUtils.dateOnly(bas);
+                onTarihSecildi: (bas, _) async {
+                  final yeni = DateUtils.dateOnly(bas);
+                  if (yeni == _seciliTarih) return;
+                  // Girilmiş ama kaydedilmemiş miktar SORMADAN silinmesin (Hızlı Süt Girişi gibi).
+                  if (_kaydedilmemisVar && await _tarihDegisimOnayi() != true) {
+                    if (mounted) setState(() {});
+                    return;
+                  }
+                  _seciliTarih = yeni;
                   _gunuYukle();
                 },
               ),

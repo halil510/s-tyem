@@ -125,11 +125,11 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
         final fiyat = sayiCoz(ctrl.text)!;
         if (fiyat <= 0) continue;
         final mevcut = _fiyatlar[cari.id!]!;
-        // Fiyatı DEĞİŞMEYEN cari için seçilen güne yeni satır açma (hesap
-        // zaten aynı; 44 caride 44 gereksiz "fiyat değişikliği" oluşmasın).
-        if (mevcut.ay != _anahtar && kurusaYuvarla(fiyat) == kurusaYuvarla(mevcut.sutFiyat)) {
-          continue;
-        }
+        // Fiyatı DEĞİŞMEYEN cari için seçilen güne satır YAZILMAZ. (Eski koşul `mevcut.ay != _anahtar`
+        // hiç doğru olmuyordu: getAyFiyatlariHepsi devralınan fiyatı da istenen anahtarla döndürür.
+        // Sonuç: değişmeyen her cariye o günden itibaren "hayalet" satır yazılıyor, sonradan yapılan
+        // ay başı fiyat değişikliği o günden sonraki sütlere uygulanmıyordu.)
+        if (kurusaYuvarla(fiyat) == kurusaYuvarla(mevcut.sutFiyat)) continue;
         kaydedilecek.add(CariFiyat(
           cariId: cari.id!,
           ay: _anahtar,

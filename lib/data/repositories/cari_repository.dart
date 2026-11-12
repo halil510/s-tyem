@@ -118,8 +118,11 @@ class CariRepository {
   /// silinir. Hareketi olan bir cari için önce [hareketSayilari] ile
   /// kullanıcı uyarılmalı ve [pasifeAl] önerilmelidir.
   /// Kapalı bir dönemde kaydı olan cari silinemez ([DonemKapaliHatasi]).
-  Future<int> delete(int id) =>
-      donemKilidiyle(() => db.delete('cariler', where: 'id = ?', whereArgs: [id]));
+  /// Rotadaki cari silinince kalanlar 1..N boşluksuz yeniden numaralanır (kural 16).
+  Future<int> delete(int id) => donemKilidiyle(() => db.transaction((txn) async {
+        await _siraAta(txn, id, null);
+        return txn.delete('cariler', where: 'id = ?', whereArgs: [id]);
+      }));
 
   /// Carinin kaç süt / yem / ödeme-tahsilat kaydı olduğunu döner.
   Future<({int sut, int yem, int odeme})> hareketSayilari(int id) async {

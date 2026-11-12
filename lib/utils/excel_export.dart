@@ -448,7 +448,7 @@ class ExcelExport {
         ('Toplam Tahsilat (Alacak)', toplamTahsilat),
         ('Toplam Yem (Borç)', toplamYem),
         ('Toplam Ödeme (Borç)', toplamOdeme),
-        ('${ekstreBakiyeEtiketi(filtreli: filtreli)} (${ekstreDurumu(kalanBakiye)})', kalanBakiye),
+        (filtreli ? '${ekstreBakiyeEtiketi(filtreli: true)} (dönemin net etkisi)' : '${ekstreBakiyeEtiketi(filtreli: false)} (${ekstreDurumu(kalanBakiye)})', kalanBakiye),
       ];
       for (var i = 0; i < ozet.length; i++) {
         final son = i == ozet.length - 1;
