@@ -2,7 +2,7 @@
 -- SÜTYEM PRO — Supabase (PostgreSQL) şeması
 -- =====================================================================
 -- Kaynak: lib/core/database/migrations/ (SQLite, şu an v11)
--- Bu dosyanın karşılık geldiği yerel şema sürümü: v12
+-- Bu dosyanın karşılık geldiği yerel şema sürümü: v13
 --
 -- GENEL KURAL: Uygulamaya yeni tablo / sütun / index eklendiğinde
 -- (yeni migration yazıldığında) bu dosya AYNI commit'te güncellenir.
@@ -52,6 +52,7 @@ create table if not exists public.cariler (
   aktif        boolean not null default true,
   not_metni    text,
   sira         integer check (sira is null or sira >= 1),  -- v12: toplama rotası (null = sırasız)
+  uuid         text,          -- v13: cihazlar arası kimlik (çoklu cihaz)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id)
@@ -71,6 +72,8 @@ create table if not exists public.sutler (
   aksam        numeric(10,2) not null default 0 check (aksam  >= 0 and aksam  <= 20000),
   toplam       numeric(10,2) not null default 0 check (toplam >= 0),
   aciklama     text,
+  sabah_zaman  text,          -- v13: sabah öğününün son değişikliği (öğün bazında birleşme)
+  aksam_zaman  text,          -- v13: akşam öğününün son değişikliği
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id),
@@ -95,6 +98,7 @@ create table if not exists public.yemler (
   tavuk_yemi   numeric(10,2) not null default 0 check (tavuk_yemi  >= 0),
   toplam       numeric(10,2) not null default 0 check (toplam      >= 0),
   aciklama     text,
+  uuid         text,          -- v13: cihazlar arası kimlik (çoklu cihaz)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id),
@@ -113,6 +117,7 @@ create table if not exists public.fiyatlar (
   birim_fiyat  numeric(12,4) not null default 0 check (birim_fiyat >= 0),
   tarih        date   not null,
   aciklama     text,
+  uuid         text,          -- v13: cihazlar arası kimlik (çoklu cihaz)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id)
@@ -138,6 +143,7 @@ create table if not exists public.cari_odemeler (
   aciklama     text,
   detay_json   jsonb,
   vade_tarihi  date,
+  uuid         text,          -- v13: cihazlar arası kimlik (çoklu cihaz)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id),
@@ -373,8 +379,11 @@ end $$;
 -- v10 tarih indeksleri: sutler(tarih) [zaten vardı], yemler(tarih), cari_odemeler(tarih)
 -- v11 cari_fiyatlar.ay 'yyyy-MM-dd' de olabilir (ay ortası fiyat); dönem kilidi left(ay, 7)
 -- v12 cariler.sira (süt toplama rotası; 1..N boşluksuz, pasifte null)
+-- v13 çoklu cihaz: cariler/fiyatlar/yemler/cari_odemeler.uuid, sutler.sabah_zaman/aksam_zaman,
+--     senk_* tabloları (cihaza özel, buluta bu dosyayla taşınmaz — bulut: sutyem_bulut_sema.sql)
 -- 2026-11-04  Dosya ilk kez oluşturuldu (yerel şema v8).
 -- 2026-11-04  v9 eklendi (dönem kapanışı / hakediş).
 -- 2026-11-04  v11 eklendi (o günden itibaren geçerli fiyat).
 -- 2026-11-05  v12 eklendi (cariler.sira — toplama rotası).
+-- 2026-11-12  v13 eklendi (çoklu cihaz / bulut senkronu).
 -- =====================================================================

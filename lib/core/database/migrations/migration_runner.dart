@@ -14,6 +14,7 @@ import 'migration_v9_donemler.dart';
 import 'migration_v10_tarih_indeksleri.dart';
 import 'migration_v11_gunluk_fiyat.dart';
 import 'migration_v12_cari_sira.dart';
+import 'migration_v13_senkron.dart';
 
 /// ─────────────────────────────────────────────────────────────
 /// MIGRATION RUNNER
@@ -53,6 +54,7 @@ class MigrationRunner {
     MigrationV10TarihIndeksleri(),
     MigrationV11GunlukFiyat(),
     MigrationV12CariSira(),
+    MigrationV13Senkron(),
   ]..sort((a, b) => a.version.compareTo(b.version));
 
   /// Bu örneğin uygulayacağı migration listesi. Uygulamada daima [_all];

@@ -87,10 +87,23 @@
 18. **Süt sekmesi "alındı" tiki** saklanmaz, bugünkü süt satırından hesaplanır (`sut_toplama_durumu.dart`):
     saat < 12 → sabah kg > 0, sonra → akşam kg > 0. Saat ayrımı `aksamBaslangicSaati`. Yalnız Süt sekmesinde.
 
+19. **Çoklu cihaz / bulut (v13, `lib/senkron/`):** her ekleme/düzeltme/silme TETİKLEYİCİYLE `senk_gunluk`'e
+    yazılır — repository'ler senkronu bilmez, değiştirmeye gerek yok. Kurallar:
+    - Yeni EŞİTLENECEK tablo = `senk_tablolari.dart` listesine ekle (ebeveyn önce) + migration'da
+      `senkTetikleyicileriKur` yeniden çağır; tek-satırlık (UNIQUE) tablo ise `dogalAnahtarlar`'a yaz.
+    - Yeni TARİHLİ tablonun dönem kilidi `donemKilitleriniKur` gibi "uzaktan uygulanıyorsa çalışma" istisnalı olmalı.
+    - Süt satırı ÖĞÜN BAZINDA birleşir (`sabah_zaman`/`aksam_zaman`, tetikleyici doldurur). Süt yazan yeni kod
+      bu sütunlara dokunmasın.
+    - Yedekten TAM geri yükleme günlüğe yazmaz (`senk_durum.kapali`) ve sonra `SenkCekirdek.tabanYenile`;
+      .db dosyası değişince `senkTabanBayragi` → bir sonraki başlangıçta taban. Yeni bir "veriyi topluca
+      değiştir" yolu eklenirse bunlardan birini kullan.
+    - `senk_ayarlar` (bulut şifresi…) yedeğe GİRMEZ, eşitlenmez. Cihaz kimliği SharedPreferences `sutyem_cihaz_id`.
+    - Bulut SQL: `supabase/sutyem_bulut_sema.sql` (ayrı Supabase projesi). `supabase_sema.sql` yalnız şema aynası.
+
 ## Testler
 
 ```bash
-flutter test          # 357 test — hepsi geçmeli
+flutter test          # 382 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -678,6 +691,36 @@ Kullanıcı isteği: "Fırın ERP'deki raporlar gibi süt-yem'de de raporlar ekr
 - Veritabanı / Supabase şeması DEĞİŞMEDİ. Test: `test/features/rapor_test.dart` (9: ay ortası fiyat, ekstre ve
   tumKalanBorclar ile kuruşu kuruşuna aynı, bakiye listesi tarihli, ekstre devir/yürüyen, eksik fiyat, yenilenme,
   Excel/PDF, 360 px'te 12 raporun hepsi hatasız). Testler: **366/366**.
+
+### 2026-11-12 (2) — Çoklu cihaz ve bulut (B11, Fırın ERP / market yapısından) · sürüm 1.2.0+9
+
+Kullanıcı isteği: "Fırın ERP'deki gibi çoklu cihaz ve bulut; bulut AYRI; internetli ya da internetsiz;
+menüde Fiş Yazıcısı'nın altında; SQL'i metin dosyası olarak ver." ⋮ menü → **Çoklu Cihaz ve Bulut**.
+- **Migration v13** (`migration_v13_senkron.dart`): cariler/fiyatlar/yemler/cari_odemeler `uuid`; sutler
+  `sabah_zaman`/`aksam_zaman`; `senk_gunluk/durum/kanallar/bekleyen/hatalar/eksik_ref/ayarlar`; tüm senkron ve
+  öğün tetikleyicileri; dönem kilitleri "uzaktan uygulanıyorsa çalışma" istisnasıyla yeniden kuruldu; mevcut veri
+  taban zamanla günlüğe (ilk eşitlemede karşıya gider).
+- `lib/senkron/`: `senk_tablolari` (8 tablo; doğal anahtar: cari_fiyatlar=cari|ay, sutler=cari|tarih,
+  donemler=ay, donem_hakedisleri=dönem|cari), `senk_cekirdek` (Fırın çekirdeği + **süt öğün birleşmesi** + rota
+  1..N düzeltme), `bulut_kanali` (Supabase RPC `sutyem_*` + market'teki **saat farkı** ölçümü — 5 dk üstü ekranda
+  uyarı), `yerel_ag_kanali` (internetsiz; port **8767**, 6 haneli kod, 5 hatalı denemede 5 dk engel),
+  `senkron_yoneticisi` (önce AL sonra GÖNDER; dakikada bir + açılış + öne gelme + arka plana geçiş),
+  `senkron_ekrani`, `otomatik_esitleyici` (AnaEkran'ı sarar).
+- Eşitlenmeyen: terazi listesi, islem_gecmisi (her telefonun kendi denetim izi), senk_ayarlar.
+- Yedek: tam JSON geri yükleme günlüğe yazmaz + taban (diğer telefonlardan silmez, onların kayıtları geri gelir);
+  çoklu cihaz öncesi (uuid'siz) yedek, eşitlenen telefona YÜKLENMEZ (cariler ikilenirdi). .db geri yükleme →
+  `senkTabanBayragi`. "Süt/yem kayıtlarını sil" onayına "diğer telefonlardan da silinir" uyarısı.
+- `supabase/sutyem_bulut_sema.sql` (yeni; pubspec asset → ekrandan paylaş/kopyala) — tek genel tablo
+  `sutyem_kayitlar` (jsonb), RLS açık + doğrudan erişim yok, yalnız işletme kodu/şifresi doğrulayan fonksiyonlar.
+  `supabase_sema.sql` aynasına v13 sütunları; `supabase_sema_test` senk_* tablolarını cihaza özel sayar.
+- `http` paketi eklendi. Release APK derlendi (82.3 MB, kalıcı anahtar).
+- Testler: `test/senkron/` — senkron_test (10: tam aktarım+bakiye, A sabah/B akşam birleşme, üç telefon ters sıra,
+  0'a düzeltme, silme yayılması, kapalı dönem, rota çakışması, JSON geri yükleme silmez, uuid'siz yedek engeli,
+  v12→v13 taban), senkron_ag_test (5: sahte Supabase uçtan uca + öğün birleşmesi, saat farkı, gizli anahtar,
+  ayarlar yedekte yok, gerçek HTTP yerel ağ), senkron_ekrani_test (360 px). **382/382**.
+- Bilerek böyle: iki telefon aynı cari FİYATINI aynı anda farklı değiştirirse son değiştiren kalır (satır bazında).
+  Aynı kişi iki telefonda AYRI ayrı cari olarak açılırsa iki cari olur → önce carileri tek telefonda girip eşitleyin.
+- Gerçek Supabase'de ve iki gerçek telefonda henüz DENENMEDİ.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
@@ -745,7 +788,7 @@ Kullanıcı isteği: "Fırın ERP'deki raporlar gibi süt-yem'de de raporlar ekr
 - [x] B8. Üretici fişi: Bluetooth termal yazıcı (ayrı kanal, teraziyi koparmaz) + WhatsApp. Ayrıntı: oturum günlüğü (8). **Gerçek yazıcıyla denenmedi.**
 - [ ] B9. İşlem geçmişi ekranı (denetim izi).
 - [ ] B10. Ayarlar (işletme bilgisi, şifre, dönem tipi, kesinti oranları, otomatik yedek).
-- [ ] B11. Bulut senkron (Supabase) — en son.
+- [x] B11. Çoklu cihaz + bulut (Supabase) + internetsiz yerel ağ — 2026-11-12 (2). Gerçek Supabase / iki telefonla denenecek.
 
 **C. Mevcut ekranların yenilenmesi**
 - [x] C1. Özet: bugün sabah/akşam, dün, gelen üretici sayısı, bugün gelmeyenler (dokununca süt girişi), dönem kapatma hatırlatması. Ayrıntı: oturum günlüğü (9).

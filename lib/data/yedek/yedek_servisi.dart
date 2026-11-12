@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../../senkron/senk_cekirdek.dart';
+
 /// Yedek okunamadığında / uygulanamadığında fırlatılır. Mesaj doğrudan
 /// kullanıcıya gösterilebilir. Bu hata fırlatıldığında veritabanında
 /// HİÇBİR değişiklik yapılmamış olur (transaction geri alınır).
@@ -168,6 +170,22 @@ class YedekServisi {
 
     return db.transaction((txn) async {
       if (tamamenDegistir) {
+        // ÇOKLU CİHAZ: çoklu cihaz öncesi (v13'ten eski) yedekte cari kimliği (uuid) yoktur;
+        // bulut/yerel ağa bağlı telefona yüklenirse cariler yeni kimlik alır ve diğer
+        // telefonlarda İKİŞER görünür. Bu durumda yükleme yapılmaz.
+        final cariler = veri['cariler'];
+        final kimliksiz = cariler is List && cariler.isNotEmpty && (cariler.first as Map)['uuid'] == null;
+        if (kimliksiz && await _senkronBagliMi(txn)) {
+          throw const YedekHatasi(
+            'Bu yedek çoklu cihaz özelliğinden ÖNCEKİ bir sürümden. Bu telefon bulut/yerel ağ ile '
+            'eşitlendiği için yüklenirse cariler diğer telefonlarda iki kez görünür. Yükleme durduruldu. '
+            'Yeni sürümle alınmış bir yedek kullanın.',
+          );
+        }
+        // Geri yükleme senkron günlüğüne YAZILMAZ (yazılsaydı yedekte olmayan, başka telefonlarda
+        // sonradan girilmiş her kayıt "silindi" sayılıp onlardan da silinirdi). Bitince günlük taban
+        // zamanla yeniden kurulur: diğer telefonlardaki daha yeni kayıtlar buraya geri gelir.
+        await txn.rawUpdate('UPDATE senk_durum SET kapali = 1 WHERE tek = 1');
         // Kapalı dönem kilidi (tetikleyiciler) silmeyi engellemesin; yedekteki
         // dönem durumları aşağıda yeniden yazılır.
         await txn.update('donemler', {'durum': 'acik'});
@@ -196,8 +214,22 @@ class YedekServisi {
         }
         sayilar[tablo] = satirlar.length;
       }
+      if (tamamenDegistir) {
+        await SenkCekirdek.tabanYenile(txn);
+        await txn.rawUpdate('UPDATE senk_durum SET kapali = 0 WHERE tek = 1');
+      }
       return YedekOzeti(sayilar);
     });
+  }
+
+  /// Bu telefon bulut ya da yerel ağ eşitlemesine bağlı mı?
+  static Future<bool> _senkronBagliMi(DatabaseExecutor txn) async {
+    final r = await txn.rawQuery(
+        "SELECT COUNT(*) AS n FROM senk_ayarlar WHERE (anahtar = 'bulut_url' AND COALESCE(deger, '') <> '') OR (anahtar = 'lan_rol' AND deger IN ('ana', 'bagli'))");
+    if (((r.first['n'] as int?) ?? 0) > 0) return true;
+    // Hiç eşitleme yapılmış mı (ayar silinmiş olsa da kanal sayacı ilerlemiş)?
+    final k = await txn.rawQuery('SELECT COUNT(*) AS n FROM senk_kanallar WHERE son_cekilen > 0 OR son_gonderilen > 0');
+    return ((k.first['n'] as int?) ?? 0) > 0;
   }
 
   static Future<Set<String>> _kolonlar(DatabaseExecutor db, String tablo) async {

@@ -2,7 +2,7 @@ name: sutyem_pro
 description: "Sütyem Pro - Cari bazlı kayıt sistemi"
 publish_to: "none"
 
-version: 1.1.6+8
+version: 1.2.0+9
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -35,6 +35,7 @@ dependencies:
 
   flutter_localizations:
     sdk: flutter
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +54,7 @@ flutter:
   assets:
     - assets/images/
     - assets/fonts/
+    - supabase/sutyem_bulut_sema.sql # Çoklu Cihaz ekranından paylaşılır/kopyalanır
     - assets/sounds/bip.mp3
     # assets/db/sut_yem.db kaldırıldı: kodda hiç okunmuyordu ve gerçek
     # müşteri isimlerini her APK'nın içine gömüyordu (kişisel veri).

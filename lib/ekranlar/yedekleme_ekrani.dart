@@ -16,6 +16,7 @@ import '../data/yedek/otomatik_yedek.dart';
 import 'otomatik_yedekler_ekrani.dart';
 import '../core/providers/veri_surumu_provider.dart';
 import '../core/providers/database_provider.dart';
+import '../senkron/senkron_yoneticisi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class YedeklemeEkrani extends StatefulWidget {
@@ -348,9 +349,13 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   /// kullanması için veritabanı sağlayıcısını yeniler.
   void _veritabaniniYenidenAc() {
     if (!mounted) return;
-    ProviderScope.containerOf(context, listen: false).invalidate(databaseProvider);
+    final kap = ProviderScope.containerOf(context, listen: false);
+    kap.invalidate(databaseProvider);
     veriDegistiBildir(context);
     _istatistikYenile();
+    // Çoklu cihaz: senkron yeni dosyayla (günlük tabandan kurularak) yeniden başlar.
+    SenkronYoneticisi().veritabaniDegisti();
+    kap.read(databaseProvider.future).then(SenkronYoneticisi().baslat).catchError((_) {});
   }
 
   Future<bool> _checkImportPermission() async {
@@ -435,6 +440,12 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
               '• Cari kayıtları: KORUNACAK\n\n'
               'Bu işlem geri alınamaz!',
               style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '☁️ Bu telefon bulut ya da yerel ağ ile eşitleniyorsa süt ve yem kayıtları '
+              'DİĞER TELEFONLARDAN DA silinir.',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.deepOrange),
             ),
             const SizedBox(height: 10),
             const Text('Devam etmek için şifreyi giriniz:'),

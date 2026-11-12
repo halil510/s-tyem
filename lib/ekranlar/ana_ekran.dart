@@ -18,6 +18,8 @@ import '../features/donem/donem_ekrani.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/cari/cari_excel_ekrani.dart';
 import '../features/raporlar/rapor_ekrani.dart';
+import '../senkron/otomatik_esitleyici.dart';
+import '../senkron/senkron_ekrani.dart';
 import 'cari/pasif_cariler_ekrani.dart';
 import 'cari/toplama_sirasi_ekrani.dart';
 import '../widgetlar/otomatik_yedekleyici.dart';
@@ -62,7 +64,7 @@ class _AnaEkranState extends State<AnaEkran> {
         });
         return child!;
       },
-      child: OtomatikYedekleyici(child: _sekmeler(context)),
+      child: OtomatikYedekleyici(child: OtomatikEsitleyici(child: _sekmeler(context))),
     );
   }
 
@@ -120,6 +122,7 @@ class _AnaEkranState extends State<AnaEkran> {
             const PopupMenuDivider(),
             _menuOgesi('terazi', Icons.scale_outlined, Colors.teal[700], 'Terazi Bağlantısı'),
             _menuOgesi('fis_yazici', Icons.print_outlined, Colors.teal[700], 'Fiş Yazıcısı'),
+            _menuOgesi('senkron', Icons.cloud_sync_outlined, Colors.teal[700], 'Çoklu Cihaz ve Bulut'),
             const PopupMenuDivider(),
             _menuOgesi('yedekleme', Icons.backup_outlined, Colors.grey[700], 'Yedekleme'),
           ],
@@ -141,6 +144,7 @@ class _AnaEkranState extends State<AnaEkran> {
             else if (value == 'donem') Navigator.push(context, MaterialPageRoute(builder: (_) => const DonemEkrani()));
             else if (value == 'terazi') context.push(AppRoutes.terazi);
             else if (value == 'fis_yazici') Navigator.push(context, MaterialPageRoute(builder: (_) => const FisYaziciAyarlariEkrani()));
+            else if (value == 'senkron') Navigator.push(context, MaterialPageRoute(builder: (_) => const SenkronEkrani()));
             else if (value == 'yedekleme') Navigator.push(context, MaterialPageRoute(builder: (_) => const YedeklemeEkrani()));
           },
         ),

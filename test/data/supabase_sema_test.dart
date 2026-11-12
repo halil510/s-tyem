@@ -38,7 +38,8 @@ void main() {
 
     for (final t in tablolar) {
       final tablo = t['name']! as String;
-      if (buluttaOlmayan.contains(tablo)) continue;
+      // senk_*: çoklu cihaz eşitlemesinin cihaza özel teknik tabloları (günlük, sayaçlar, ayarlar).
+      if (buluttaOlmayan.contains(tablo) || tablo.startsWith('senk_')) continue;
 
       final govde = tabloGovdesi(tablo);
       if (govde == null) {

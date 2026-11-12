@@ -2,9 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'migrations/migration_runner.dart';
+
+/// Veritabanı dosyası değiştirildi (.db geri yükleme): senkron günlüğü tabandan kurulmalı.
+const senkTabanBayragi = 'sutyem_senk_taban_gerekli';
 
 /// Bir migration (şema güncellemesi) başarısız oldu. Veritabanı dosyasına
 /// DOKUNULMADI: veriler yerinde, şema son başarılı sürümde duruyor.
@@ -241,7 +245,15 @@ class AppDatabase {
         await _acilis;
       } catch (_) {}
       await close();
-      return await islem(await _yol());
+      final sonuc = await islem(await _yol());
+      // ÇOKLU CİHAZ: dosya değişti → senkron günlüğü bir sonraki başlangıçta tabandan
+      // kurulmalı (eski dosyadaki sayaçlarla devam edilirse diğer telefonlardaki daha yeni
+      // kayıtlar bu cihaza bir daha gelmezdi). Bkz. SenkronYoneticisi.baslat.
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setBool(senkTabanBayragi, true);
+      } catch (_) {}
+      return sonuc;
     } finally {
       _degisim = null;
       kilit.complete();
