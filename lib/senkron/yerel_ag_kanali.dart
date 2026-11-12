@@ -79,13 +79,17 @@ class YerelAgSunucusu {
       var sonra = (govde['son_cekilen'] as num?)?.toInt() ?? 0;
       final sunucuSon = await c.sonGunlukId();
       if (sonra > sunucuSon) sonra = 0; // ana cihazın veritabanı yenilenmiş: baştan
-      final (giden, sonId) = await c.gonderilecekler(sonra: sonra, haricKaynak: kanal);
+      // "Tam" isteyen istemci (yedeğe dönmüş) KENDİ gönderdiklerinin son halini de geri almalı:
+      // yankı önleme o zaman uygulanmaz (yoksa yedekten sonra yaptığı değişiklikler ona hiç dönmezdi).
+      final (giden, sonId) = await c.gonderilecekler(sonra: sonra, haricKaynak: govde['tam'] == true ? null : kanal);
       cevap.write(jsonEncode({
         'kayitlar': [for (final k in giden) k.toJson()],
         'son_id': sonId,
         'sunucu_son': sunucuSon,
         'sunucu_cihaz': cihaz,
         'sunucu_ad': cihazAd,
+        // Ana cihaz yedeğe dönünce değişir → bağlı telefonlar her şeyi yeniden gönderir.
+        'sunucu_nesil': (await db.query('senk_ayarlar', where: "anahtar = 'taban_nesil'")).firstOrNull?['deger'] ?? '',
         'uygulama': sonuc.toString(),
       }));
     } catch (e) {
@@ -126,6 +130,9 @@ class AnaCihaz {
 /// İSTEMCİ — ana cihazı bulur ve onunla eşitler.
 /// ─────────────────────────────────────────────────────────────
 class YerelAgIstemcisi {
+  /// Son cevaptaki ana cihaz "taban nesli" (ana cihaz yedeğe dönünce değişir).
+  static String? sonSunucuNesil;
+
   /// Aynı ağdaki ana cihazları bulur (port 8766'da /bilgi cevaplayanlar).
   static Future<List<AnaCihaz>> tara() async {
     final ip = await yerelIp();
@@ -156,6 +163,7 @@ class YerelAgIstemcisi {
     required String cihaz,
     required int sonCekilen,
     required List<SenkKayit> giden,
+    bool tam = false,
   }) async {
     final istemci = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {
@@ -165,6 +173,7 @@ class YerelAgIstemcisi {
       rq.add(utf8.encode(jsonEncode({
         'cihaz': cihaz,
         'son_cekilen': sonCekilen,
+        'tam': tam,
         'kayitlar': [for (final k in giden) k.toJson()]
       })));
       final r = await rq.close().timeout(const Duration(seconds: 60));
@@ -177,7 +186,10 @@ class YerelAgIstemcisi {
         [for (final m in (j['kayitlar'] as List)) SenkKayit.fromJson((m as Map).cast<String, Object?>())],
         (j['son_id'] as num).toInt(),
         (j['sunucu_son'] as num).toInt(),
-        j['sunucu_cihaz'] as String,
+        () {
+          sonSunucuNesil = j['sunucu_nesil'] as String?;
+          return j['sunucu_cihaz'] as String;
+        }(),
       );
     } on SocketException {
       throw YerelAgHatasi('Ana cihaza ($adres) ulaşılamadı. Aynı WiFi\'da mı, ana cihazda uygulama açık mı?');

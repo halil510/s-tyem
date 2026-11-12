@@ -76,7 +76,12 @@ class CariFiyatRepository {
             final map = f.toMap()..remove('id');
             final guncellenen = await txn.update('cari_fiyatlar', map,
                 where: 'cari_id = ? AND ay = ?', whereArgs: [f.cariId, f.ay]);
-            if (guncellenen == 0) await txn.insert('cari_fiyatlar', map);
+            // Yeni satırda ekranın DEĞİŞTİRMEDİĞİ grup (Yem Fiyatı ekranında süt fiyatı, Süt Fiyatı
+            // ekranında yem fiyatları) yalnız kopyadır: başka telefonda girilmiş gerçek fiyatı
+            // çoklu cihaz birleşmesinde ezmesin diye zamanı "en eski" ('') verilir.
+            if (guncellenen == 0) {
+              await txn.insert('cari_fiyatlar', {...map, if (yemFiyatiniAyaYay) 'sut_zaman': '' else 'yem_zaman': ''});
+            }
             if (yemFiyatiniAyaYay && f.ay.length == 7) {
               await txn.update(
                 'cari_fiyatlar',

@@ -24,6 +24,8 @@ class SenkAyar {
   static const lanIstemciKod = 'lan_istemci_kod';
   static const lanSunucuCihaz = 'lan_sunucu_cihaz';
   static const cihazAd = 'cihaz_ad';
+  static const tamYeniden = 'tam_yeniden'; // bu telefon yedeğe döndü: yerel ağda tam eşitleme
+  static const lanSunucuNesil = 'lan_sunucu_nesil'; // ana cihazın son görülen taban nesli
 }
 
 enum SenkDurum { kapali, esitleniyor, tamam, hata }
@@ -47,6 +49,9 @@ class SenkronYoneticisi {
   String? _cihaz;
   Timer? _zamanlayici;
   bool _calisiyor = false;
+
+  /// Bulut (adres/işletme) değişince artar: sürmekte olan eski eşitleme sayaç yazmadan durur.
+  int _bulutNesil = 0;
   final sunucu = YerelAgSunucusu();
 
   /// Uzak değişiklik uygulanınca çağrılır (ekranlar yenilensin).
@@ -161,10 +166,23 @@ class SenkronYoneticisi {
   Future<int> bekletilenSayisi() async => _db == null ? 0 : (Sqflite.firstIntValue(await _db!.rawQuery('SELECT COUNT(*) FROM senk_bekleyen')) ?? 0);
   Future<void> hatalariTemizle() async => _db?.delete('senk_hatalar');
 
+  /// Ebeveyni sonradan gelen ya da hata veren bekletilmiş kayıtlar, o kanaldan yeni veri
+  /// gelmese de yeniden denenir (ör. cari başka kanaldan geldi).
+  Future<void> _bekleyenleriDene(String kanal, UygulamaSonucu alinan) async {
+    final db = _db!;
+    final n = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM senk_bekleyen WHERE kanal = ?', [kanal])) ?? 0;
+    if (n == 0) return;
+    final s = await db.transaction((txn) => SenkCekirdek(txn).uygula(const [], kanal: kanal));
+    alinan
+      ..uygulanan += s.uygulanan
+      ..bekletilen = s.bekletilen
+      ..hatali += s.hatali;
+  }
+
   Future<void> otomatikEsitle() async {
     if (_db == null || _calisiyor) return;
     try {
-      if ((await ayar(SenkAyar.lanRol)) == 'bagli') await yerelAgdaEsitle(sessiz: true);
+      if ((await ayar(SenkAyar.lanRol)) == 'bagli' && (await ayar(SenkAyar.lanAdres)) != null) await yerelAgdaEsitle(sessiz: true);
       if ((await bulutAyari()) != null && (await ayar(SenkAyar.bulutOtomatik)) != '0') await buluttaEsitle(sessiz: true);
     } catch (_) {
       // Otomatik eşitleme sessizdir; durum kartlarında hata görünür.
@@ -175,17 +193,19 @@ class SenkronYoneticisi {
 
   /// Ayarları kaydeder ve bağlantıyı dener (işletme yoksa kurar).
   Future<Map<String, Object?>> bulutBaglan(BulutAyari a, {String? isletmeAd}) async {
-    final sorun = BulutAyari.anahtarSorunu(a.anahtar);
+    final sorun = BulutAyari.adresSorunu(a.url) ?? BulutAyari.anahtarSorunu(a.anahtar);
     if (sorun != null) throw BulutHatasi(sorun);
+    // Sürmekte olan eşitleme bitince eski bulutun sayaçlarını yeni bulutun üstüne yazardı.
+    // Sürmekte olan eşitleme varsa: bulut değiştiği için o eşitleme sayaçları YAZMADAN durur (bkz. _bulutNesil).
     final kanal = BulutKanali(a);
     try {
       final r = await kanal.baglan(cihaz: cihaz, cihazAd: await cihazAdi(), isletmeAd: isletmeAd);
       saatFarki.value = kanal.saatFarki;
       final kimlik = '${BulutAyari.urlTemizle(a.url)}#${a.isletme}';
       if ((await ayar(SenkAyar.bulutKimlik)) != kimlik) {
-        await _kanal('bulut');
-        await _kanalYaz('bulut', {'son_gonderilen': 0, 'son_cekilen': 0});
-        await _db!.delete('senk_bekleyen', where: 'kanal = ?', whereArgs: ['bulut']);
+        await _bulutSayaclariniSifirla();
+      } else {
+        await _bulutSifirlandiysa(r);
       }
       await ayarYaz(SenkAyar.bulutUrl, BulutAyari.urlTemizle(a.url));
       await ayarYaz(SenkAyar.bulutAnahtar, a.anahtar.trim());
@@ -196,6 +216,22 @@ class SenkronYoneticisi {
     } finally {
       kanal.kapat();
     }
+  }
+
+  Future<void> _bulutSayaclariniSifirla() async {
+    await _kanal('bulut');
+    _bulutNesil++;
+    await _kanalYaz('bulut', {'son_gonderilen': 0, 'son_cekilen': 0});
+    await _db!.delete('senk_bekleyen', where: 'kanal = ?', whereArgs: ['bulut']);
+  }
+
+  /// Buluttaki işletme silinip aynı kodla yeniden kurulduysa (ya da bulut veritabanı
+  /// sıfırlandıysa) bu telefon her şeyini yeniden göndermeli, baştan almalı.
+  Future<void> _bulutSifirlandiysa(Map<String, Object?> baglanti) async {
+    final k = await _kanal('bulut');
+    final sonSira = (baglanti['son_sira'] as num?)?.toInt() ?? 0;
+    final sifirlandi = baglanti['yeni'] == true || sonSira < (k['son_cekilen'] as int);
+    if (sifirlandi && ((k['son_gonderilen'] as int) > 0 || (k['son_cekilen'] as int) > 0)) await _bulutSayaclariniSifirla();
   }
 
   Future<void> bulutuKapat() async {
@@ -217,6 +253,8 @@ class SenkronYoneticisi {
     final alinan = UygulamaSonucu();
     try {
       final db = _db!;
+      await _bulutSifirlandiysa(await kanal.baglan(cihaz: cihaz, cihazAd: await cihazAdi()));
+      final nesil = _bulutNesil;
       var k = await _kanal('bulut');
       // ÖNCE AL, SONRA GÖNDER: buluttaki değişiklikler önce bu telefondakilerle birleşir
       // (ör. aynı günün sütünde öğünler), sonra birleşmiş hali gider. Önce gönderilseydi bu
@@ -231,15 +269,18 @@ class SenkronYoneticisi {
           ..bekletilen = s.bekletilen
           ..hatali += s.hatali;
         sonCekilen = gelen.last.$2;
+        if (nesil != _bulutNesil) return 'Bulut değişti; eşitleme yeniden başlayacak';
         await _kanalYaz('bulut', {'son_cekilen': sonCekilen});
         if (gelen.length < 500) break;
       }
+      await _bekleyenleriDene('bulut', alinan);
       var sonGonderilen = (k = await _kanal('bulut'))['son_gonderilen'] as int;
       while (true) {
         final (giden, sonId) = await SenkCekirdek(db).gonderilecekler(sonra: sonGonderilen, haricKaynak: 'bulut');
         if (sonId == sonGonderilen) break;
         if (giden.isNotEmpty) gonderilen += await kanal.gonder(cihaz: cihaz, kayitlar: giden);
         sonGonderilen = sonId;
+        if (nesil != _bulutNesil) return 'Bulut değişti; eşitleme yeniden başlayacak';
         await _kanalYaz('bulut', {'son_gonderilen': sonGonderilen});
       }
       await SenkCekirdek(db).budama();
@@ -328,16 +369,34 @@ class SenkronYoneticisi {
       final k = await _kanal('lan');
       var sonGonderilen = k['son_gonderilen'] as int;
       var sonCekilen = k['son_cekilen'] as int;
+      // Tam eşitleme (yankı önlemesiz): bu telefon yedeğe döndüyse ya da ana cihaz yedeğe döndüyse.
+      var tam = (await ayar(SenkAyar.tamYeniden)) == '1';
       for (var tur = 0; tur < 200; tur++) {
-        final (giden, sonId) = await SenkCekirdek(db).gonderilecekler(sonra: sonGonderilen, haricKaynak: 'lan');
+        final (giden, sonId) = await SenkCekirdek(db).gonderilecekler(sonra: sonGonderilen, haricKaynak: tam ? null : 'lan');
         final (gelen, yeniCekilen, sunucuSon, sunucuCihaz) =
-            await YerelAgIstemcisi.tur(adres: adres, kod: kod, cihaz: cihaz, sonCekilen: sonCekilen, giden: giden);
+            await YerelAgIstemcisi.tur(adres: adres, kod: kod, cihaz: cihaz, sonCekilen: sonCekilen, giden: giden, tam: tam);
+        final nesil = YerelAgIstemcisi.sonSunucuNesil ?? '';
+        final eskiNesil = await ayar(SenkAyar.lanSunucuNesil);
+        if (eskiNesil != nesil) {
+          await ayarYaz(SenkAyar.lanSunucuNesil, nesil);
+          if (eskiNesil != null && !tam) {
+            // Ana cihaz yedeğe döndü: ondan baştan al, elindekileri yankısız yeniden gönder.
+            tam = true;
+            sonCekilen = 0;
+            sonGonderilen = 0;
+            await _kanalYaz('lan', {'son_cekilen': 0, 'son_gonderilen': 0});
+            continue;
+          }
+        }
         final eski = await ayar(SenkAyar.lanSunucuCihaz);
         if (eski != sunucuCihaz) {
           await ayarYaz(SenkAyar.lanSunucuCihaz, sunucuCihaz);
           if (eski != null) {
+            // Yeni ana cihaz: ondan baştan alınır VE bu telefonun eski ana cihaza gönderdiği her şey
+            // yenisine de gönderilir (yoksa yeni ana cihaz bu telefonun geçmiş kayıtlarını hiç görmezdi).
             sonCekilen = 0;
-            await _kanalYaz('lan', {'son_cekilen': 0});
+            sonGonderilen = 0;
+            await _kanalYaz('lan', {'son_cekilen': 0, 'son_gonderilen': 0});
             continue;
           }
         }
@@ -355,6 +414,8 @@ class SenkronYoneticisi {
         await _kanalYaz('lan', {'son_gonderilen': sonGonderilen, 'son_cekilen': sonCekilen});
         if (!ilerledi) break;
       }
+      await _bekleyenleriDene('lan', alinan);
+      if (tam) await ayarYaz(SenkAyar.tamYeniden, null);
       await SenkCekirdek(db).budama();
       final mesaj = '${gonderilen > 0 ? '$gonderilen gönderildi, ' : ''}${alinan.uygulanan} alındı'
           '${alinan.hatali > 0 ? ', ${alinan.hatali} sorun' : ''}';

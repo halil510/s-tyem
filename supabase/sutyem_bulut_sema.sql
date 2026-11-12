@@ -50,7 +50,7 @@ create table if not exists public.sutyem_kayitlar (
   isletme   text   not null references public.sutyem_isletmeler(kod) on delete cascade,
   tablo     text   not null,
   anahtar   text   not null,
-  veri      jsonb,                          -- silinmiş kayıtta boş
+  veri      jsonb,                          -- silinmiş kayıtta yalnız {"_tz": silmenin gerçek zamanı}
   silindi   boolean not null default false,
   -- "C" sıralaması: karşılaştırma bayt sırasıyla (cihazdaki SQLite ile AYNI sonuç).
   zaman     text collate "C" not null,      -- değişikliğin cihazdaki anı (UTC ISO)
@@ -132,7 +132,7 @@ begin
   for v_k in select * from jsonb_array_elements(p_kayitlar) loop
     insert into public.sutyem_kayitlar as f (isletme, tablo, anahtar, veri, silindi, zaman, cihaz)
     values (p_isletme, v_k->>'t', v_k->>'k',
-            case when coalesce((v_k->>'s')::boolean, false) then null else v_k->'v' end,
+            v_k->'v',   -- silmede de saklanır: süt/fiyat/cari silmesinin gerçek zamanı (_tz)
             coalesce((v_k->>'s')::boolean, false), v_k->>'z', coalesce(v_k->>'c', p_cihaz))
     on conflict (isletme, tablo, anahtar) do update
        set veri = excluded.veri, silindi = excluded.silindi, zaman = excluded.zaman, cihaz = excluded.cihaz,

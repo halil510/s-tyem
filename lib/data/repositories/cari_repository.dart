@@ -98,10 +98,17 @@ class CariRepository {
     await _numarala(txn, idler);
   }
 
+  /// Yalnız sırası DEĞİŞEN cariler güncellenir: çoklu cihazda sırası aynı kalan carinin
+  /// "değişti" sayılıp başka telefondaki eşzamanlı düzenlemesiyle yarışmasın.
   static Future<void> _numarala(Transaction txn, List<int> idler) async {
+    if (idler.isEmpty) return;
+    final mevcut = {
+      for (final r in await txn.query('cariler', columns: ['id', 'sira'], where: 'id IN (${List.filled(idler.length, '?').join(',')})', whereArgs: idler))
+        r['id'] as int: r['sira'] as int?,
+    };
     final b = txn.batch();
     for (var i = 0; i < idler.length; i++) {
-      b.update('cariler', {'sira': i + 1}, where: 'id = ?', whereArgs: [idler[i]]);
+      if (mevcut[idler[i]] != i + 1) b.update('cariler', {'sira': i + 1}, where: 'id = ?', whereArgs: [idler[i]]);
     }
     await b.commit(noResult: true);
   }

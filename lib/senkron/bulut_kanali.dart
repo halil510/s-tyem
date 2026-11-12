@@ -18,6 +18,15 @@ class BulutAyari {
 
   static String urlTemizle(String u) => u.trim().replaceAll(RegExp(r'/rest/v1/?$'), '').replaceAll(RegExp(r'/+$'), '');
 
+  /// İşletme şifresi her istekte gider: adres https olmalı (http'de şifre ağda açık gider).
+  static String? adresSorunu(String u) {
+    final a = urlTemizle(u);
+    final uri = Uri.tryParse(a);
+    if (uri == null || uri.host.isEmpty) return 'Bulut adresi geçersiz (örn. https://xxxx.supabase.co).';
+    if (uri.scheme != 'https') return 'Bulut adresi "https://" ile başlamalı; "http://" ile işletme şifresi ağda şifresiz gider.';
+    return null;
+  }
+
   /// Uygulamaya GİZLİ anahtar konmamalı (anahtar cihazdan okunabilir).
   static String? anahtarSorunu(String a) {
     final k = a.trim();
@@ -105,7 +114,15 @@ class BulutKanali {
       throw BulutHatasi('Bağlantı hatası: ${e.message}');
     }
     saatFarki = SaatFarki.hesapla(r.headers['date'], bas, DateTime.now()) ?? saatFarki;
-    if (r.statusCode >= 200 && r.statusCode < 300) return r.body.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (r.body.isEmpty) return null;
+      try {
+        return jsonDecode(utf8.decode(r.bodyBytes));
+      } on FormatException {
+        // Ör. otel/kafe WiFi giriş sayfası 200 + HTML döndürür.
+        throw const BulutHatasi('Buluttan anlaşılmayan cevap geldi. WiFi giriş sayfası açık olabilir; internet bağlantısını kontrol edin.');
+      }
+    }
     var m = utf8.decode(r.bodyBytes);
     try {
       final j = jsonDecode(m) as Map;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../../../theme/app_theme.dart';
+import '../../../utils/bt_cihaz_suzgeci.dart';
 import '../../../models/terazi_cihaz_model.dart';
 import '../providers/terazi_providers.dart';
 import '../services/terazi_baglanti_durumu.dart';
@@ -31,6 +32,39 @@ class _TeraziBaglantiEkraniProState extends ConsumerState<TeraziBaglantiEkraniPr
 
   List<BluetoothDevice> _bleCihazlar = [];
   List<Map<String, dynamic>> _classicCihazlar = [];
+
+  /// Taramada etraftaki HER cihaz (telefon, saat, kulaklık…) çıkar; isimsizler varsayılan gizli,
+  /// adı teraziye benzeyenler (HC-05, Scale, Terazi…) en üstte.
+  bool _isimsizGoster = false;
+
+  static BtCihaz _bleBt(BluetoothDevice d) =>
+      BtCihaz(ad: d.platformName.isNotEmpty ? d.platformName : d.advName, adres: d.remoteId.str);
+  static BtCihaz _klasikBt(Map<String, dynamic> d) =>
+      BtCihaz(ad: d['name']?.toString() ?? '', adres: d['address']?.toString() ?? '', eslesmis: true);
+
+  List<BluetoothDevice> get _bleSirali {
+    final m = {for (final d in _bleCihazlar) d.remoteId.str: d};
+    return [
+      for (final c in BtCihazSuzgeci.sirala(_bleCihazlar.map(_bleBt), BtAranan.terazi, isimsizleriGoster: _isimsizGoster)) m[c.adres]!,
+    ];
+  }
+
+  List<BtCihaz> get _klasikSirali =>
+      BtCihazSuzgeci.sirala(_classicCihazlar.map(_klasikBt), BtAranan.terazi, isimsizleriGoster: _isimsizGoster);
+
+  Widget? _isimsizSecenegi(Iterable<BtCihaz> cihazlar) {
+    final n = BtCihazSuzgeci.isimsizSayisi(cihazlar);
+    if (n == 0) return null;
+    return SwitchListTile(
+      key: const ValueKey('isimsizGoster'),
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      value: _isimsizGoster,
+      title: Text('İsimsiz cihazları da göster ($n)'),
+      subtitle: const Text('Terazi isimsiz görünüyorsa açın'),
+      onChanged: (v) => setState(() => _isimsizGoster = v),
+    );
+  }
   bool _taraniyor = false;
 
   @override
@@ -108,11 +142,14 @@ class _TeraziBaglantiEkraniProState extends ConsumerState<TeraziBaglantiEkraniPr
           if (mounted) setState(() => _taraniyor = false);
         }
       },
-      cihazSayisi: _bleCihazlar.length,
+      altSecenek: _isimsizSecenegi(_bleCihazlar.map(_bleBt)),
+      cihazSayisi: _bleSirali.length,
       cihazBuilder: (i) {
-        final d = _bleCihazlar[i];
+        final d = _bleSirali[i];
+        final bt = _bleBt(d);
         return _CihazSatiri(
-          ad: d.platformName.isNotEmpty ? d.platformName : '(İsimsiz cihaz)',
+          ad: bt.gorunenAd,
+          oneri: BtCihazSuzgeci.benziyor(bt.ad, BtAranan.terazi),
           altBaslik: d.remoteId.str,
           onBagla: () async {
             try {
@@ -143,13 +180,15 @@ class _TeraziBaglantiEkraniProState extends ConsumerState<TeraziBaglantiEkraniPr
           if (mounted) setState(() => _taraniyor = false);
         }
       },
-      cihazSayisi: _classicCihazlar.length,
+      altSecenek: _isimsizSecenegi(_classicCihazlar.map(_klasikBt)),
+      cihazSayisi: _klasikSirali.length,
       cihazBuilder: (i) {
-        final d = _classicCihazlar[i];
-        final ad = d['name']?.toString() ?? '(İsimsiz cihaz)';
-        final adres = d['address']?.toString() ?? '';
+        final bt = _klasikSirali[i];
+        final ad = bt.isimsiz ? bt.adres : bt.ad.trim();
+        final adres = bt.adres;
         return _CihazSatiri(
-          ad: ad,
+          ad: bt.gorunenAd,
+          oneri: BtCihazSuzgeci.benziyor(bt.ad, BtAranan.terazi),
           altBaslik: adres,
           onBagla: () async {
             try {
@@ -341,12 +380,16 @@ class _SekmeIskeleti extends StatelessWidget {
   final int cihazSayisi;
   final Widget Function(int index) cihazBuilder;
 
+  /// Tarama düğmesinin altında (ör. "İsimsiz cihazları da göster").
+  final Widget? altSecenek;
+
   const _SekmeIskeleti({
     required this.taraBaslik,
     required this.taraniyor,
     required this.onTara,
     required this.cihazSayisi,
     required this.cihazBuilder,
+    this.altSecenek,
   });
 
   @override
@@ -366,6 +409,7 @@ class _SekmeIskeleti extends StatelessWidget {
             ),
           ),
         ),
+        if (altSecenek != null) Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: altSecenek),
         Expanded(
           child: cihazSayisi == 0
               ? const Center(child: Text('Cihaz bulunamadı — taramayı deneyin'))
@@ -385,7 +429,10 @@ class _CihazSatiri extends StatelessWidget {
   final String altBaslik;
   final VoidCallback onBagla;
 
-  const _CihazSatiri({required this.ad, required this.altBaslik, required this.onBagla});
+  /// Adı teraziye benziyor (HC-05, Scale, Terazi…) → "terazi olabilir" etiketi.
+  final bool oneri;
+
+  const _CihazSatiri({required this.ad, required this.altBaslik, required this.onBagla, this.oneri = false});
 
   @override
   Widget build(BuildContext context) {
@@ -405,7 +452,14 @@ class _CihazSatiri extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(ad, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(ad, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                if (oneri)
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                    child: const Text('terazi olabilir', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600)),
+                  ),
                 Text(altBaslik, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
               ],
             ),

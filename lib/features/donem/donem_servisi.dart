@@ -145,9 +145,28 @@ class DonemServisi {
 
   /// Canlı hakediş hesabı — ekstre/bakiye ile aynı fonksiyonlar
   /// ([sutTutari], [yemTutari]) ve aynı fiyat devralma kuralı.
-  Future<List<HakedisSatiri>> hesapla(String ay, [DatabaseExecutor? ex]) async {
+  Future<List<HakedisSatiri>> hesapla(String ay, [DatabaseExecutor? ex]) => hesaplaIle(ex ?? db, ay);
+
+  /// ÇOKLU CİHAZ: kapalı aya başka telefondan GEÇ kayıt geldiğinde (o telefon kapanışı
+  /// görmeden girmişti) bu ayın ve sonraki KAPALI ayların donmuş bordrosu canlı hesapla
+  /// yeniden yazılır — bordro, bakiye ve raporlar uyuşsun. Satır silinmez (kilit), yalnız
+  /// güncellenir / yeni cari eklenir. Değişen ayları döner.
+  static Future<List<String>> bordroyuYenile(DatabaseExecutor e, String ay) async {
+    final aylar = (await e.query('donemler', where: "durum = 'kapali' AND ay >= ?", whereArgs: [ay], orderBy: 'ay'))
+        .map((r) => (ay: r['ay'] as String, id: r['id'] as int))
+        .toList();
+    for (final d in aylar) {
+      for (final s in await hesaplaIle(e, d.ay)) {
+        final m = s.toMap(d.id)..remove('id');
+        final n = await e.update('donem_hakedisleri', m, where: 'donem_id = ? AND cari_id = ?', whereArgs: [d.id, s.cariId]);
+        if (n == 0) await e.insert('donem_hakedisleri', m);
+      }
+    }
+    return [for (final d in aylar) d.ay];
+  }
+
+  static Future<List<HakedisSatiri>> hesaplaIle(DatabaseExecutor e, String ay) async {
     _ayDogrula(ay);
-    final e = ex ?? db;
     final bas = '$ay-01', bit = '$ay-31';
     final lookup = CariFiyatLookup(
         (await e.query('cari_fiyatlar')).map((m) => CariFiyat.fromMap(m)).toList());
@@ -252,7 +271,10 @@ class DonemServisi {
           final f = lookup.fiyatIcin(s.cariId, ay).toMap()
             ..remove('id')
             ..['cari_id'] = s.cariId
-            ..['ay'] = ay;
+            ..['ay'] = ay
+            // Kopya fiyat: başka telefonda bu aya GERÇEKTEN girilmiş fiyatı ezmesin (en eski zaman).
+            ..['sut_zaman'] = ''
+            ..['yem_zaman'] = '';
           await txn.insert('cari_fiyatlar', f);
         }
       }

@@ -3,6 +3,13 @@ package com.example.sut_yem_clean
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -46,6 +53,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getPairedDevices" -> getPairedDevices(result)
+                "discover" -> discover(call.argument<Int>("seconds") ?: 10, result)
                 "connect" -> {
                     val address = call.argument<String>("address")
                     if (address.isNullOrEmpty()) {
@@ -88,6 +96,66 @@ class MainActivity : FlutterActivity() {
                 }
             }
         )
+    }
+
+    /**
+     * Yakındaki KLASİK Bluetooth cihazlarını arar ([saniye] sn) — eşleşmemiş fiş yazıcıları da bulunur.
+     * Dönen liste: eşleşmişler + aramada bulunanlar: {name, address, bonded, rssi}.
+     * Eşleşmemiş klasik yazıcıya ilk yazdırmada Android eşleştirme penceresini kendisi açar.
+     */
+    private var aramaAlicisi: BroadcastReceiver? = null
+
+    private fun discover(saniye: Int, result: MethodChannel.Result) {
+        val adapter = btAdapter
+        if (adapter == null) {
+            result.error("NO_BLUETOOTH", "Bluetooth not available", null)
+            return
+        }
+        if (!adapter.isEnabled) {
+            result.error("BT_KAPALI", "Bluetooth kapalı", null)
+            return
+        }
+        val bulunan = LinkedHashMap<String, MutableMap<String, Any?>>()
+        try {
+            for (d in adapter.bondedDevices) {
+                bulunan[d.address] = mutableMapOf("name" to (d.name ?: ""), "address" to d.address, "bonded" to true, "rssi" to null)
+            }
+            aramaAlicisi?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+            val alici = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action != BluetoothDevice.ACTION_FOUND) return
+                    val d: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    if (d == null) return
+                    val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
+                    val ad = try { d.name } catch (_: SecurityException) { null } ?: intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: ""
+                    val eski = bulunan[d.address]
+                    bulunan[d.address] = mutableMapOf(
+                        "name" to (if (ad.isNotEmpty()) ad else (eski?.get("name") ?: "")),
+                        "address" to d.address,
+                        "bonded" to (eski?.get("bonded") ?: false),
+                        "rssi" to (if (rssi == Short.MIN_VALUE.toInt()) null else rssi)
+                    )
+                }
+            }
+            aramaAlicisi = alici
+            registerReceiver(alici, IntentFilter(BluetoothDevice.ACTION_FOUND))
+            adapter.cancelDiscovery()
+            adapter.startDiscovery()
+            Handler(Looper.getMainLooper()).postDelayed({
+                try { adapter.cancelDiscovery() } catch (_: Exception) {}
+                try { unregisterReceiver(alici) } catch (_: Exception) {}
+                if (aramaAlicisi === alici) aramaAlicisi = null
+                result.success(bulunan.values.toList())
+            }, saniye.coerceIn(3, 30) * 1000L)
+        } catch (e: SecurityException) {
+            result.error("IZIN", "Bluetooth arama izni verilmemiş", null)
+        } catch (e: Exception) {
+            result.error("ARAMA_HATASI", e.message, null)
+        }
     }
 
     private fun getPairedDevices(result: MethodChannel.Result) {

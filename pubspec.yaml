@@ -2,7 +2,7 @@ name: sutyem_pro
 description: "Sütyem Pro - Cari bazlı kayıt sistemi"
 publish_to: "none"
 
-version: 1.2.0+9
+version: 1.2.4+13
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -25,6 +25,9 @@ dependencies:
   url_launcher: ^6.3.0
   shared_preferences: ^2.3.2
   flutter_blue_plus: ^1.36.8
+  # USB (OTG) fiş yazıcısı — Fırın ERP'deki yerel kopya (yeni Android Gradle ile derlenir)
+  usb_serial:
+    path: packages/usb_serial
   permission_handler: ^11.3.1
   cross_file: ^0.3.3
   file_picker: ^8.0.0

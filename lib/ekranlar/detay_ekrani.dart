@@ -249,7 +249,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
       final repo = await ref.read(sutRepositoryProvider.future);
       final ayar = await FisAyarlari.yukle();
       final fis = await sutFisiOlustur(repo,
-          cari: widget.cari, tarih: sut.tarih.substring(0, 10), isletmeAdi: ayar.isletmeAdi);
+          cari: widget.cari, tarih: sut.tarih.substring(0, 10), isletmeAdi: ayar.isletmeAdi, ayar: ayar);
       if (fis == null || !mounted) return;
       await fisGoster(context, fis: fis, telefon: widget.cari.telefon);
     } catch (e) {

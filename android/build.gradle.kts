@@ -2,6 +2,10 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // usb_serial'in yerel kütüphanesi (felHR85/UsbSerial) yalnız JitPack'te (USB fiş yazıcısı).
+        maven("https://jitpack.io") {
+            content { includeGroup("com.github.felHR85") }
+        }
     }
 }
 

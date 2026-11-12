@@ -18,6 +18,11 @@ class FisSatiri {
 /// Üreticiye verilen günlük süt teslim fişi.
 class UreticiFisi {
   final String isletmeAdi;
+  final String isletmeTelefon;
+  final String isletmeAdres;
+
+  /// Fişin en altındaki yazı (Fiş Yazıcısı ayarından; boşsa yazılmaz).
+  final String altYazi;
   final int? fisNo;
   final DateTime tarih;
   final DateTime basimZamani;
@@ -30,6 +35,9 @@ class UreticiFisi {
 
   const UreticiFisi({
     required this.isletmeAdi,
+    this.isletmeTelefon = '',
+    this.isletmeAdres = '',
+    this.altYazi = 'Teşekkür ederiz',
     required this.fisNo,
     required this.tarih,
     required this.basimZamani,
@@ -54,6 +62,9 @@ class UreticiFisi {
       const FisSatiri('SÜT TESLİM FİŞİ', ortala: true, kalin: true, buyuk: true),
       if (isletmeAdi.trim().isNotEmpty)
         for (final s in sar(isletmeAdi.trim(), genislik)) FisSatiri(s, ortala: true),
+      if (isletmeAdres.trim().isNotEmpty)
+        for (final s in sar(isletmeAdres.trim(), genislik)) FisSatiri(s, ortala: true),
+      if (isletmeTelefon.trim().isNotEmpty) FisSatiri('Tel: ${isletmeTelefon.trim()}', ortala: true),
       cizgi,
       if (fisNo != null) ikili('Fiş No', '$fisNo'),
       ikili('Tarih', DateFormat('dd.MM.yyyy').format(tarih)),
@@ -66,8 +77,10 @@ class UreticiFisi {
       ikili('GÜNLÜK TOPLAM', kg(toplam), kalin: true),
       cizgi,
       ikili('Bu ay toplam', kg(buAyKg)),
-      FisSatiri.bos,
-      const FisSatiri('Teşekkür ederiz', ortala: true),
+      if (altYazi.trim().isNotEmpty) ...[
+        FisSatiri.bos,
+        for (final s in sar(altYazi.trim(), genislik)) FisSatiri(s, ortala: true),
+      ],
     ];
   }
 
@@ -155,7 +168,8 @@ class EscPos {
     return b;
   }
 
-  static List<int> fis(List<FisSatiri> satirlar, {bool turkceKodSayfasi = false, bool kes = true}) {
+  /// [besleme]: fiş sonunda kâğıdın kaç satır ilerletileceği (kesici / yırtma hizası).
+  static List<int> fis(List<FisSatiri> satirlar, {bool turkceKodSayfasi = false, bool kes = true, int besleme = 4}) {
     final b = <int>[
       _esc, 0x40, // başlat
       if (turkceKodSayfasi) ...[_esc, 0x74, 13], // kod sayfası PC857
@@ -169,7 +183,7 @@ class EscPos {
         ..add(_lf);
     }
     b.addAll([_esc, 0x61, 0, _esc, 0x45, 0, _gs, 0x21, 0]); // varsayılana dön
-    b.addAll([_esc, 0x64, 4]); // kâğıdı kesme hizasına ilerlet
+    if (besleme > 0) b.addAll([_esc, 0x64, besleme.clamp(0, 10)]); // kâğıdı kesme/yırtma hizasına ilerlet
     if (kes) b.addAll([_gs, 0x56, 0x42, 0x00]); // kesici varsa kısmi kesim
     return b;
   }

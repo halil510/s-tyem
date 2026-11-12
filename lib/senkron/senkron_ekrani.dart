@@ -106,13 +106,16 @@ class _SenkronEkraniState extends ConsumerState<SenkronEkrani> {
     setState(() => _mesgul = true);
     try {
       final m = await f();
+      if (!mounted) return; // eşitleme sürerken ekrandan çıkıldı (veri yine de yenilenir: veriGeldi)
       ref.veriDegisti();
-      if (mounted) _mesaj(m, renk: _yesil);
+      _mesaj(m, renk: _yesil);
     } catch (e) {
       if (mounted) _mesaj(e.toString(), renk: _kirmizi);
     } finally {
-      if (mounted) setState(() => _mesgul = false);
-      await _yukle();
+      if (mounted) {
+        setState(() => _mesgul = false);
+        await _yukle();
+      }
     }
   }
 
@@ -382,8 +385,11 @@ class _SenkronEkraniState extends ConsumerState<SenkronEkrani> {
               await _y.yerelAgiKapat();
               await _yukle();
             } else {
+              // Rol kaydedilir: yoksa uygulama yeniden açılınca telefon kendiliğinden yine ana cihaz olurdu.
               await _y.sunucu.durdur();
-              setState(() => _lanRol = 'bagli');
+              await _y.ayarYaz(SenkAyar.lanRol, 'bagli');
+              _y.lanDurum.value = const SenkOzet(SenkDurum.kapali, 'Ana cihaza bağlanmak için adres ve kodu girin');
+              if (mounted) setState(() => _lanRol = 'bagli');
             }
           },
         ),

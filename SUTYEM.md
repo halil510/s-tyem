@@ -99,11 +99,15 @@
       değiştir" yolu eklenirse bunlardan birini kullan.
     - `senk_ayarlar` (bulut şifresi…) yedeğe GİRMEZ, eşitlenmez. Cihaz kimliği SharedPreferences `sutyem_cihaz_id`.
     - Bulut SQL: `supabase/sutyem_bulut_sema.sql` (ayrı Supabase projesi). `supabase_sema.sql` yalnız şema aynası.
+    - GRUPLU tablolar (süt, cari fiyatı, cari — `alanGruplari`): yeni sütun bir gruba aitse oraya ekle; grup zamanını
+      tetikleyici yazar. Kopya/varsayılan değer yazan kod o grubun zamanını '' (en eski) vermeli (bkz. topluKaydet).
+    - Silme = mezar taşı (`senk_gunluk.tz`); `budama` her anahtarın son satırını (silmede mezar taşını) korur.
+    - Kalıcı test: `test/ajan_senkron/` (derin denetim) — çoklu cihaz koduna dokununca çalıştır.
 
 ## Testler
 
 ```bash
-flutter test          # 382 test — hepsi geçmeli
+flutter test          # 457 test — hepsi geçmeli
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -721,6 +725,61 @@ menüde Fiş Yazıcısı'nın altında; SQL'i metin dosyası olarak ver." ⋮ me
 - Bilerek böyle: iki telefon aynı cari FİYATINI aynı anda farklı değiştirirse son değiştiren kalır (satır bazında).
   Aynı kişi iki telefonda AYRI ayrı cari olarak açılırsa iki cari olur → önce carileri tek telefonda girip eşitleyin.
 - Gerçek Supabase'de ve iki gerçek telefonda henüz DENENMEDİ.
+
+### 2026-11-12 (3) — Çoklu cihaz DERİN DENETİMİ (4 asistan) + düzeltmeler · sürüm 1.2.1+10
+
+4 asistan (çekirdek, uygulama bağlantıları, bulut/SQL/yerel ağ, ekran/senaryo) `test/ajan_senkron/` altında 25 bulgu
+çıkardı, hepsi "BUG:" testiyle kanıtlı. **Hepsi düzeltildi; 63 asistan testi + 447 testin tamamı geçiyor.**
+1.2.0+9 hatalıydı (DAĞITILMADI); dağıtılacak sürüm 1.2.1+10.
+- v13 migration kapalı ayda yem/ödeme varsa DONEM_KAPALI ile duruyordu (uygulama açılmazdı) → eski kilit
+  tetikleyicileri uuid doldurmadan önce kaldırılıyor.
+- **Migration v14** (`migration_v14_senkron_gruplar.dart`): GRUPLU BİRLEŞME — cari_fiyatlar (sut_zaman / yem_zaman),
+  cariler (kart_zaman / rota_zaman / durum_zaman); süt öğünleri de aynı genel mekanizmada (`alanGruplari`).
+  Yem Fiyatı ekranı başka telefonun süt fiyatını, rota kaydı başka telefondaki telefon düzeltmesini / pasife almayı ezmez.
+  `senk_gunluk.tz` = silmenin gerçek zamanı (mezar taşı).
+- Silme: süt/fiyatta (`parcaliSilinir`) her grup silme anında boşalır — silmeden ESKİ değişiklik/yankı/yedek satırı
+  DİRİLTEMEZ, silmeden YENİ girilen öğün kalır; caride silmeden yeni değişiklik varsa satır bütünüyle kalır. Silme kaydı
+  bulutta da `_tz` ile saklanır (`sutyem_gonder` artık silinen kaydın verisini siler değil saklar).
+- CASCADE: cari/dönem silinirken çocuklar (süt, fiyat, hakediş) BEFORE DELETE ile DOĞRU anahtarla günlüğe; eski
+  "|tarih" anahtarı yazılmıyor. Carisi silinmiş kayıt sonsuza "bekliyor" kalmıyor (`_Atla`).
+- Kapalı dönem: uzaktan gelen SİLME kapalı aydaki kaydı / kapalı ayda kaydı olan cariyi silmez → korur, geri gönderir,
+  uyarır. Kapalı aya GEÇ kayıt gelirse kabul edilir ve `DonemServisi.bordroyuYenile` o ayın (ve sonraki kapalı ayların)
+  bordrosunu yeniden hesaplar + uyarı.
+- Çakışma: aynı öğüne / fiyata iki telefon farklı değer girerse son giren kalır ve "Eşitleme sorunları"nda Çakışma
+  notu (`senk_hatalar`, kanal `uyari`).
+- `CariRepository._numarala` yalnız sırası DEĞİŞEN carileri yazar; fiyat ekranları/dönem kapanışı kopyaladıkları
+  fiyata en eski zamanı verir.
+- Yönetici: bulut değişince sürmekte olan eşitleme sayaç yazmadan durur (`_bulutNesil`); bulutta işletme silinip
+  yeniden kurulursa (`yeni` / son_sira küçüldü) her şey yeniden gönderilir; bekletilen kayıtlar yeni veri gelmese de
+  yeniden denenir; 200 + HTML → BulutHatasi; https zorunlu.
+- Yerel ağ: yeni ana cihaza geçince gönderim sayacı da sıfır; yedeğe dönen telefon `tam_yeniden` ile "tam" ister
+  (kendi eski kayıtlarının son hali de gelir); ana cihaz yedeğe dönünce `taban_nesil` değişir → bağlı telefon her
+  şeyini yankısız yeniden gönderir. (İkisi gerçek HTTP testiyle: senkron_ag_test "YEREL AĞ: ANA/BAĞLI ... yedeğe".)
+- Ekran: "Bağlı" rolü kaydediliyor; eşitleme sürerken ekrandan çıkılınca hata yok.
+
+### 2026-11-12 (4) — Fiş yazıcısı Fırın ERP gibi: USB + fiş ayarları · sürüm 1.2.2+11 (1.2.3+12: kayıtlı yazıcı kartı "Değiştir" ile Bluetooth/USB açıklaması)
+Kullanıcı isteği: "Fırın ERP gibi Bluetooth / USB fiş ayarı". ⋮ menü → Fiş Yazıcısı.
+- **USB (OTG)** üçüncü bağlantı: `packages/usb_serial` (Fırın ERP'deki yerel kopya) + `android/build.gradle.kts` JitPack
+  (yalnız com.github.felHR85) + manifest `usb.host required=false`. Ayarda takılı USB cihazlar listelenir (VID/PID
+  saklanır); her fişte cihaz bulunur, açılır (Android ilk seferde izin sorar), 9600 baud yazılır, kapatılır.
+- Yeni ayarlar (`FisAyarlari`, SharedPreferences): işletme telefonu ve adresi, fiş alt yazısı (boşsa yok), kopya sayısı
+  (1–5), fiş sonu besleme (0–10), kesici aç/kapat, **süt kaydedince otomatik yazdır** (yalnız "Kaydet + Fiş" akışında;
+  fişe sonradan bakınca basmaz). Eski kurulumda varsayılanlar eski davranışla aynı (1 kopya, 4 satır, kes, "Teşekkür ederiz").
+- Bluetooth (klasik, `TermalYazici.kt`) ve Wi-Fi (TCP 9100) aynen duruyor; kopya/besleme/kesici hepsine uygulanır.
+- Test: `test/features/fis_yazici_ayar_test.dart` (6: ayar kaydı, kopya/besleme/kesici baytları, fiş satırları, sahte ağ
+  yazıcısıyla otomatik baskı 2 kopya, yeniden bakışta basmama, 360 px ekran + USB listesi + kopya). **453/453**.
+- Gerçek USB yazıcıyla DENENMEDİ (desteklenen: CDC, FTDI, CH34x, CP210x).
+
+### 2026-11-12 (5) — Bluetooth arama: fiş yazıcısı bulunmuyordu, terazide çok cihaz · sürüm 1.2.4+13
+Kullanıcı: "Bluetooth'ta yazıcı bulmuyor; terazide Bluetooth bir sürü isimsiz cihaz buluyor."
+- Fiş yazıcısı yalnız EŞLEŞMİŞ cihazları listeliyordu. Yeni: "Yakındaki yazıcıları ara" (10 sn klasik Bluetooth araması,
+  `MainActivity.kt` → `classic_bluetooth` kanalı `discover`; eşleşmemiş yazıcı da bulunur, ilk fişte Android eşleştirir).
+- `lib/utils/bt_cihaz_suzgeci.dart` (`BtCihazSuzgeci`): isimsiz cihazlar varsayılan GİZLİ ("İsimsiz cihazları da göster (N)"),
+  adı yazıcıya (POS, PT-, XP-, MPT…) ya da teraziye (HC-05/06, JDY, HM-10, Scale, Terazi…) benzeyenler üstte + etiket,
+  sonra eşleşmiş, sonra sinyal gücü; aynı adres tekleşir. Fiş yazıcısı ve terazi (BLE + klasik sekme) ortak kullanır.
+  Terazi BLE adı `platformName` boşsa `advName` (yayın adı).
+- Test: `test/features/bt_arama_test.dart` (3; sahte Android kanalıyla arama → PT-210 üstte → kaydedilir; 360 px'te
+  etiket taşıyordu → alt satıra alındı). **457/457**. Yalnız BLE (klasik değil) yazıcılar hâlâ desteklenmiyor.
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"

@@ -251,7 +251,7 @@ void main() {
     await fiyatTanimla(db, ali, '2026-11', sut: 20);
     await db.insert('sutler', {'cari_id': ali, 'tarih': gun, 'sabah': 50, 'aksam': 0, 'toplam': 50});
     await db.insert('yemler', {'cari_id': ali, 'tarih': gun, 'sut_yemi': 3, 'toplam': 3});
-    expect(await MigrationRunner().run(db), 1, reason: 'yalnız v13');
+    expect(await MigrationRunner().run(db), MigrationRunner.targetVersion - 12, reason: 'v13 ve sonrası');
     expect(await say(db, 'cariler WHERE uuid IS NULL'), 0);
     final x = Cihaz('X', db);
     addTearDown(x.c.dispose);

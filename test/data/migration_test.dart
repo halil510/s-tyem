@@ -37,7 +37,7 @@ void main() {
     final db = await testVeritabaniAc();
     final surum = Sqflite.firstIntValue(await db.rawQuery('PRAGMA user_version'));
     expect(surum, MigrationRunner.targetVersion);
-    expect(MigrationRunner.targetVersion, 13);
+    expect(MigrationRunner.targetVersion, 14);
 
     // İkinci çalıştırma hiçbir şey yapmamalı (idempotent).
     expect(await MigrationRunner().run(db), 0);

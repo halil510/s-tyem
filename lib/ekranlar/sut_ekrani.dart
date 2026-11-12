@@ -368,13 +368,14 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
   }
 
   /// Kaydedilen günün fişini önizletir (yazdır / WhatsApp).
-  Future<void> _fisGoster() async {
+  /// [kayittan]: süt az önce kaydedildi → "otomatik yazdır" açıksa fiş kendiliğinden basılır.
+  Future<void> _fisGoster({bool kayittan = false}) async {
     try {
       final repo = await ref.read(sutRepositoryProvider.future);
       final ayar = await FisAyarlari.yukle();
-      final fis = await sutFisiOlustur(repo, cari: widget.cari, tarih: _tarihStr, isletmeAdi: ayar.isletmeAdi);
+      final fis = await sutFisiOlustur(repo, cari: widget.cari, tarih: _tarihStr, isletmeAdi: ayar.isletmeAdi, ayar: ayar);
       if (fis == null || !mounted) return;
-      await fisGoster(context, fis: fis, telefon: widget.cari.telefon);
+      await fisGoster(context, fis: fis, telefon: widget.cari.telefon, otomatikYazdir: kayittan);
     } catch (e) {
       if (mounted) _snack('Fiş hazırlanamadı: $e', renk: Colors.red);
     }
@@ -426,7 +427,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
         SutKayitDurumu.degismedi => 'Değişiklik yok — kayıt aynı',
       };
       _snack(mesaj, renk: Colors.green[700]!);
-      if (fisVer && durum != SutKayitDurumu.silindi) await _fisGoster();
+      if (fisVer && durum != SutKayitDurumu.silindi) await _fisGoster(kayittan: true);
       if (!mounted) return;
       Navigator.pop(context, true);
     } on KayitliOgunHatasi catch (e) {
@@ -651,7 +652,7 @@ class _SutGirisSayfasiState extends ConsumerState<SutGirisSayfasi> {
                 // Gün tamamsa yalnız fiş verilir (kayıt değişmez).
                 onPressed: _kaydediliyor || _yukleniyor
                     ? null
-                    : (_gunTamam ? _fisGoster : () => _kaydet(fisVer: true)),
+                    : (_gunTamam ? () => _fisGoster() : () => _kaydet(fisVer: true)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.blue[800],
                   side: BorderSide(color: Colors.blue[700]!, width: 1.5),

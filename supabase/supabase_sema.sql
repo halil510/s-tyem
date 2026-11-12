@@ -2,7 +2,7 @@
 -- SÜTYEM PRO — Supabase (PostgreSQL) şeması
 -- =====================================================================
 -- Kaynak: lib/core/database/migrations/ (SQLite, şu an v11)
--- Bu dosyanın karşılık geldiği yerel şema sürümü: v13
+-- Bu dosyanın karşılık geldiği yerel şema sürümü: v14
 --
 -- GENEL KURAL: Uygulamaya yeni tablo / sütun / index eklendiğinde
 -- (yeni migration yazıldığında) bu dosya AYNI commit'te güncellenir.
@@ -53,6 +53,9 @@ create table if not exists public.cariler (
   not_metni    text,
   sira         integer check (sira is null or sira >= 1),  -- v12: toplama rotası (null = sırasız)
   uuid         text,          -- v13: cihazlar arası kimlik (çoklu cihaz)
+  kart_zaman   text,          -- v14: kart bilgisi grubunun son değişikliği
+  rota_zaman   text,          -- v14: rota sırası grubunun son değişikliği
+  durum_zaman  text,          -- v14: aktiflik grubunun son değişikliği
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   primary key (kullanici_id, id)
@@ -170,6 +173,8 @@ create table if not exists public.cari_fiyatlar (
   b_buyutme_fiyat   numeric(12,4) not null default 0 check (b_buyutme_fiyat   >= 0),
   kuzu_yemi_fiyat   numeric(12,4) not null default 0 check (kuzu_yemi_fiyat   >= 0),
   tavuk_yemi_fiyat  numeric(12,4) not null default 0 check (tavuk_yemi_fiyat  >= 0),
+  sut_zaman         text,      -- v14: süt fiyatı grubunun son değişikliği (gruplu birleşme)
+  yem_zaman         text,      -- v14: yem fiyatları grubunun son değişikliği
   primary key (kullanici_id, id),
   foreign key (kullanici_id, cari_id) references public.cariler (kullanici_id, id) on delete cascade,
   unique (kullanici_id, cari_id, ay)
@@ -381,9 +386,11 @@ end $$;
 -- v12 cariler.sira (süt toplama rotası; 1..N boşluksuz, pasifte null)
 -- v13 çoklu cihaz: cariler/fiyatlar/yemler/cari_odemeler.uuid, sutler.sabah_zaman/aksam_zaman,
 --     senk_* tabloları (cihaza özel, buluta bu dosyayla taşınmaz — bulut: sutyem_bulut_sema.sql)
+-- v14 cari_fiyatlar.sut_zaman/yem_zaman, cariler.kart_zaman/rota_zaman/durum_zaman (gruplu birleşme)
 -- 2026-11-04  Dosya ilk kez oluşturuldu (yerel şema v8).
 -- 2026-11-04  v9 eklendi (dönem kapanışı / hakediş).
 -- 2026-11-04  v11 eklendi (o günden itibaren geçerli fiyat).
 -- 2026-11-05  v12 eklendi (cariler.sira — toplama rotası).
 -- 2026-11-12  v13 eklendi (çoklu cihaz / bulut senkronu).
+-- 2026-11-12  v14 eklendi (gruplu birleşme zamanları, senk_gunluk.tz — çoklu cihaz derin denetimi).
 -- =====================================================================

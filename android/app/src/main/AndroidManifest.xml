@@ -31,6 +31,9 @@
         android:name="android.permission.ACCESS_COARSE_LOCATION"
         android:maxSdkVersion="30" />
 
+    <!-- Fiş yazıcısı: USB (OTG) — zorunlu değil, USB'siz telefonlara da kurulur -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <!-- WiFi izinleri -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

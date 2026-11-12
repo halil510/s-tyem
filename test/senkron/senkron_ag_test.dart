@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sutyem_pro/data/repositories/sut_repository.dart';
+import 'package:sutyem_pro/data/yedek/yedek_servisi.dart';
 import 'package:sutyem_pro/senkron/bulut_kanali.dart';
 import 'package:sutyem_pro/senkron/senk_cekirdek.dart';
 import 'package:sutyem_pro/senkron/senkron_yoneticisi.dart';
@@ -43,7 +44,7 @@ class SahteBulut {
                   (k['z'] as String).compareTo(o['z'] as String) > 0 ||
                   (k['z'] == o['z'] && (k['c'] as String).compareTo(o['c'] as String) > 0);
               if (!yeni) continue;
-              kayitlar[a] = {'t': k['t'], 'k': k['k'], 'z': k['z'], 'c': k['c'], 's': k['s'] == true, 'v': k['s'] == true ? null : k['v'], 'sira': ++sira};
+              kayitlar[a] = {'t': k['t'], 'k': k['k'], 'z': k['z'], 'c': k['c'], 's': k['s'] == true, 'v': k['v'], 'sira': ++sira};
               n++;
             }
             return http.Response(jsonEncode({'yazilan': n, 'son_sira': sira}), 200, headers: h);
@@ -176,4 +177,35 @@ void main() {
     expect((await a.query('sutler')).length, 1);
     expect((await a.query('cariler')).length, 1);
   });
+
+  /// Gerçek HTTP yerel ağ: A ana, B bağlı. A'nın girdiği yemi B düzeltir (10). Sonra [kimDoner]
+  /// eski JSON yedeğine (yem 5) döner. Bir sonraki eşitlemede ikisi de 10'da buluşmalı.
+  Future<void> yedegeDonus(String kimDoner) async {
+    final a = await cihazDb('A');
+    final ali = await cariEkle(a, ad: 'Ali');
+    await fiyatTanimla(a, ali, '2026-11', sut: 20, sutYemi: 12);
+    await a.insert('yemler', {'cari_id': ali, 'tarih': gun, 'sut_yemi': 5, 'toplam': 5});
+    final sunucu = YerelAgSunucusu();
+    await sunucu.baslat(db: a, cihaz: 'cihaz-A', cihazAd: 'Dükkan', kod: '123456');
+    addTearDown(sunucu.durdur);
+
+    final b = await cihazDb('B');
+    final y = await yonetici('B', b);
+    await y.anaCihazaBaglan('127.0.0.1', '123456');
+    final yedek = YedekServisi.coz(await YedekServisi.disaAktarJson(kimDoner == 'A' ? a : b)); // yem 5
+    await b.update('yemler', {'sut_yemi': 10, 'toplam': 10});
+    await y.yerelAgdaEsitle();
+    expect((await a.query('yemler')).single['sut_yemi'], 10.0);
+
+    await YedekServisi.iceAktar(kimDoner == 'A' ? a : b, yedek, tamamenDegistir: true);
+    expect((await (kimDoner == 'A' ? a : b).query('yemler')).single['sut_yemi'], 5.0);
+    await y.yerelAgdaEsitle();
+    await y.yerelAgdaEsitle();
+    for (final db in [a, b]) {
+      expect((await db.query('yemler')).single['sut_yemi'], 10.0, reason: '$kimDoner yedeğe döndü; düzeltme kaybolmamalı');
+    }
+  }
+
+  test('YEREL AĞ: ANA cihaz eski yedeğe dönerse bağlı telefon fark eder (taban nesli) ve son hali geri gönderir', () => yedegeDonus('A'));
+  test('YEREL AĞ: BAĞLI telefon eski yedeğe dönerse "tam" eşitlemeyle kendi gönderdiği son hali geri alır', () => yedegeDonus('B'));
 }

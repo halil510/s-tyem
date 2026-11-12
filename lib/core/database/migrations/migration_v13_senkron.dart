@@ -26,6 +26,15 @@ class MigrationV13Senkron extends Migration {
   Future<void> up(DatabaseExecutor db) async {
     Future<Set<Object?>> kolonlar(String t) async => (await db.rawQuery('PRAGMA table_info($t)')).map((c) => c['name']).toSet();
 
+    // Eski (v9/v11) dönem kilidi tetikleyicileri, KAPALI aydaki satırlara uuid yazılırken
+    // DONEM_KAPALI ile migration'ı durduruyordu → uygulama açılmıyordu. Önce kaldırılır;
+    // aşağıda donemKilitleriniKur ile (uzaktan uygulama istisnasıyla) yeniden kurulur.
+    for (final t in ['sutler', 'yemler', 'cari_odemeler', 'cari_fiyatlar']) {
+      for (final s in ['ekle', 'guncelle', 'sil']) {
+        await db.execute('DROP TRIGGER IF EXISTS trg_${t}_donem_$s');
+      }
+    }
+
     for (final t in uuidTablolari) {
       if (!(await kolonlar(t)).contains('uuid')) await db.execute('ALTER TABLE $t ADD COLUMN uuid TEXT');
       await db.execute('UPDATE $t SET uuid = lower(hex(randomblob(16))) WHERE uuid IS NULL');
@@ -172,10 +181,16 @@ String _gunlukYaz(String tablo, String anahtar, String islem) => '''
       CASE WHEN d.uygulaniyor = 1 THEN d.kaynak ELSE NULL END
     FROM senk_durum d WHERE d.tek = 1 AND d.kapali = 0;''';
 
-/// Tüm senkron tetikleyicilerini (yeniden) kurar.
+/// Tüm senkron tetikleyicilerini (yeniden) kurar. v13 ve sonraki migration'lar çağırır;
+/// grup zamanı tetikleyicileri yalnız zaman sütunu VAR olan gruplar için kurulur.
 Future<void> senkTetikleyicileriKur(DatabaseExecutor db) async {
+  Future<Set<String>> kolonlar(String t) async => (await db.rawQuery('PRAGMA table_info($t)')).map((c) => c['name'] as String).toSet();
+  const zaman = "CASE WHEN d.uygulaniyor = 1 THEN d.zaman ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END";
+  const cihaz = 'CASE WHEN d.uygulaniyor = 1 THEN d.uzak_cihaz ELSE d.yerel_cihaz END';
+  const kaynak = 'CASE WHEN d.uygulaniyor = 1 THEN d.kaynak ELSE NULL END';
+
   for (final t in senkTablolari) {
-    for (final s in ['ins', 'upd', 'upd_eski', 'del', 'uuid', 'ogun_ins', 'ogun_upd']) {
+    for (final s in ['ins', 'upd', 'upd_eski', 'del', 'uuid', 'ogun_ins', 'ogun_upd', 'grup_ins', 'grup_upd', 'cocuk_sil']) {
       await db.execute('DROP TRIGGER IF EXISTS senk_${t}_$s');
     }
     final yeni = anahtarIfadesi(t, 'NEW');
@@ -185,7 +200,14 @@ Future<void> senkTetikleyicileriKur(DatabaseExecutor db) async {
       await db.execute('CREATE TRIGGER senk_${t}_upd AFTER UPDATE ON $t BEGIN ${_gunlukYaz(t, yeni, 'y')} END');
       // Doğal anahtar değiştiyse (ör. süt satırının tarihi düzeltildi) eski anahtar silinmiş sayılır.
       await db.execute('CREATE TRIGGER senk_${t}_upd_eski AFTER UPDATE ON $t WHEN ($eski) <> ($yeni) BEGIN ${_gunlukYaz(t, eski, 's')} END');
-      await db.execute('CREATE TRIGGER senk_${t}_del AFTER DELETE ON $t BEGIN ${_gunlukYaz(t, eski, 's')} END');
+      // Ebeveyn (cari/dönem) silinirken CASCADE ile silinen satırın anahtarı artık kurulamaz
+      // ("|tarih"): onu ebeveynin BEFORE DELETE tetikleyicisi doğru anahtarla yazar.
+      final ebeveynVar = [
+        for (final c in dogalAnahtarlar[t]!)
+          if (iliskiSutunlari[c] != null) 'EXISTS (SELECT 1 FROM ${iliskiSutunlari[c]} WHERE id = OLD.$c)',
+      ];
+      await db.execute(
+          'CREATE TRIGGER senk_${t}_del AFTER DELETE ON $t ${ebeveynVar.isEmpty ? '' : 'WHEN ${ebeveynVar.join(' AND ')}'} BEGIN ${_gunlukYaz(t, eski, 's')} END');
     } else {
       // uuid'siz eklenen satıra (repository insert'leri) uuid verilir; bu güncelleme günlüğe yazılır.
       await db.execute(
@@ -198,27 +220,43 @@ Future<void> senkTetikleyicileriKur(DatabaseExecutor db) async {
     }
   }
 
-  // Süt öğün zamanları: bu cihazda bir öğün girilince/değişince o öğünün zamanı "şimdi" olur.
+  // Ebeveyn silinmeden ÖNCE: doğal anahtarlı çocukların (süt, fiyat, hakediş) silinmesi,
+  // ebeveyn henüz varken doğru anahtarla günlüğe yazılır.
+  for (final ebeveyn in {...iliskiSutunlari.values}) {
+    final govde = StringBuffer();
+    for (final cocuk in dogalAnahtarlar.keys) {
+      for (final c in dogalAnahtarlar[cocuk]!.where((c) => iliskiSutunlari[c] == ebeveyn)) {
+        govde.write('''
+          INSERT INTO senk_gunluk (tablo, anahtar, islem, zaman, cihaz, kaynak)
+          SELECT '$cocuk', ${anahtarIfadesi(cocuk, 'x')}, 's', $zaman, $cihaz, $kaynak
+          FROM $cocuk x, senk_durum d WHERE x.$c = OLD.id AND d.tek = 1 AND d.kapali = 0;''');
+      }
+    }
+    if (govde.isEmpty) continue;
+    await db.execute('CREATE TRIGGER senk_${ebeveyn}_cocuk_sil BEFORE DELETE ON $ebeveyn BEGIN $govde END');
+  }
+
+  // Grup zamanları: bu cihazda bir grup girilince/değişince o grubun zamanı "şimdi" olur.
   // Uzaktan uygularken (zamanı karşı cihaz verir) ve yedekten geri yüklerken (kapali) dokunulmaz.
-  const yerel = "(SELECT d.uygulaniyor = 0 AND d.kapali = 0 FROM senk_durum d WHERE d.tek = 1)";
+  const yerel = '(SELECT d.uygulaniyor = 0 AND d.kapali = 0 FROM senk_durum d WHERE d.tek = 1)';
   const simdi = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
-  await db.execute('''
-    CREATE TRIGGER senk_sutler_ogun_ins AFTER INSERT ON sutler
-    WHEN $yerel AND ((COALESCE(NEW.sabah, 0) <> 0 AND NEW.sabah_zaman IS NULL) OR (COALESCE(NEW.aksam, 0) <> 0 AND NEW.aksam_zaman IS NULL))
-    BEGIN
-      UPDATE sutler SET
-        sabah_zaman = CASE WHEN COALESCE(NEW.sabah, 0) <> 0 AND NEW.sabah_zaman IS NULL THEN $simdi ELSE sabah_zaman END,
-        aksam_zaman = CASE WHEN COALESCE(NEW.aksam, 0) <> 0 AND NEW.aksam_zaman IS NULL THEN $simdi ELSE aksam_zaman END
-      WHERE rowid = NEW.rowid;
-    END''');
-  await db.execute('''
-    CREATE TRIGGER senk_sutler_ogun_upd AFTER UPDATE OF sabah, aksam ON sutler
-    WHEN $yerel AND ((NEW.sabah IS NOT OLD.sabah AND NEW.sabah_zaman IS OLD.sabah_zaman)
-                  OR (NEW.aksam IS NOT OLD.aksam AND NEW.aksam_zaman IS OLD.aksam_zaman))
-    BEGIN
-      UPDATE sutler SET
-        sabah_zaman = CASE WHEN NEW.sabah IS NOT OLD.sabah AND NEW.sabah_zaman IS OLD.sabah_zaman THEN $simdi ELSE sabah_zaman END,
-        aksam_zaman = CASE WHEN NEW.aksam IS NOT OLD.aksam AND NEW.aksam_zaman IS OLD.aksam_zaman THEN $simdi ELSE aksam_zaman END
-      WHERE rowid = NEW.rowid;
-    END''');
+  for (final e in alanGruplari.entries) {
+    final t = e.key;
+    final k = await kolonlar(t);
+    final gruplar = {for (final g in e.value.entries) if (k.contains(g.key)) g.key: g.value};
+    if (gruplar.isEmpty) continue;
+    String dolu(String c) => "(NEW.$c IS NOT NULL AND NEW.$c <> 0 AND NEW.$c <> '')";
+    String yeniGrup(String z, List<String> c) => '(NEW.$z IS NULL AND (${c.map(dolu).join(' OR ')}))';
+    String degisti(String z, List<String> c) => '((${c.map((x) => 'NEW.$x IS NOT OLD.$x').join(' OR ')}) AND NEW.$z IS OLD.$z)';
+    await db.execute('''
+      CREATE TRIGGER senk_${t}_grup_ins AFTER INSERT ON $t
+      WHEN $yerel AND (${gruplar.entries.map((g) => yeniGrup(g.key, g.value)).join(' OR ')})
+      BEGIN UPDATE $t SET ${gruplar.entries.map((g) => '${g.key} = CASE WHEN ${yeniGrup(g.key, g.value)} THEN $simdi ELSE ${g.key} END').join(', ')}
+      WHERE rowid = NEW.rowid; END''');
+    await db.execute('''
+      CREATE TRIGGER senk_${t}_grup_upd AFTER UPDATE OF ${gruplar.values.expand((c) => c).join(', ')} ON $t
+      WHEN $yerel AND (${gruplar.entries.map((g) => degisti(g.key, g.value)).join(' OR ')})
+      BEGIN UPDATE $t SET ${gruplar.entries.map((g) => '${g.key} = CASE WHEN ${degisti(g.key, g.value)} THEN $simdi ELSE ${g.key} END').join(', ')}
+      WHERE rowid = NEW.rowid; END''');
+  }
 }
