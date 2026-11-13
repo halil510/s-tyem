@@ -368,7 +368,7 @@ class CariHesapNotifier extends AsyncNotifier<void> {
 
   /// İşletmenin cariye yaptığı nakit ödeme (bakiye azalır / negatife
   /// dönebilir — fazla ödenirse cari işletmeye borçlanır).
-  Future<void> odemeYap({
+  Future<int> odemeYap({
     required int cariId,
     required double tutar,
     DateTime? tarih,
@@ -382,7 +382,7 @@ class CariHesapNotifier extends AsyncNotifier<void> {
       );
 
   /// İşletmenin cariden tahsil ettiği nakit (cari borcu azalır).
-  Future<void> tahsilatAl({
+  Future<int> tahsilatAl({
     required int cariId,
     required double tutar,
     DateTime? tarih,
@@ -395,7 +395,7 @@ class CariHesapNotifier extends AsyncNotifier<void> {
         aciklama: aciklama ?? 'Nakit tahsilat',
       );
 
-  Future<void> _hareketEkle({
+  Future<int> _hareketEkle({
     required int cariId,
     required String islemTuru,
     required double tutar,
@@ -407,7 +407,7 @@ class CariHesapNotifier extends AsyncNotifier<void> {
     }
     final yuvarli = kurusaYuvarla(tutar);
     final repo = await ref.read(cariOdemeRepositoryProvider.future);
-    await repo.insert(CariOdeme(
+    final id = await repo.insert(CariOdeme(
       cariId: cariId,
       tarih: _gunFormat.format(tarih ?? DateTime.now()),
       islemTuru: islemTuru,
@@ -417,6 +417,7 @@ class CariHesapNotifier extends AsyncNotifier<void> {
       aciklama: (aciklama == null || aciklama.trim().isEmpty) ? null : aciklama.trim(),
     ));
     veriDegisti(ref);
+    return id;
   }
 }
 

@@ -6,6 +6,9 @@ import '../../../models/cari_model.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/excel_export.dart';
 import '../../../utils/pdf_export.dart';
+import '../../fis/fis_ekranlari.dart';
+import '../../fis/fis_servisi.dart';
+import '../../fis/odeme_fisi.dart';
 import '../models/cari_hareket.dart';
 import '../providers/cari_hesap_providers.dart';
 import '../widgets/odeme_al_bottom_sheet.dart';
@@ -122,6 +125,9 @@ class _CariHesapEkstresiEkraniState extends ConsumerState<CariHesapEkstresiEkran
                             hareket: h,
                             paraFormat: _paraFormat,
                             onSil: h.silinebilir ? () => _silmeyiOnayla(h) : null,
+                            onFis: h.silinebilir && (h.tur == 'odeme' || h.tur == 'tahsilat')
+                                ? () => _odemeFisiGoster(h.kayitId!)
+                                : null,
                           ))
                       .toList(),
                 );
@@ -220,24 +226,65 @@ class _CariHesapEkstresiEkraniState extends ConsumerState<CariHesapEkstresiEkran
     if (girdi == null) return;
 
     final notifier = ref.read(cariHesapNotifierProvider.notifier);
+    final int kayitId;
     try {
       if (tahsilatMi) {
-        await notifier.tahsilatAl(
+        kayitId = await notifier.tahsilatAl(
             cariId: cariId, tutar: girdi.tutar, tarih: girdi.tarih, aciklama: girdi.aciklama);
       } else {
-        await notifier.odemeYap(
+        kayitId = await notifier.odemeYap(
             cariId: cariId, tutar: girdi.tutar, tarih: girdi.tarih, aciklama: girdi.aciklama);
       }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${_paraFormat.format(girdi.tutar)} ${tahsilatMi ? 'tahsilat' : 'ödeme'} kaydedildi'),
-      ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Kayıt yapılamadı: $e'),
         backgroundColor: AppColors.danger,
       ));
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('${_paraFormat.format(girdi.tutar)} ${tahsilatMi ? 'tahsilat' : 'ödeme'} kaydedildi'),
+      action: girdi.fisVer ? null : SnackBarAction(label: 'FİŞ', onPressed: () => _odemeFisiGoster(kayitId)),
+    ));
+    // Kayıt yapıldı; fiş hazırlanamasa bile kayıt geçerli (fiş sonradan hareket menüsünden verilebilir).
+    if (girdi.fisVer) await _odemeFisiGoster(kayitId, yeniKayit: true);
+  }
+
+  /// Ödeme/tahsilat fişi: önceki bakiye, tutar, kalan bakiye. Bakiye, ekrandaki
+  /// tarih filtresinden BAĞIMSIZ olarak tüm hareketlerden hesaplanır.
+  Future<void> _odemeFisiGoster(int kayitId, {bool yeniKayit = false}) async {
+    // autoDispose: tarih filtresi açıkken bu (filtresiz) ekstreyi izleyen yok; okuma
+    // bitene kadar dinleyici tutulur, yoksa hesaplama yarıda atılabilir.
+    final tumu = cariEkstreProvider((cariId: cariId, baslangic: null, bitis: null));
+    final dinleyici = ref.listenManual(tumu, (_, __) {});
+    try {
+      final ekstre = await ref.read(tumu.future);
+      final ayar = await FisAyarlari.yukle();
+      final fis = odemeFisiOlustur(
+        tumHareketler: ekstre.hareketler,
+        kayitId: kayitId,
+        ureticiAdi: widget.cari.tamAd,
+        isletmeAdi: ayar.isletmeAdi,
+        isletmeTelefon: ayar.isletmeTelefon,
+        isletmeAdres: ayar.isletmeAdres,
+        altYazi: ayar.altYazi,
+      );
+      if (!mounted) return;
+      if (fis == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kayıt bulunamadı (silinmiş olabilir).')));
+        return;
+      }
+      await fisGoster(context, fis: fis, telefon: widget.cari.telefon, otomatikYazdir: yeniKayit);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Fiş hazırlanamadı: $e'),
+        backgroundColor: AppColors.danger,
+      ));
+    } finally {
+      dinleyici.close();
     }
   }
 

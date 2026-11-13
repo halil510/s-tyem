@@ -12,7 +12,7 @@ import 'uretici_fisi.dart';
 /// Fişi önizler; yazıcıya basar veya WhatsApp'tan gönderir.
 /// [otomatikYazdir]: süt az önce kaydedildi → ayarda "otomatik yazdır" açık ve yazıcı seçiliyse
 /// fiş pencere açılır açılmaz basılır (yeniden bakışta basılmaz, iki kez çıkmasın).
-Future<void> fisGoster(BuildContext context, {required UreticiFisi fis, String? telefon, bool otomatikYazdir = false}) =>
+Future<void> fisGoster(BuildContext context, {required Fis fis, String? telefon, bool otomatikYazdir = false}) =>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -21,7 +21,7 @@ Future<void> fisGoster(BuildContext context, {required UreticiFisi fis, String? 
     );
 
 class _FisOnizleme extends StatefulWidget {
-  final UreticiFisi fis;
+  final Fis fis;
   final String? telefon;
   final bool otomatikYazdir;
   const _FisOnizleme({required this.fis, this.telefon, this.otomatikYazdir = false});
@@ -100,8 +100,8 @@ class _FisOnizlemeState extends State<_FisOnizleme> {
             ? const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(children: [
-                  const Expanded(
-                    child: Text('Üretici Fişi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Expanded(
+                    child: Text(widget.fis.baslik, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
                   IconButton(
                     tooltip: 'Yazıcı ayarları',

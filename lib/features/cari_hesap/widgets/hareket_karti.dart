@@ -14,11 +14,15 @@ class HareketKarti extends StatelessWidget {
   final NumberFormat paraFormat;
   final VoidCallback? onSil;
 
+  /// Ödeme/tahsilat satırı için fişi (yeniden) basma.
+  final VoidCallback? onFis;
+
   const HareketKarti({
     super.key,
     required this.hareket,
     required this.paraFormat,
     this.onSil,
+    this.onFis,
   });
 
   @override
@@ -79,7 +83,7 @@ class HareketKarti extends StatelessWidget {
               ),
             ),
           ),
-          if (onSil != null)
+          if (onSil != null || onFis != null)
             IconButton(
               icon: const Icon(Icons.more_vert, size: 18),
               onPressed: () => _menuGoster(context),
@@ -95,6 +99,16 @@ class HareketKarti extends StatelessWidget {
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
+            if (onFis != null)
+              ListTile(
+                leading: const Icon(Icons.print_rounded, color: AppColors.primary),
+                title: const Text('Fiş Ver (yazdır / WhatsApp)'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onFis?.call();
+                },
+              ),
+            if (onSil != null)
             ListTile(
               leading: const Icon(Icons.delete_outline, color: AppColors.danger),
               title: const Text('Sil'),

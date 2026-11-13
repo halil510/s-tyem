@@ -15,8 +15,20 @@ class FisSatiri {
   static const bos = FisSatiri('');
 }
 
+/// Yazıcıya basılabilen / WhatsApp'tan gönderilebilen her fiş.
+abstract interface class Fis {
+  /// Önizleme penceresinin başlığı ("Üretici Fişi", "Ödeme Fişi"...).
+  String get baslik;
+  List<FisSatiri> satirlar(int genislik);
+  String whatsappMetni({int genislik = 32});
+}
+
+/// WhatsApp için: tek aralıklı (```) blok, yazıcıyla aynı düzen.
+String fisWhatsappMetni(Fis fis, int genislik) =>
+    '```\n${fis.satirlar(genislik).map((s) => s.ortala ? ortalaMetin(s.metin, genislik) : s.metin).join('\n')}\n```';
+
 /// Üreticiye verilen günlük süt teslim fişi.
-class UreticiFisi {
+class UreticiFisi implements Fis {
   final String isletmeAdi;
   final String isletmeTelefon;
   final String isletmeAdres;
@@ -52,7 +64,11 @@ class UreticiFisi {
   static final _kg = NumberFormat('#,##0.##', 'tr_TR');
   static String kg(double v) => '${_kg.format(v)} kg';
 
+  @override
+  String get baslik => 'Üretici Fişi';
+
   /// [genislik]: satırdaki karakter sayısı (58 mm ≈ 32, 80 mm ≈ 48).
+  @override
   List<FisSatiri> satirlar(int genislik) {
     final cizgi = FisSatiri('-' * genislik);
     FisSatiri ikili(String sol, String sag, {bool kalin = false}) =>
@@ -84,9 +100,8 @@ class UreticiFisi {
     ];
   }
 
-  /// WhatsApp için: tek aralıklı (```) blok, yazıcıyla aynı düzen.
-  String whatsappMetni({int genislik = 32}) =>
-      '```\n${satirlar(genislik).map((s) => s.ortala ? ortalaMetin(s.metin, genislik) : s.metin).join('\n')}\n```';
+  @override
+  String whatsappMetni({int genislik = 32}) => fisWhatsappMetni(this, genislik);
 }
 
 /// Sol metni sola, sağ metni sağa yaslar; sığmazsa sol kısaltılır.

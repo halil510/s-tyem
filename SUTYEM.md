@@ -127,6 +127,7 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/services/toplu_mesaj_test.dart` | Telefon biçimi, toplu gönderim sayımı, haftalık süt toplamı, yem dökümü, rapor diyaloğu |
 | `test/features/donem_test.dart` | Hakediş hesabı, kapatma kilidi (süt/yem/ödeme/fiyat/cari silme), fiyat sabitleme, yeniden açma, yedek |
 | `test/donem_ekrani_test.dart` | Dönem ekranı: kapat → kilitli → gerekçeyle yeniden aç |
+| `test/features/odeme_fisi_test.dart` | Ödeme/tahsilat fişi: önceki bakiye + hareket = kalan, aynı gün sırası, 32/40/48 karakter sığma |
 | `test/features/fis_test.dart` | Fiş düzeni (58/80 mm), ESC/POS baytları, Türkçe harf çevirisi/CP857, yazıcı kanalı, fiş verisi |
 | `test/features/dashboard_test.dart` | Gelmeyen üreticiler kuralı, bugün sabah/akşam/dün, buzağı yemi dilimi, dönem hatırlatması |
 | `test/dashboard_ekrani_test.dart` | Özet ekranı 360 px genişlikte taşmadan çizilir |
@@ -803,6 +804,21 @@ Kullanıcı: "süt ve cari bu kısmı analiz edelim derin". Asistanlar 21 hatay�
   ileri tarihli taslak bugüne uygulanmaz; Hızlı Süt "Kayıtlı/Boş" yalnız aktif carileri sayar; Süt Ekle'de tarih
   değişince kaydedilmemiş miktar için onay sorulur; Süt sekmesi özet satırı 360 px ×1.5'te taşmıyor.
 - **524/524** test geçti; `dart analyze` 0 hata.
+
+### 2026-11-13 (2) — Ödeme / Tahsilat fişi · sürüm 1.2.6+15
+Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yok; önceki borç veya alacak, ödeme, kalan bakiye."
+- `lib/features/fis/odeme_fisi.dart`: `OdemeFisi` (ÖDEME FİŞİ / TAHSİLAT FİŞİ) — Önceki Alacağınız/Borcunuz, Ödenen (−) /
+  Tahsil Edilen (+), açıklama, KALAN ALACAĞINIZ/BORCUNUZ (sıfırsa "HESAP KAPANDI"), Teslim Eden / Teslim Alan imza yeri.
+  Tutarlar "TL" (yazıcı ₺ basamıyor). Geçmiş fiş yeniden basılırken sonradan hareket varsa "Bugünkü ..." satırı da çıkar.
+- `odemeFisiOlustur(tumHareketler, kayitId)`: TÜM ZAMANLAR ekstresinden (ekrandaki tarih filtresinden bağımsız) yürüyen
+  bakiye. Aynı gün içinde süt → yem → ödeme → tahsilat, sonra kayıt no sırası (günün sütü ödemeden önce sayılır).
+- Ortak `Fis` arayüzü (`uretici_fisi.dart`): `fisGoster` her fişi gösterir (başlık fişten gelir); yazdır/WhatsApp/
+  Bluetooth-Wi-Fi-USB ayarları süt fişiyle aynı.
+- Ödeme/Tahsilat penceresi: **"Onayla"** + **"Onayla + Fiş"** (fiş ayarında "otomatik yazdır" açıksa doğrudan basar).
+  Sade "Onayla" sonrası bildirimde **FİŞ** düğmesi. Hesap Ekstresi'nde ödeme/tahsilat satırı ⋮ → **"Fiş Ver"** (yeniden basım).
+- `CariHesapNotifier.odemeYap/tahsilatAl` artık yeni kaydın id'sini döndürür (fiş no).
+- Test: `test/features/odeme_fisi_test.dart` (4). **528/528** test geçti. Gerçek yazıcıyla denenmedi.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"

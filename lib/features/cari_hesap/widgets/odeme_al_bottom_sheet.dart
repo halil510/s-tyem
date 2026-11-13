@@ -8,7 +8,10 @@ class NakitHareketGirdisi {
   final double tutar;
   final DateTime tarih;
   final String? aciklama;
-  const NakitHareketGirdisi({required this.tutar, required this.tarih, this.aciklama});
+
+  /// "KAYDET + FİŞ" ile onaylandı: kayıttan sonra ödeme/tahsilat fişi gösterilir.
+  final bool fisVer;
+  const NakitHareketGirdisi({required this.tutar, required this.tarih, this.aciklama, this.fisVer = false});
 }
 
 /// Ödeme / tahsilat girişi için bottom sheet.
@@ -57,7 +60,7 @@ class _OdemeAlBottomSheetState extends State<OdemeAlBottomSheet> {
 
   bool _kapandi = false;
 
-  void _onayla() {
+  void _onayla({bool fisVer = false}) {
     // Çift dokunma: ikinci pop alttaki ekranı kapatmasın.
     if (_kapandi) return;
     final tutar = sayiCoz(_tutarCtrl.text);
@@ -76,6 +79,7 @@ class _OdemeAlBottomSheetState extends State<OdemeAlBottomSheet> {
       tutar: kurusaYuvarla(tutar),
       tarih: _tarih,
       aciklama: aciklama.isEmpty ? null : aciklama,
+      fisVer: fisVer,
     ));
   }
 
@@ -162,17 +166,36 @@ class _OdemeAlBottomSheetState extends State<OdemeAlBottomSheet> {
               onSubmitted: (_) => _onayla(),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: _onayla,
+                    child: const Text('Onayla', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
                 ),
-                onPressed: _onayla,
-                child: const Text('Onayla', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () => _onayla(fisVer: true),
+                    icon: const Icon(Icons.print_rounded, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Onayla + Fiş', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
