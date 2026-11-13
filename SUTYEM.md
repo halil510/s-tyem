@@ -818,6 +818,9 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
   Sade "Onayla" sonrası bildirimde **FİŞ** düğmesi. Hesap Ekstresi'nde ödeme/tahsilat satırı ⋮ → **"Fiş Ver"** (yeniden basım).
 - `CariHesapNotifier.odemeYap/tahsilatAl` artık yeni kaydın id'sini döndürür (fiş no).
 - Test: `test/features/odeme_fisi_test.dart` (4). **528/528** test geçti. Gerçek yazıcıyla denenmedi.
+- **APK adı:** `android/app/build.gradle.kts` sonunda `assembleRelease` sonrası `build/app/outputs/flutter-apk/Sutyem-<sürüm>+<N>.apk`
+  kopyası (kaynak `outputs/apk/release/app-release.apk`; `app-release.apk` adı KALIR, Flutter onu arar). İlk derlemede
+  `Sutyem-1.2.6+15.apk` (82.8 MB) çıktı, SHA-256 orijinalle aynı.
 
 ## ⚠️ Açık riskler / karar bekleyenler
 

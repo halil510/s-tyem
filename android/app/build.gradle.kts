@@ -106,3 +106,22 @@ gradle.taskGraph.whenReady {
 flutter {
     source = "../.."
 }
+
+// Release derlemesinden sonra sürüm numaralı kopya: Sutyem-1.2.6+15.apk
+// (flutter-apk klasöründe, app-release.apk'nın yanında). Orijinal ad KALIR:
+// Flutter aracı APK'yı o adla arar. Kaynak, Gradle'ın kendi çıktısı (apk/release).
+tasks.whenTaskAdded {
+    if (name == "assembleRelease") {
+        doLast {
+            val cikti = layout.buildDirectory.get().asFile
+            val kaynak = File(cikti, "outputs/apk/release/app-release.apk")
+            val hedefKlasor = File(cikti, "outputs/flutter-apk")
+            if (kaynak.exists()) {
+                hedefKlasor.mkdirs()
+                val ad = "Sutyem-${flutter.versionName}+${flutter.versionCode}.apk"
+                kaynak.copyTo(File(hedefKlasor, ad), overwrite = true)
+                println("Sürüm adlı kopya: ${File(hedefKlasor, ad)}")
+            }
+        }
+    }
+}
