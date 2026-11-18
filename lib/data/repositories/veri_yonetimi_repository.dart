@@ -7,6 +7,16 @@ import 'donem_kilidi.dart';
 /// Yedekleme ekranındaki kayıt sayıları.
 typedef KayitSayilari = ({int cari, int sut, int yem, int odeme});
 
+/// Veritabanı temizliğinin kapsamı (Fırın ERP ile aynı yapı, 2026-11-19).
+enum TemizlikTuru {
+  /// Süt, yem, ödeme/tahsilat, dönem kapanışları silinir; cariler ve fiyatlar KALIR.
+  hareketler,
+
+  /// SIFIRDAN BAŞLA: hareketler + cariler, cari fiyatları, piyasa fiyat notları.
+  /// Ayarlar (şifre, aktivasyon, yazıcı, terazi, eşitleme) ve işlem geçmişi KALIR.
+  hepsi,
+}
+
 /// Toplu veri işlemleri: kayıt sayıları, yedek alma/yükleme, süt ve yem
 /// kayıtlarını temizleme, dışarıdan seçilen .db dosyasını doğrulama.
 /// Ekranlar bu işler için doğrudan SQL yazmaz.
@@ -33,16 +43,56 @@ class VeriYonetimiRepository {
   /// Tüm süt ve yem kayıtlarını siler (cariler, ödemeler, fiyatlar kalır).
   /// Kapalı dönemde kaydı varsa HİÇBİR ŞEY silinmez ([DonemKapaliHatasi]).
   /// Silinen satır sayıları denetim kaydına yazılır.
-  Future<({int sut, int yem})> sutVeYemSil() => donemKilidiyle(
+  /// VERİTABANI TEMİZLİĞİ (tek transaction: hata olursa hiçbir şey silinmez).
+  /// Kapatılmış dönemler de silinir (önce açılır, kilit tetikleyicileri
+  /// engellemesin). ÇAĞIRAN önce güvenlik yedeği almalıdır.
+  /// Dönüş: tablo → silinen satır sayısı.
+  Future<Map<String, int>> temizle(TemizlikTuru tur) => db.transaction((txn) async {
+        final silinen = <String, int>{};
+        await txn.update('donemler', {'durum': 'acik'});
+        final tablolar = [
+          'donem_hakedisleri',
+          'donemler',
+          'cari_odemeler',
+          'yemler',
+          'sutler',
+          if (tur == TemizlikTuru.hepsi) ...['cari_fiyatlar', 'fiyatlar', 'cariler'],
+        ];
+        for (final t in tablolar) {
+          silinen[t] = await txn.delete(t);
+        }
+        // Numaralar sıfırdan başlasın.
+        final sira = await txn.rawQuery("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'");
+        if (sira.isNotEmpty) {
+          await txn.execute(
+              "DELETE FROM sqlite_sequence WHERE name IN (${tablolar.map((t) => "'$t'").join(',')})");
+        }
+        final fk = await txn.rawQuery('PRAGMA foreign_key_check');
+        if (fk.isNotEmpty) {
+          throw StateError('Temizlik tamamlanamadı (kopuk ilişki: ${fk.first['table']}). Hiçbir kayıt silinmedi.');
+        }
+        await denetimKaydet(txn,
+            tablo: 'sutler',
+            kayitId: 0,
+            islem: 'sil',
+            oncekiDeger: {'toplu_temizlik': tur.name, ...silinen});
+        return silinen;
+      });
+
+  /// [odemelerDahil]: carilerin ödeme / tahsilat hareketleri (cari_odemeler) de
+  /// silinir (2026-11-19: yalnız süt/yem silinince ödemeler kalıp bakiyeler
+  /// anlamsızlaşıyordu). Cariler ve fiyatlar HER ZAMAN kalır.
+  Future<({int sut, int yem, int odeme})> sutVeYemSil({bool odemelerDahil = false}) => donemKilidiyle(
         () => db.transaction((txn) async {
           final sut = await txn.delete('sutler');
           final yem = await txn.delete('yemler');
+          final odeme = odemelerDahil ? await txn.delete('cari_odemeler') : 0;
           await denetimKaydet(txn,
               tablo: 'sutler',
               kayitId: 0,
               islem: 'sil',
-              oncekiDeger: {'toplu_temizlik': true, 'sut_satir': sut, 'yem_satir': yem});
-          return (sut: sut, yem: yem);
+              oncekiDeger: {'toplu_temizlik': true, 'sut_satir': sut, 'yem_satir': yem, 'odeme_satir': odeme});
+          return (sut: sut, yem: yem, odeme: odeme);
         }),
       );
 

@@ -194,6 +194,8 @@ class YedekServisi {
         }
       }
 
+      if (!tamamenDegistir) await _baskaVeritabaniMi(txn, veri);
+
       final sayilar = <String, int>{};
       for (final tablo in tablolar) {
         final satirlar = veri[tablo];
@@ -220,6 +222,33 @@ class YedekServisi {
       }
       return YedekOzeti(sayilar);
     });
+  }
+
+  /// BİRLEŞTİRME güvenliği: birleştirme `id` ile eşleştirir. Yedek BAŞKA bir
+  /// veritabanından ise (ör. yeni kurulumda girilmiş cariler) aynı numaralı
+  /// cari farklı bir kişidir; birleştirilirse o kişinin adı değişir ve süt /
+  /// ödemeleri yanlış cariye geçer. Böyle bir eşleşme varsa hiçbir şey yazılmaz.
+  static Future<void> _baskaVeritabaniMi(Transaction txn, Map<String, dynamic> veri) async {
+    String ad(Map m) => '${m['ad'] ?? ''} ${m['soyad'] ?? ''}'.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    final kolonlar = await _kolonlar(txn, 'cariler');
+    final yerel = {
+      for (final r in await txn.query('cariler', columns: ['id', 'ad', 'soyad', if (kolonlar.contains('uuid')) 'uuid']))
+        r['id']: r,
+    };
+    for (final ham in veri['cariler'] as List) {
+      final y = ham as Map;
+      final l = yerel[y['id']];
+      if (l == null) continue;
+      final yu = y['uuid'], lu = l['uuid'];
+      final ayni = (yu != null && lu != null) ? yu == lu : ad(y) == ad(l);
+      if (!ayni) {
+        throw YedekHatasi(
+          'Bu yedek başka bir veritabanına ait görünüyor: ${y['id']} numaralı cari telefonda '
+          '"${ad(l)}", yedekte "${ad(y)}". Birleştirilirse kayıtlar yanlış carilere geçer; '
+          'yükleme yapılmadı. "Yedekteki hale getir" seçeneğini kullanın.',
+        );
+      }
+    }
   }
 
   /// Bu telefon bulut ya da yerel ağ eşitlemesine bağlı mı?
@@ -271,7 +300,18 @@ class YedekServisi {
     final id = satir['id'];
     final idsiz = Map<String, Object?>.from(satir)..remove('id');
 
+    // Birebir aynı satır yeniden YAZILMAZ: kapatılmış dönemdeki değişmemiş bir
+    // kayda UPDATE, dönem kilidi tetikleyicisine takılıp tüm geri yüklemeyi
+    // durduruyordu (aynı telefonun yedeğini "Birleştir" kullanılamıyordu).
+    Future<bool> ayniMi(String where, List<Object?> args) async {
+      final mevcut = await txn.query(tablo, where: where, whereArgs: args, limit: 1);
+      if (mevcut.isEmpty) return false;
+      final m = mevcut.first;
+      return idsiz.entries.every((e) => _esit(m[e.key], e.value));
+    }
+
     if (id != null) {
+      if (await ayniMi('id = ?', [id])) return;
       final guncellenen = await txn.update(tablo, idsiz, where: 'id = ?', whereArgs: [id]);
       if (guncellenen > 0) return;
     }
@@ -284,17 +324,19 @@ class YedekServisi {
       _ => const <String>[],
     };
     if (dogalAnahtar.isNotEmpty && dogalAnahtar.every((k) => satir[k] != null)) {
-      final guncellenen = await txn.update(
-        tablo,
-        idsiz,
-        where: dogalAnahtar.map((k) => '$k = ?').join(' AND '),
-        whereArgs: [for (final k in dogalAnahtar) satir[k]],
-      );
+      final where = dogalAnahtar.map((k) => '$k = ?').join(' AND ');
+      final args = [for (final k in dogalAnahtar) satir[k]];
+      if (await ayniMi(where, args)) return;
+      final guncellenen = await txn.update(tablo, idsiz, where: where, whereArgs: args);
       if (guncellenen > 0) return;
     }
 
     await txn.insert(tablo, satir);
   }
+
+  /// Sayılarda 18 ile 18.0 aynıdır.
+  static bool _esit(Object? a, Object? b) =>
+      a is num && b is num ? a == b || a.toDouble() == b.toDouble() : a == b;
 
   static String _kisaHata(DatabaseException e) {
     final metin = e.toString();

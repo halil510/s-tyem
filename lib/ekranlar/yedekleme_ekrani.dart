@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../utils/excel_yedekleme.dart';
 import '../core/database/app_database.dart';
-import '../data/repositories/donem_kilidi.dart';
 import '../data/repositories/veri_yonetimi_repository.dart';
 import '../bluetooth/bluetooth_cihaz_secme.dart';
 import '../bluetooth/wifi_transfer_service.dart';
@@ -77,7 +77,11 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
   }
 
   void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    if (!mounted) return;
+    // Önceki mesaj kuyrukta bekletmesin (art arda "SİL yazın" / "Hatalı şifre").
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
       SnackBar(
         content: Text(msg),
         behavior: SnackBarBehavior.floating,
@@ -111,21 +115,28 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
 
   Future<void> _dbYedekle() async {
     setState(() => _isProcessing = true);
+    // Kullanıcı isteği (2026-11-19): WhatsApp'a paylaşma değil, telefonda sakla.
+    // Android: İndirilenler/SutYem_Yedekleri (uygulama silinse de kalır, 20 gün).
+    // Tutarlı kopya + kopyanın sağlam olduğu kaydetmeden ÖNCE denetlenir.
+    Future<File> al() => OtomatikYedek.veritabaniYedekAl(
+          kopyala: AppDatabase.instance.tutarliKopyala,
+          dogrula: VeriYonetimiRepository.dbDosyasiniDogrula,
+        );
     try {
-      final tempDir = await getTemporaryDirectory();
-      final backupFile = File('${tempDir.path}/sut_yem_backup_${DateTime.now().millisecondsSinceEpoch}.db');
-      // Tutarlı kopya + kopyanın sağlam olduğunu paylaşmadan ÖNCE denetle:
-      // bozuk bir yedek, yedek yokmuş gibi güven verip en kötü anda çıkar.
-      await AppDatabase.instance.tutarliKopyala(backupFile.path);
-      await VeriYonetimiRepository.dbDosyasiniDogrula(backupFile.path);
-
-      await Share.shareXFiles(
-        [XFile(backupFile.path)], 
-        text: 'Süt Yem Uygulaması - Veritabanı Yedeği\nTarih: ${DateTime.now().toString()}\nUyarı: Bu dosyayı sadece güvendiğiniz kaynaklardan alın.'
-      );
-      _showSnack('✅ DB yedekleme ve paylaşım tamamlandı');
+      File dosya;
+      try {
+        dosya = await al();
+      } on FileSystemException {
+        // Android 9 ve altı: ortak klasöre yazmak için depolama izni gerekir.
+        if (!Platform.isAndroid || !(await Permission.storage.request()).isGranted) rethrow;
+        dosya = await al();
+      }
+      final yer = Platform.isAndroid
+          ? 'İndirilenler/${OtomatikYedek.disKlasorAdi}/${p.basename(dosya.path)}'
+          : dosya.path;
+      _showSnack('✅ Veritabanı yedeği telefona kaydedildi: $yer');
     } catch (e) {
-      _showSnack('❌ Hata: $e');
+      _showSnack('❌ Yedek kaydedilemedi: $e');
     }
     setState(() => _isProcessing = false);
   }
@@ -265,9 +276,9 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     }
   }
 
-  /// JSON yedeğini BİRLEŞTİREREK geri yükler (bkz. [YedekServisi.iceAktar]):
-  /// yedekteki kayıtlar eklenir/güncellenir, mevcut ödeme ve fiyat
-  /// kayıtları korunur. Hata olursa hiçbir değişiklik yazılmaz.
+  /// JSON yedeğini geri yükler (bkz. [YedekServisi.iceAktar]): kullanıcı
+  /// "yedekteki hale getir" ya da "birleştir" seçer. Hata olursa hiçbir
+  /// değişiklik yazılmaz.
   Future<void> _importJsonFile(File jsonFile) async {
     _showSnack('JSON dosyası okunuyor...');
     final veri = YedekServisi.coz(await jsonFile.readAsString());
@@ -281,9 +292,34 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
       }
     }
 
+    // Yükleme biçimi: tam yedekte varsayılan "yedekteki hale getir". Birleştirmede
+    // yedekten sonra silinen kayıtlar geri gelir, yedekten sonra girilenler kalır.
+    var tamamen = false;
+    if (YedekServisi.tamYedekMi(veri)) {
+      if (!mounted) return;
+      final secim = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Nasıl yüklensin?'),
+          content: const Text(
+            'Yedekteki hale getir: telefondaki TÜM kayıtlar yedektekiyle değiştirilir '
+            '(yedekten sonra girilenler silinir). Elle aldığınız yedeği geri almak için bunu seçin.\n\n'
+            'Birleştir: yedekteki kayıtlar eklenir/güncellenir, telefonda olup yedekte olmayanlar kalır.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Birleştir')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yedekteki hale getir')),
+          ],
+        ),
+      );
+      if (secim == null) return;
+      tamamen = secim;
+    }
+
     await OtomatikYedek.islemOncesiAl('json_geri_yukleme');
     _showSnack('Veritabanına uygulanıyor...');
-    final ozet = await (await _veriRepo).yedekYukle(veri);
+    final ozet = await (await _veriRepo).yedekYukle(veri, tamamenDegistir: tamamen);
     if (mounted) {
       veriDegistiBildir(context);
       _istatistikYenile();
@@ -412,98 +448,131 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     return sifreOk == true;
   }
 
+  /// Fırın ERP ile aynı: "Yalnız hareketler" ya da "Her şey (sıfırdan başla)".
+  /// Ayarlar (şifre, aktivasyon, yazıcı, terazi, eşitleme) her iki durumda da kalır.
   Future<void> _veritabaniTemizle() async {
-    final TextEditingController sifreController = TextEditingController();
+    KayitSayilari? sayilar;
+    try {
+      sayilar = await (await _veriRepo).kayitSayilari();
+    } catch (_) {} // sayılar yalnız bilgi; okunamasa da temizlik penceresi açılır
+    if (!mounted) return;
+    final sifreController = TextEditingController();
+    final onayController = TextEditingController();
+    var tur = TemizlikTuru.hareketler;
 
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Güvenlik Doğrulaması'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '⚠️ SADECE Süt ve Yem kayıtları silinecektir!',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setD) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.orange),
+              SizedBox(width: 8),
+              Expanded(child: Text('Veritabanını temizle')),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (sayilar != null)
+                Text(
+                  'Şu an: ${sayilar.cari} cari, ${sayilar.sut} süt, ${sayilar.yem} yem, ${sayilar.odeme} ödeme/tahsilat',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                RadioGroup<TemizlikTuru>(
+                  groupValue: tur,
+                  onChanged: (x) => setD(() => tur = x!),
+                  child: const Column(children: [
+                    RadioListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: TemizlikTuru.hareketler,
+                      title: Text('Yalnız hareketler'),
+                      subtitle: Text('Süt, yem, ödeme/tahsilat ve dönem kapanışları silinir.\n'
+                          'Cariler ve fiyatlar KORUNUR.'),
+                    ),
+                    RadioListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: TemizlikTuru.hepsi,
+                      title: Text('Her şey (sıfırdan başla)'),
+                      subtitle: Text('Hareketler + cariler ve tüm fiyatlar silinir.\n'
+                          'Şifre, aktivasyon, yazıcı, terazi ve ayarlar KALIR.'),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Bu işlem geri alınamaz! Önce otomatik güvenlik yedeği alınır (Otomatik Yedekler\'den geri dönülebilir). '
+                  'Bulut / yerel ağ eşitlemesi açıksa silme BAĞLI TÜM TELEFONLARA da yansır.',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.deepOrange),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: onayController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: 'Onay için SİL yazın', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: sifreController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Şifre',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '• Süt kayıtları: TAMAMEN SİLİNECEK\n'
-              '• Yem kayıtları: TAMAMEN SİLİNECEK\n'
-              '• Cari kayıtları: KORUNACAK\n\n'
-              'Bu işlem geri alınamaz!',
-              style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Vazgeç'),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '☁️ Bu telefon bulut ya da yerel ağ ile eşitleniyorsa süt ve yem kayıtları '
-              'DİĞER TELEFONLARDAN DA silinir.',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.deepOrange),
-            ),
-            const SizedBox(height: 10),
-            const Text('Devam etmek için şifreyi giriniz:'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: sifreController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Şifre',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
               ),
+              onPressed: () {
+                final onay = onayController.text.trim().replaceAll('i', 'İ').toUpperCase();
+                if (onay != 'SİL' && onay != 'SIL') {
+                  _showSnack('❌ Onay için SİL yazın.');
+                } else if (sifreController.text.trim() != _kayitliSifre) {
+                  _showSnack('❌ Hatalı şifre!');
+                } else {
+                  Navigator.pop(context, true);
+                }
+              },
+              child: const Text('SİL'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İPTAL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              if (sifreController.text.trim() == _kayitliSifre) {
-                Navigator.pop(context, true);
-              } else {
-                _showSnack('❌ Hatalı şifre!');
-              }
-            },
-            child: const Text('SİL'),
-          ),
-        ],
       ),
     );
 
     if (result == true) {
-      await _temizlemeIslemi();
+      await _temizlemeIslemi(tur);
     }
   }
 
-  Future<void> _temizlemeIslemi() async {
+  Future<void> _temizlemeIslemi(TemizlikTuru tur) async {
     setState(() => _isProcessing = true);
     try {
       await OtomatikYedek.islemOncesiAl('sut_yem_silme');
-      final silinen = await (await _veriRepo).sutVeYemSil();
+      final s = await (await _veriRepo).temizle(tur);
       if (mounted) {
-      veriDegistiBildir(context);
-      _istatistikYenile();
-    }
-      _showSnack('✅ ${silinen.sut} süt ve ${silinen.yem} yem kaydı temizlendi\n(Cariler korundu)');
-    } on DonemKapaliHatasi {
-      _showSnack('❌ Kapatılmış dönemlerde kayıt var; hiçbir kayıt silinmedi. '
-          'Önce ilgili dönemleri yeniden açmanız gerekir.');
+        veriDegistiBildir(context);
+        _istatistikYenile();
+      }
+      _showSnack('✅ Temizlendi: ${s['sutler']} süt, ${s['yemler']} yem, ${s['cari_odemeler']} ödeme/tahsilat'
+          '${tur == TemizlikTuru.hepsi ? ', ${s['cariler']} cari' : ' (cariler korundu)'}');
     } catch (e) {
-      _showSnack('❌ Hata oluştu: $e');
+      _showSnack('❌ Hata oluştu, hiçbir kayıt silinmedi: $e');
     }
     if (mounted) setState(() => _isProcessing = false);
   }
@@ -829,7 +898,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
         const SizedBox(height: 8),
         _buildActionButton(
           title: 'DB ile Yedekle',
-          subtitle: 'Tam veritabanı yedeği paylaş',
+          subtitle: 'Tam veritabanı yedeği telefona kaydet (İndirilenler/SutYem_Yedekleri)',
           icon: Icons.backup,
           color: Colors.purple,
           onTap: _dbYedekle,
@@ -863,7 +932,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
         ),
         _buildActionButton(
           title: 'Veritabanını Temizle',
-          subtitle: 'Tüm kayıtları sil (şifre gerekli)',
+          subtitle: 'Yalnız hareketler ya da her şey — ayarlar kalır (şifre gerekli)',
           icon: Icons.cleaning_services,
           color: Colors.red,
           isDanger: true,
@@ -963,7 +1032,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
             '• Bluetooth: Yakın mesafe için\n'
             '• Wi-Fi: Hızlı ve büyük dosyalar için\n'
             '• Excel: Detaylı raporlar ve analizler\n'
-            '• DB Yedekle: Tam yedekleme ve paylaşım\n'
+            '• DB Yedekle: Tam yedek telefona kaydedilir (20 gün saklanır)\n'
             '• DB/JSON İçeri Al: Yedekten geri yükleme\n'
             '• Temizleme: Güvenlik şifresi gerektirir',
             style: TextStyle(fontSize: 12, height: 1.5),

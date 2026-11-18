@@ -822,6 +822,45 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
   kopyası (kaynak `outputs/apk/release/app-release.apk`; `app-release.apk` adı KALIR, Flutter onu arar). İlk derlemede
   `Sutyem-1.2.6+15.apk` (82.8 MB) çıktı, SHA-256 orijinalle aynı.
 
+### 2026-11-19 — Eski sürüm yedeğinin yeni sürüme geri yüklenmesi denetlendi
+- Kullanıcı işletmedeki ESKİ sürümde (paket adı değişmeden önceki, güncellenemiyor) yedek aldı, yeni sürümü kurup içeri alacak.
+- Eski şema (user_version 0; cari_fiyatlar/aktif/sira yok) → v14 migration'ları sorunsuz. Yeni test
+  `test/data/eski_yedek_gecis_test.dart`: eski DDL birebir + mükerrer gün + saatli tarih; kg/₺/cari sayısı aynı kalır,
+  yeni ekran sorguları ve yeni süt girişi çalışır. `ESKI_YEDEK=<yol.db>` ile gerçek dosya da denenir — kökteki
+  Şubat 2026 yedeği (`sut_yem_backup_1770565606887.db`, git'te değil) ile GEÇTİ.
+- Geri yükleme: Yedekleme → İçeri Al → şifre (yeni kurulumda `12345`) → "Veritabanı (.db)". Yalnız `.db` uzantısı kabul.
+  Excel yedeği içeri alınamaz (yalnız .db / .json). Yeni kurulum aktivasyonu aynı ana şifreyle (değiştirilmedi).
+
+### 2026-11-19 (2) — Yedekler uygulama silinse de kalsın; 20 gün saklama; DB yedeği telefona · sürüm 1.2.7+16
+- Kullanıcı uygulamayı silip yükledi: otomatik yedekler (uygulama klasöründe) gitti. İstek: kalıcı olsun; DB yedeği WhatsApp
+  değil uygulama içinde; "20 gün tutsun, sonra geriye doğru otomatik silsin" (telefon şişmesin).
+- `OtomatikYedek`: her yedeğin kopyası Android'de `/storage/emulated/0/Download/SutYem_Yedekleri` (disKlasor). Yazılamazsa
+  asıl yedek yine alınır, `sonDisHata` ekranda uyarı + "İzin ver" (Android ≤9 depolama izni).
+- Saklama kuralı `silinecekler()`: 20 günden eski her şey silinir; otomatik: son 24 saat hepsi, öncesi günde bir (en yeni);
+  işlem öncesi/.db: 20 gün, en çok 30. Eski sayı kuralı (15/10) kaldırıldı. Dış klasörde yalnız `sutyem_<damga>_...json|db` silinir.
+- "DB ile Yedekle" artık paylaşmıyor: `OtomatikYedek.veritabaniYedekAl` → `SutYem_Yedekleri/sutyem_<damga>_veritabani.db`
+  (tutarlı kopya + doğrulama). Geri yükleme: Yedekleme → İçeri Al → .db.
+- Otomatik Yedekler ekranı: "Dosyadan geri yükle" (.json seç → tam geri dönüş, şifre + işlem öncesi yedek).
+- NOT: Android 11+'da yeniden kurulan uygulama eski kurulumun dosyalarını LİSTELEYEMEZ/silemez (kapsamlı depolama) —
+  bu yüzden geri yükleme dosya seçiciyle; o eski dosyaları kullanıcı dosya yöneticisinden siler.
+- Testler: veri_guvenligi_test (20 gün, işlem öncesi, dış kopya, dış hata, DB yedeği). 534 test geçti. APK: Sutyem-1.2.7+16.apk.
+  Gerçek telefonda denenmedi.
+
+### 2026-11-19 (3) — Veritabanı temizliği Fırın ERP gibi; elle yedek/geri yükleme denetimi · sürüm 1.2.9+18 (1.2.8+17 derlendi, kurulmadı)
+- Kullanıcı: "temizle dediğimde carideki tahsilat ve ödemeler kalıyor" → "tüm her şey silinsin, sadece veriler; Fırın ERP'de öyleydi".
+- `VeriYonetimiRepository.temizle(TemizlikTuru)`: **hareketler** (süt, yem, cari_odemeler, donemler, donem_hakedisleri; cariler+fiyatlar
+  kalır) / **hepsi** (+ cariler, cari_fiyatlar, fiyatlar). Ayarlar, terazi_cihazlari, senk tabloları, islem_gecmisi KALIR.
+  Kapalı dönem artık engellemez (önce açılır, silinir); sqlite_sequence sıfırlanır; foreign_key_check; tek transaction.
+  Ekran: radyo seçimi + "SİL yazın" + şifre; önce işlem öncesi güvenlik yedeği. Eski `sutVeYemSil` duruyor (testler).
+- HATA bulundu+düzeltildi: JSON "birleştir" kapatılmış dönem varken HER ZAMAN başarısızdı (değişmemiş satıra UPDATE dönem
+  kilidine takılıyordu). `_yaz` artık birebir aynı satırı yazmaz.
+- YENİ koruma: birleştirmede aynı id'li cari farklı kişiyse (uuid farklı; uuid yoksa ad+soyad farklı) → YedekHatasi, hiçbir şey
+  yazılmaz (başka telefonun yedeği yeni kurulumla birleşip süt/ödemeler yanlış cariye geçiyordu).
+- JSON İçeri Al artık sorar: "Yedekteki hale getir" (tamamenDegistir) / "Birleştir".
+- Test: `test/data/yedek_dongu_test.dart` (.db ve JSON döngüsü birebir, temizlik türleri, başka veritabanı koruması). 542 test geçti.
+- Kontrol turu (widget testi ekran_tarama: temizle penceresi): pencere kapanırken TextEditingController erken dispose → "used after being disposed" hatası (yedekleme + otomatik_yedekler şifre penceresi, ikincisi eskiden beri) düzeltildi; _showSnack kuyrukta bekletmiyor. 543 test.
+- NOT: Excel yedeği geri yüklenemez (yalnız rapor). Elle geri yükleme yolu: DB ile Yedekle → İçeri Al → Veritabanı (.db).
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
@@ -839,7 +878,7 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
    kopyalayarak) yazar. Sonradan **önceki** bir ayın süt fiyatı değişirse bu ay
    eski kopyayı kullanır. İleride fiyatları ürün bazında ayrı satırlara ayırmak düşünülebilir.
 5. `withOpacity` vb. ~180 adet "info" düzeyinde eski API uyarısı var (çalışmayı etkilemez).
-6. **Telefon dışı yedek yok (2026-11-05):** otomatik yedekler telefonun içinde; telefon kaybolur/bozulur ya da
+6. **Telefon dışı yedek yok (2026-11-05; 2026-11-19 kısmen: kopya İndirilenler/SutYem_Yedekleri, uygulama silinse de kalır, telefon kaybına karşı değil):** otomatik yedekler telefonun içinde; telefon kaybolur/bozulur ya da
    uygulama silinirse onlar da gider. Kullanıcı ara sıra "Paylaş" ile dışarı göndermeli. İleride: Supabase'e
    otomatik bulut yedeği ya da "son dış yedek X gün önce" hatırlatması.
 
@@ -855,9 +894,8 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
 
 - [ ] D1. **Cari Kartı birleştirme:** "Detay" (yalnız kg) ve "Hesap Ekstresi" (yalnız ₺) iki ayrı ekran;
       kullanıcı ikisini karıştırıyor. Tek ekran, sekmeler: Özet (bakiye) · Süt · Yem · Ödemeler.
-- [ ] D2. **Açılış ve aktivasyon ekranında sabit "HALİL İBRAHİM KABATLI / HALK MARKET"** yazıyor (market
-      uygulamasından kalma). İşletme adı ayardan gelsin. WhatsApp/Excel altındaki sabit
-      "Süt Yem Takip Sistemi" de işletme adı olsun.
+- [~] D2. İPTAL (2026-11-19): açılış/aktivasyondaki "HALİL İBRAHİM KABATLI / HALK MARKET" yazısı kullanıcının
+      bilinçli İMZASI ("benim imzam görsünler diye") — DEĞİŞTİRME, kaldırma, önerme.
 - [ ] D3. **Ayarlar ekranı (B10):** işletme adı/telefonu (fiş, WhatsApp, Excel, açılış), şifre değiştirme,
       otomatik yedek hatırlatma. Bugün bu ayarlar dört farklı ekrana dağınık.
 - [ ] D4. **Sayı biçimi tek tip:** Özet/Dönem/Fiş "1.234,5 kg" (Türkçe), Detay/Cari listesi/Yem "1234.5kg".

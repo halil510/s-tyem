@@ -193,6 +193,49 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
   });
 
+  testWidgets('Veritabanını Temizle penceresi: iki seçenek, SİL ve şifre denetimi, taşma yok', (tester) async {
+    await telefon(tester);
+    await tester.pumpWidget(uygulama(const YedeklemeEkrani()));
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 15)));
+      await tester.pump();
+    }
+    await tester.scrollUntilVisible(find.text('Veritabanını Temizle'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Veritabanını Temizle'));
+    for (var i = 0; i < 20; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 15)));
+      await tester.pump();
+    }
+    expect(find.text('Yalnız hareketler'), findsOneWidget);
+    expect(find.text('Her şey (sıfırdan başla)'), findsOneWidget);
+    await tester.tap(find.text('Her şey (sıfırdan başla)'));
+    await tester.pump();
+    final alanlar = find.byType(TextField);
+    // SİL yazılmadan şifre doğru olsa da silinmez.
+    await tester.enterText(alanlar.at(1), '12345');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'SİL'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('❌ Onay için SİL yazın.'), findsOneWidget);
+    expect(find.text('Her şey (sıfırdan başla)'), findsOneWidget, reason: 'pencere açık kalır');
+    // SİL yazılı, şifre yanlış → silinmez.
+    await tester.enterText(alanlar.at(0), 'sil');
+    await tester.enterText(alanlar.at(1), '999');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'SİL'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('❌ Hatalı şifre!'), findsOneWidget);
+    expect(find.text('Her şey (sıfırdan başla)'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Vazgeç'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Her şey (sıfırdan başla)'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   testWidgets('⋮ menüsü dar ekranda taşmadan açılır', (tester) async {
     await telefon(tester);
     await tester.pumpWidget(uygulama(const AnaEkran()));

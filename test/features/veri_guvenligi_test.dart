@@ -121,22 +121,79 @@ void main() {
       expect((await y.listele()).where((e) => e.sebep == YedekSebebi.otomatik), hasLength(2));
     });
 
-    test('eski yedekler silinir: son 15 otomatik + 10 işlem öncesi kalır, en yeniler', () async {
+    test('20 gün kuralı: son 24 saat hepsi, öncesi günde bir, 20 günden eskiler silinir', () async {
+      final y = OtomatikYedek(db, klasor);
+      final t0 = DateTime(2026, 10, 1, 1);
+      // 30 gün boyunca 4 saatte bir otomatik yedek (telefon hiç kapanmasa).
+      DateTime son = t0;
+      for (var i = 0; i < 30 * 6; i++) {
+        son = t0.add(Duration(hours: 4 * i));
+        await y.al(YedekSebebi.otomatik, simdi: son);
+      }
+      final oto = (await y.listele()).where((e) => e.sebep == YedekSebebi.otomatik).toList();
+      final sinir = son.subtract(const Duration(days: OtomatikYedek.saklaGun));
+      expect(oto.every((e) => !e.tarih.isBefore(sinir)), isTrue, reason: '20 günden eski kalmaz');
+      expect(oto.first.tarih, son, reason: 'en yeni korunur');
+      final son24 = oto.where((e) => e.tarih.isAfter(son.subtract(const Duration(hours: 24)))).length;
+      expect(son24, 6, reason: 'son 24 saattekilerin hepsi');
+      final eskiGunler = oto.where((e) => !e.tarih.isAfter(son.subtract(const Duration(hours: 24))));
+      final gunler = eskiGunler.map((e) => DateTime(e.tarih.year, e.tarih.month, e.tarih.day)).toList();
+      expect(gunler.toSet().length, gunler.length, reason: 'eski günlerden günde yalnız bir');
+      expect(oto.length, lessThanOrEqualTo(6 + OtomatikYedek.saklaGun + 1), reason: 'telefon şişmez');
+    });
+
+    test('işlem öncesi yedekler 20 gün kalır, en çok 30', () async {
       final y = OtomatikYedek(db, klasor);
       final t0 = DateTime(2026, 11, 1);
-      for (var i = 0; i < 18; i++) {
-        await y.al(YedekSebebi.otomatik, simdi: t0.add(Duration(hours: i)));
-      }
-      for (var i = 0; i < 12; i++) {
+      for (var i = 0; i < 35; i++) {
         await y.al(YedekSebebi.islemOncesi, aciklama: 'cari_silme', simdi: t0.add(Duration(minutes: i)));
       }
-      final liste = await y.listele();
-      final oto = liste.where((e) => e.sebep == YedekSebebi.otomatik).toList();
-      final islem = liste.where((e) => e.sebep == YedekSebebi.islemOncesi).toList();
-      expect(oto, hasLength(OtomatikYedek.otomatikSakla));
-      expect(islem, hasLength(OtomatikYedek.islemOncesiSakla));
-      expect(oto.first.tarih, t0.add(const Duration(hours: 17)), reason: 'en yeni korunur');
-      expect(oto.last.tarih, t0.add(const Duration(hours: 3)), reason: 'en eski 3 silindi');
+      expect(await y.listele(), hasLength(OtomatikYedek.islemOncesiSakla));
+      // 21 gün sonra yeni bir yedek: eskilerin hepsi gider.
+      await y.al(YedekSebebi.islemOncesi, aciklama: 'cari_silme', simdi: t0.add(const Duration(days: 21)));
+      expect(await y.listele(), hasLength(1));
+    });
+
+    test('her yedeğin kopyası dış klasöre yazılır; dış klasör de 20 günle temizlenir', () async {
+      final dis = Directory(p.join(klasor.path, 'Download', OtomatikYedek.disKlasorAdi));
+      final y = OtomatikYedek(db, Directory(p.join(klasor.path, 'ic')), disKlasor: dis);
+      final t0 = DateTime(2026, 10, 1, 9);
+      final ilk = await y.al(YedekSebebi.otomatik, simdi: t0);
+      final kopya = File(p.join(dis.path, p.basename(ilk.path)));
+      expect(kopya.existsSync(), isTrue);
+      expect(kopya.readAsStringSync(), ilk.readAsStringSync());
+      expect(OtomatikYedek.sonDisHata, isNull);
+      // Elle alınmış eski bir .db yedeği de 20 gün sonra silinir; tanınmayan dosyaya dokunulmaz.
+      File(p.join(dis.path, 'sutyem_2026-10-01_10-00-00_veritabani.db')).writeAsStringSync('x');
+      final yabanci = File(p.join(dis.path, 'baska_dosya.txt'))..writeAsStringSync('x');
+      await y.al(YedekSebebi.otomatik, simdi: t0.add(const Duration(days: 25)));
+      final adlar = dis.listSync().map((f) => p.basename(f.path)).toList();
+      expect(adlar, hasLength(2));
+      expect(adlar, contains('baska_dosya.txt'));
+      expect(yabanci.existsSync(), isTrue);
+    });
+
+    test('dış klasöre yazılamazsa asıl yedek yine alınır, hata not edilir', () async {
+      final engel = File(p.join(klasor.path, 'engel'))..writeAsStringSync('dosya, klasör değil');
+      final y = OtomatikYedek(db, Directory(p.join(klasor.path, 'ic')), disKlasor: Directory(p.join(engel.path, 'alt')));
+      final dosya = await y.al(YedekSebebi.otomatik);
+      expect(dosya.existsSync(), isTrue);
+      expect(OtomatikYedek.sonDisHata, isNotNull);
+      expect(await y.listele(), hasLength(1));
+    });
+
+    test('DB Yedekle: tutarlı .db kopyası klasöre kaydedilir, geçerli veritabanıdır', () async {
+      final hedef = Directory(p.join(klasor.path, 'Download', OtomatikYedek.disKlasorAdi));
+      final dosya = await OtomatikYedek.veritabaniYedekAl(
+        kopyala: (yol) async => db.execute('VACUUM INTO ?', [yol]),
+        dogrula: (yol) => VeriYonetimiRepository.dbDosyasiniDogrula(yol, factory: databaseFactoryFfi),
+        hedefKlasor: hedef,
+        simdi: DateTime(2026, 11, 19, 14, 5, 0),
+      );
+      expect(p.basename(dosya.path), 'sutyem_2026-11-19_14-05-00_veritabani.db');
+      expect(p.dirname(dosya.path), hedef.path);
+      await VeriYonetimiRepository.dbDosyasiniDogrula(dosya.path, factory: databaseFactoryFfi);
+      expect(hedef.listSync().where((f) => f.path.endsWith('.tmp')), isEmpty);
     });
 
     test('aynı saniyede iki yedek birbirinin üzerine yazmaz', () async {

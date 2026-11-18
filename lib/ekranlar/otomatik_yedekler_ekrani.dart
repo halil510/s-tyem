@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,7 +14,8 @@ import '../data/repositories/veri_yonetimi_repository.dart';
 import '../data/yedek/otomatik_yedek.dart';
 import '../data/yedek/yedek_servisi.dart';
 
-/// Telefonda otomatik tutulan güvenlik yedekleri: listele, paylaş, geri dön.
+/// Telefonda otomatik tutulan güvenlik yedekleri: listele, paylaş, geri dön,
+/// uygulama silinip yüklendiyse İndirilenler'deki kopyadan geri yükle.
 class OtomatikYedeklerEkrani extends StatefulWidget {
   const OtomatikYedeklerEkrani({super.key});
 
@@ -61,14 +66,56 @@ class _OtomatikYedeklerEkraniState extends State<OtomatikYedeklerEkrani> {
             subject: 'Süt Yem yedeği', text: 'Süt Yem yedeği — ${_tarih.format(y.tarih)}');
       });
 
+  /// Uygulama silinip yeniden yüklendiyse eski yedekler listede görünmez:
+  /// İndirilenler/SutYem_Yedekleri'ndeki (ya da başka yerdeki) .json yedek seçilir.
+  Future<void> _dosyadanGeriYukle() async {
+    String? yol;
+    try {
+      final secim = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+      yol = secim?.files.singleOrNull?.path;
+    } catch (e) {
+      _mesaj('Dosya seçilemedi: $e', hata: true);
+      return;
+    }
+    if (yol == null) return;
+    if (!yol.toLowerCase().endsWith('.json')) {
+      _mesaj('"sutyem_....json" adlı bir yedek seçin. .db dosyası için: Yedekleme → İçeri Al.', hata: true);
+      return;
+    }
+    final Map<String, dynamic> veri;
+    try {
+      veri = YedekServisi.coz(await File(yol).readAsString());
+      if (!YedekServisi.tamYedekMi(veri)) throw const YedekHatasi('Bu yedek eksik; geri yüklenemez.');
+    } catch (e) {
+      _mesaj('$e', hata: true);
+      return;
+    }
+    if (!mounted) return;
+    await _geriYukle(veri, 'seçilen yedek dosyasındaki');
+  }
+
   Future<void> _geriDon(GuvenlikYedegi y) async {
+    // Dosya, yeni güvenlik yedeği eskileri temizlemeden ÖNCE okunur.
+    final Map<String, dynamic> veri;
+    try {
+      veri = YedekServisi.coz(await y.dosya.readAsString());
+      if (!YedekServisi.tamYedekMi(veri)) throw const YedekHatasi('Bu yedek eksik; geri dönülemez.');
+    } catch (e) {
+      _mesaj('$e', hata: true);
+      return;
+    }
+    if (!mounted) return;
+    await _geriYukle(veri, '${_tarih.format(y.tarih)} tarihindeki');
+  }
+
+  Future<void> _geriYukle(Map<String, dynamic> veri, String hangisi) async {
     final onay = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Bu yedeğe dönülsün mü?'),
         content: Text(
-          'Telefondaki TÜM kayıtlar ${_tarih.format(y.tarih)} tarihindeki haline döner.\n\n'
-          'Bu tarihten SONRA girilen süt, yem ve ödeme kayıtları silinir.\n\n'
+          'Telefondaki TÜM kayıtlar $hangisi haline döner.\n\n'
+          'Yedekten SONRA girilen süt, yem ve ödeme kayıtları silinir.\n\n'
           'Şu anki hali önce ayrıca yedeklenir; vazgeçerseniz ona da dönebilirsiniz.',
         ),
         actions: [
@@ -85,9 +132,6 @@ class _OtomatikYedeklerEkraniState extends State<OtomatikYedeklerEkrani> {
     if (!await _sifreDogru()) return;
 
     await _calistir(() async {
-      // Dosya, yeni güvenlik yedeği eskileri temizlemeden ÖNCE okunur.
-      final veri = YedekServisi.coz(await y.dosya.readAsString());
-      if (!YedekServisi.tamYedekMi(veri)) throw const YedekHatasi('Bu yedek eksik; geri dönülemez.');
       await OtomatikYedek.islemOncesiAl('guvenlik_yedegi_donusu');
       final repo = VeriYonetimiRepository(await AppDatabase.instance.database);
       final ozet = await repo.yedekYukle(veri, tamamenDegistir: true);
@@ -117,15 +161,33 @@ class _OtomatikYedeklerEkraniState extends State<OtomatikYedeklerEkrani> {
         ],
       ),
     );
-    ctrl.dispose();
     if (ok == false) _mesaj('Hatalı şifre', hata: true);
     return ok == true;
   }
 
+  Future<void> _izinIste() async {
+    final durum = await Permission.storage.request();
+    if (durum.isGranted) {
+      await _simdiAl();
+    } else {
+      _mesaj('İzin verilmedi; kopya İndirilenler klasörüne yazılamıyor.', hata: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final disHata = OtomatikYedek.sonDisHata;
     return Scaffold(
-      appBar: AppBar(title: const Text('Otomatik Güvenlik Yedekleri')),
+      appBar: AppBar(
+        title: const Text('Otomatik Güvenlik Yedekleri'),
+        actions: [
+          IconButton(
+            tooltip: 'Dosyadan geri yükle',
+            icon: const Icon(Icons.folder_open),
+            onPressed: _calisiyor ? null : _dosyadanGeriYukle,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _calisiyor ? null : _simdiAl,
         icon: const Icon(Icons.save_alt),
@@ -142,13 +204,43 @@ class _OtomatikYedeklerEkraniState extends State<OtomatikYedeklerEkrani> {
               color: Colors.blue[50],
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text(
-              'Uygulama, açılırken ve arka plana geçerken (en çok 4 saatte bir) ve '
-              'toplu silme / geri yükleme gibi riskli işlemlerden önce kendiliğinden yedek alır. '
-              'Son ${OtomatikYedek.otomatikSakla} otomatik ve ${OtomatikYedek.islemOncesiSakla} işlem öncesi yedek saklanır.\n\n'
-              '⚠️ Bu yedekler telefonun içindedir. Telefon kaybolur ya da uygulama silinirse onlar da gider: '
-              'ara sıra "Paylaş" ile Drive / WhatsApp / bilgisayara gönderin.',
-              style: TextStyle(fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Uygulama, açılırken ve arka plana geçerken (en çok 4 saatte bir) ve '
+                  'toplu silme / geri yükleme gibi riskli işlemlerden önce kendiliğinden yedek alır. '
+                  'Yedekler ${OtomatikYedek.saklaGun} gün saklanır (bir günden eskilerden günde biri kalır), '
+                  'daha eskiler kendiliğinden silinir.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                if (Platform.isAndroid) ...[
+                  const SizedBox(height: 8),
+                  if (disHata == null)
+                    const Text(
+                      '✅ Kopyası İndirilenler/${OtomatikYedek.disKlasorAdi} klasöründe de tutulur. '
+                      'Uygulama silinse de orada kalır; yeniden yükleyince "Dosyadan geri yükle" ile geri alınır.',
+                      style: TextStyle(fontSize: 13),
+                    )
+                  else ...[
+                    Text(
+                      '⚠️ Kopya İndirilenler klasörüne yazılamadı: uygulama silinirse yedekler de gider.',
+                      style: TextStyle(fontSize: 13, color: Colors.red[800], fontWeight: FontWeight.w600),
+                    ),
+                    TextButton(onPressed: _calisiyor ? null : _izinIste, child: const Text('İzin ver ve tekrar dene')),
+                  ],
+                ],
+                const SizedBox(height: 8),
+                const Text(
+                  '⚠️ Telefon kaybolursa bu yedekler de gider: ara sıra "Paylaş" ile telefon dışına da gönderin.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                TextButton.icon(
+                  onPressed: _calisiyor ? null : _dosyadanGeriYukle,
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  label: const Text('Dosyadan geri yükle'),
+                ),
+              ],
             ),
           ),
           Expanded(
