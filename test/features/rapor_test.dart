@@ -43,8 +43,8 @@ void main() {
     ]) {
       await db.insert('sutler', s);
     }
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-06', 'sut_yemi': 50, 'toplam': 50}); // 600
-    await db.insert('yemler', {'cari_id': veli, 'tarih': '2026-11-06', 'besi_yemi': 20, 'toplam': 20}); // 0
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-06', 'urun_id': 1, 'miktar': 50, 'toplam': 50}); // 600
+    await db.insert('yemler', {'cari_id': veli, 'tarih': '2026-11-06', 'urun_id': 2, 'miktar': 20, 'toplam': 20}); // 0
     await db.insert('cari_odemeler', {
       'cari_id': ali, 'tarih': '2026-11-10', 'islem_turu': 'odeme', 'miktar': 1, 'birim_fiyat': 1000, 'toplam_tutar': 1000, 'aciklama': 'nakit'
     });
@@ -117,7 +117,7 @@ void main() {
 
     test('Fiyatı eksik kayıtlar yakalanır; ilgili raporlarda not düşülür', () async {
       final t = await rapor(RaporTuru.fiyatEksik);
-      expect(t.satirlar.map((r) => '${r[1]} ${r[2]}'), ['Veli Şahin Süt', 'Veli Şahin Yem']);
+      expect(t.satirlar.map((r) => '${r[1]} ${r[2]}'), ['Veli Şahin Süt', 'Veli Şahin Besi Yemi']);
       expect((await rapor(RaporTuru.gunlukSut)).not, contains('1 kayıtta fiyat'));
     });
 

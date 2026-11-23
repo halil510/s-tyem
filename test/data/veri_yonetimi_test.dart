@@ -32,14 +32,14 @@ void main() {
     test('kayıt sayıları tek sorguda', () async {
       await sut(ali, '2026-11-01', 10);
       await sut(veli, '2026-11-01', 20);
-      await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-01', 'sut_yemi': 5, 'toplam': 5});
+      await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-01', 'urun_id': 1, 'miktar': 5, 'toplam': 5});
       final s = await VeriYonetimiRepository(db).kayitSayilari();
       expect((s.cari, s.sut, s.yem, s.odeme), (2, 2, 1, 0));
     });
 
     test('süt ve yem temizliği: carileri korur, denetime yazar', () async {
       await sut(ali, '2026-11-01', 10);
-      await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-01', 'sut_yemi': 5, 'toplam': 5});
+      await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-01', 'urun_id': 1, 'miktar': 5, 'toplam': 5});
       final r = await VeriYonetimiRepository(db).sutVeYemSil();
       expect((r.sut, r.yem), (1, 1));
       expect(await db.query('sutler'), isEmpty);

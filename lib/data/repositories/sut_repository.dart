@@ -130,6 +130,18 @@ class SutRepository {
     };
   }
 
+  /// Aralıktaki her günün TÜM carilerden toplanan sütü ('yyyy-MM-dd' → kg) — tank/fire hesabı.
+  /// Tarih indeksini kullanır (idx_sutler_tarih).
+  Future<Map<String, double>> gunlukToplamlar(String start, String end) async {
+    final result = await db.rawQuery(
+      'SELECT tarih, SUM(toplam) AS toplam FROM $_tablo WHERE tarih BETWEEN ? AND ? GROUP BY tarih',
+      [start, end],
+    );
+    return {
+      for (final r in result) r['tarih'] as String: (r['toplam'] as num? ?? 0).toDouble(),
+    };
+  }
+
   /// Bir carinin bir aralıktaki toplam sütü (tek SUM sorgusu).
   Future<double> toplamCari(int cariId, String start, String end) async {
     final r = await db.rawQuery(

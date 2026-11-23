@@ -184,7 +184,7 @@ void main() {
     final a = await cihazDb('A');
     final ali = await cariEkle(a, ad: 'Ali');
     await fiyatTanimla(a, ali, '2026-11', sut: 20, sutYemi: 12);
-    await a.insert('yemler', {'cari_id': ali, 'tarih': gun, 'sut_yemi': 5, 'toplam': 5});
+    await a.insert('yemler', {'cari_id': ali, 'tarih': gun, 'urun_id': 1, 'miktar': 5, 'toplam': 5});
     final sunucu = YerelAgSunucusu();
     await sunucu.baslat(db: a, cihaz: 'cihaz-A', cihazAd: 'Dükkan', kod: '123456');
     addTearDown(sunucu.durdur);
@@ -193,16 +193,16 @@ void main() {
     final y = await yonetici('B', b);
     await y.anaCihazaBaglan('127.0.0.1', '123456');
     final yedek = YedekServisi.coz(await YedekServisi.disaAktarJson(kimDoner == 'A' ? a : b)); // yem 5
-    await b.update('yemler', {'sut_yemi': 10, 'toplam': 10});
+    await b.update('yemler', {'urun_id': 1, 'miktar': 10, 'toplam': 10});
     await y.yerelAgdaEsitle();
-    expect((await a.query('yemler')).single['sut_yemi'], 10.0);
+    expect((await a.query('yemler')).single['miktar'], 10.0);
 
     await YedekServisi.iceAktar(kimDoner == 'A' ? a : b, yedek, tamamenDegistir: true);
-    expect((await (kimDoner == 'A' ? a : b).query('yemler')).single['sut_yemi'], 5.0);
+    expect((await (kimDoner == 'A' ? a : b).query('yemler')).single['miktar'], 5.0);
     await y.yerelAgdaEsitle();
     await y.yerelAgdaEsitle();
     for (final db in [a, b]) {
-      expect((await db.query('yemler')).single['sut_yemi'], 10.0, reason: '$kimDoner yedeğe döndü; düzeltme kaybolmamalı');
+      expect((await db.query('yemler')).single['miktar'], 10.0, reason: '$kimDoner yedeğe döndü; düzeltme kaybolmamalı');
     }
   }
 

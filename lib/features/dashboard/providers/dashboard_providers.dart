@@ -7,8 +7,9 @@ import '../../../core/providers/veri_surumu_provider.dart';
 import '../../../data/repositories/cari_repository.dart' show cariSirala;
 import '../../../models/cari_model.dart';
 import '../../../models/sut_model.dart';
+import '../../../models/yem_model.dart';
 import '../../cari_hesap/providers/cari_hesap_providers.dart'
-    show tumKalanBorclarProvider;
+    show kgUrunuMu, tumKalanBorclarProvider;
 import '../../donem/donem_providers.dart';
 
 /// Bir günün toplam süt miktarı (haftalık grafik için).
@@ -152,6 +153,9 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
   // bellekte grupla.
   final aylikSutler = await sutRepo.getAllInRange(ayBasStr, ayBitStr);
   final aylikYemler = await yemRepo.getAllInRange(ayBasStr, ayBitStr);
+  final urunler = {for (final u in await (await ref.watch(urunRepositoryProvider.future)).getAll()) u.id!: u};
+  // Yem kg toplamları yalnız birimi kg olan ürünlerdendir (çuval / adet kg değildir).
+  double kg(Iterable<Yem> l) => l.fold(0.0, (sum, y) => sum + (kgUrunuMu(urunler, y.urunId) ? y.miktar : 0));
   final haftalikSutler = await sutRepo.getAllInRange(haftaBasStr, bugunStr);
   final sonSutler = await sutRepo.getAllInRange(sonIkiHaftaStr, bugunStr);
   final bugunSutler = sonSutler.where((s) => s.tarih == bugunStr).toList();
@@ -181,11 +185,9 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
   final bugunToplamSut = aylikSutler
       .where((s) => s.tarih == bugunStr)
       .fold(0.0, (sum, s) => sum + s.toplam);
-  final bugunToplamYem = aylikYemler
-      .where((y) => y.tarih == bugunStr)
-      .fold(0.0, (sum, y) => sum + y.toplam);
+  final bugunToplamYem = kg(aylikYemler.where((y) => y.tarih == bugunStr));
   final aylikToplamSut = aylikSutler.fold(0.0, (sum, s) => sum + s.toplam);
-  final aylikToplamYem = aylikYemler.fold(0.0, (sum, y) => sum + y.toplam);
+  final aylikToplamYem = kg(aylikYemler);
 
   // Son 7 gün — güne göre grupla.
   final haftalikSutGrafik = <GunlukSutVerisi>[];
@@ -212,25 +214,16 @@ final dashboardDataProvider = FutureProvider<DashboardData>((ref) async {
     ..sort((a, b) => b.miktar.compareTo(a.miktar));
   final ilkBes = enCokSutVerenCariler.take(5).toList();
 
-  // Yem dağılımı (bu ay).
-  double sutYemiTop = 0,
-      besiYemiTop = 0,
-      buzagiTop = 0,
-      kuzuYemiTop = 0,
-      tavukYemiTop = 0;
+  // Yem dağılımı (bu ay, kg ürünleri) — ürün ekran sırasıyla.
+  final urunKg = <int, double>{};
   for (final y in aylikYemler) {
-    sutYemiTop += y.sutYemi;
-    besiYemiTop += y.besiYemi;
-    buzagiTop += y.bBaslangic + y.bBuyutme;
-    kuzuYemiTop += y.kuzuYemi;
-    tavukYemiTop += y.tavukYemi;
+    if (kgUrunuMu(urunler, y.urunId)) urunKg[y.urunId] = (urunKg[y.urunId] ?? 0) + y.miktar;
   }
   final yemDagilimi = <YemTuruVerisi>[
-    if (sutYemiTop > 0) YemTuruVerisi('Süt', sutYemiTop),
-    if (besiYemiTop > 0) YemTuruVerisi('Besi', besiYemiTop),
-    if (buzagiTop > 0) YemTuruVerisi('Buzağı', buzagiTop),
-    if (kuzuYemiTop > 0) YemTuruVerisi('Kuzu', kuzuYemiTop),
-    if (tavukYemiTop > 0) YemTuruVerisi('Tavuk', tavukYemiTop),
+    for (final u in urunler.values)
+      if ((urunKg[u.id] ?? 0) > 0) YemTuruVerisi(u.ad, urunKg[u.id]!),
+    for (final e in urunKg.entries)
+      if (!urunler.containsKey(e.key) && e.value > 0) YemTuruVerisi('Ürün #${e.key}', e.value),
   ];
 
   // Cari bakiyeleri — Ödemeler sekmesiyle AYNI kaynaktan (canlı

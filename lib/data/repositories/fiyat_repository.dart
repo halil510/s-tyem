@@ -62,41 +62,16 @@ class CariFiyatRepository {
 
   Future<void> kaydet(CariFiyat fiyat) => donemKilidiyle(() => _kaydet(fiyat));
 
-  /// Birçok carinin fiyatını TEK transaction'da yazar: ya hepsi ya hiçbiri
+  /// Birçok carinin SÜT fiyatını TEK transaction'da yazar: ya hepsi ya hiçbiri
   /// (fiyat ekranında 100 cari = tek disk yazımı; eskiden cari başına ayrı).
-  ///
-  /// [yemFiyatiniAyaYay]: Yem fiyatları AYLIK girilir. Ay ortasından geçerli
-  /// süt fiyatı satırları (`'yyyy-MM-dd'`) da yem fiyatı taşır; aylık yem
-  /// fiyatı kaydedilince aynı ayın bu gün satırlarının yem fiyatları da
-  /// güncellenir — yoksa ayın kalanı eski yem fiyatıyla hesaplanırdı.
-  Future<void> topluKaydet(List<CariFiyat> fiyatlar, {bool yemFiyatiniAyaYay = false}) =>
-      donemKilidiyle(
+  /// (Yem / ürün fiyatları v16'dan beri `UrunFiyatRepository.ayFiyatlariniKaydet`.)
+  Future<void> topluKaydet(List<CariFiyat> fiyatlar) => donemKilidiyle(
         () => db.transaction((txn) async {
           for (final f in fiyatlar) {
             final map = f.toMap()..remove('id');
             final guncellenen = await txn.update('cari_fiyatlar', map,
                 where: 'cari_id = ? AND ay = ?', whereArgs: [f.cariId, f.ay]);
-            // Yeni satırda ekranın DEĞİŞTİRMEDİĞİ grup (Yem Fiyatı ekranında süt fiyatı, Süt Fiyatı
-            // ekranında yem fiyatları) yalnız kopyadır: başka telefonda girilmiş gerçek fiyatı
-            // çoklu cihaz birleşmesinde ezmesin diye zamanı "en eski" ('') verilir.
-            if (guncellenen == 0) {
-              await txn.insert('cari_fiyatlar', {...map, if (yemFiyatiniAyaYay) 'sut_zaman': '' else 'yem_zaman': ''});
-            }
-            if (yemFiyatiniAyaYay && f.ay.length == 7) {
-              await txn.update(
-                'cari_fiyatlar',
-                {
-                  'sut_yemi_fiyat': f.sutYemiFiyat,
-                  'besi_yemi_fiyat': f.besiYemiFiyat,
-                  'b_baslangic_fiyat': f.bBaslangicFiyat,
-                  'b_buyutme_fiyat': f.bBuyutmeFiyat,
-                  'kuzu_yemi_fiyat': f.kuzuYemiFiyat,
-                  'tavuk_yemi_fiyat': f.tavukYemiFiyat,
-                },
-                where: 'cari_id = ? AND ay LIKE ?',
-                whereArgs: [f.cariId, '${f.ay}-%'],
-              );
-            }
+            if (guncellenen == 0) await txn.insert('cari_fiyatlar', map);
           }
         }),
       );
@@ -129,12 +104,6 @@ class CariFiyatRepository {
         cariId: cariId,
         ay: ay,
         sutFiyat: onceki.sutFiyat,
-        sutYemiFiyat: onceki.sutYemiFiyat,
-        besiYemiFiyat: onceki.besiYemiFiyat,
-        bBaslangicFiyat: onceki.bBaslangicFiyat,
-        bBuyutmeFiyat: onceki.bBuyutmeFiyat,
-        kuzuYemiFiyat: onceki.kuzuYemiFiyat,
-        tavukYemiFiyat: onceki.tavukYemiFiyat,
       );
     }
     return CariFiyat(cariId: cariId, ay: ay);
@@ -172,12 +141,6 @@ class CariFiyatRepository {
               cariId: id,
               ay: ay,
               sutFiyat: f.sutFiyat,
-              sutYemiFiyat: f.sutYemiFiyat,
-              besiYemiFiyat: f.besiYemiFiyat,
-              bBaslangicFiyat: f.bBaslangicFiyat,
-              bBuyutmeFiyat: f.bBuyutmeFiyat,
-              kuzuYemiFiyat: f.kuzuYemiFiyat,
-              tavukYemiFiyat: f.tavukYemiFiyat,
             ),
         },
     };

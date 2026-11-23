@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
+import '../models/urun_model.dart';
 import '../models/yem_model.dart';
+import '../features/urunler/urun_providers.dart';
+import '../features/cari_hesap/providers/cari_hesap_providers.dart' show kgUrunuMu;
 import 'package:intl/intl.dart';
 import '../utils/sayi_format.dart';
 import '../utils/excel_export.dart';
@@ -227,6 +230,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
       final file = await beklemeyleCalistir(context, 'Rapor hazırlanıyor…', () => ExcelExport.exportYemRaporu(
         cariler: cariler,
         yemler: _yemKayitlari,
+        urunler: _urunler.values.toList(),
         startDate: _selectedRange!.start,
         endDate: _selectedRange!.end,
         raporAdi: '${widget.cari.ad}_${widget.cari.soyad}_Yem_Raporu',
@@ -242,7 +246,10 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
   }
 
   double get _toplamSut => _sutKayitlari.fold(0, (sum, sut) => sum + sut.toplam);
-  double get _toplamYem => _yemKayitlari.fold(0, (sum, yem) => sum + yem.toplam);
+  Map<int, Urun> get _urunler => ref.read(urunHaritasiProvider).valueOrNull ?? const {};
+
+  /// Yalnız birimi kg olan ürünlerin toplamı (çuval / adet kg'ye eklenmez).
+  double get _toplamYem => _yemKayitlari.fold(0, (sum, yem) => sum + (kgUrunuMu(_urunler, yem.urunId) ? yem.miktar : 0));
 
   Future<void> _sutFisi(Sut sut) async {
     try {
@@ -280,6 +287,8 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    // Ürün adı / birimi (yem kartları ve kg toplamı) — ürün değişince yeniden çizilir.
+    ref.watch(urunHaritasiProvider);
     // Başka ekranda (ör. Hızlı Süt Girişi, ekstre) yapılan değişiklikte
     // listeyi yenile (bkz. SUTYEM.md kural 11).
     ref.listen(veriSurumuProvider, (_, __) {
@@ -770,7 +779,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        '${sayiGoster(yem.toplam)}kg',
+                        '${sayiGoster(yem.miktar)} ${_urunler[yem.urunId]?.birim ?? 'kg'}',
                         style: TextStyle(
                           color: bugunKayit ? Colors.green[700] : Colors.green[700],
                           fontWeight: FontWeight.w600,
@@ -799,12 +808,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                if (yem.sutYemi > 0) _yemTipiChip('Süt: ${sayiGoster(yem.sutYemi)}kg', bugunKayit),
-                if (yem.besiYemi > 0) _yemTipiChip('Besi: ${sayiGoster(yem.besiYemi)}kg', bugunKayit),
-                if (yem.bBaslangic > 0) _yemTipiChip('Başlangıç: ${sayiGoster(yem.bBaslangic)}kg', bugunKayit),
-                if (yem.bBuyutme > 0) _yemTipiChip('Büyütme: ${sayiGoster(yem.bBuyutme)}kg', bugunKayit),
-                if (yem.kuzuYemi > 0) _yemTipiChip('Kuzu: ${sayiGoster(yem.kuzuYemi)}kg', bugunKayit),
-                if (yem.tavukYemi > 0) _yemTipiChip('Tavuk: ${sayiGoster(yem.tavukYemi)}kg', bugunKayit),
+                _yemTipiChip(_urunler[yem.urunId]?.ad ?? 'Ürün #${yem.urunId}', bugunKayit),
               ],
             ),
           ],

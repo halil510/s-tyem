@@ -16,7 +16,8 @@
     (`cari_fiyatlar.ay` = `'yyyy-MM'` ay başından ya da `'yyyy-MM-dd'` o günden itibaren;
     kaydın tarihine kadar başlamış EN SON fiyat — `CariFiyatLookup.fiyatIcin(cariId, s.tarih)`.
     Ay anahtarıyla değil, KAYDIN TARİHİYLE sorgula!). Örn. 25 ₺, 4 Kasım'dan itibaren 27 ₺ →
-    1–3 Kasım 25, 4 Kasım ve sonrası 27. Yem fiyatı aylık girilir, aynı ayın gün satırlarına yayılır.
+    1–3 Kasım 25, 4 Kasım ve sonrası 27. Yem / ürün fiyatı (v16) cari + ürün başına AYLIK girilir
+    (`cari_urun_fiyatlari`, `UrunFiyatLookup` — aynı "en son başlamış fiyat" kuralı).
   - Bu hesabın tek kaynağı: `lib/features/cari_hesap/providers/cari_hesap_providers.dart`
     (`sutTutari`, `yemTutari`, `cariEkstreProvider`, `tumKalanBorclarProvider`).
 
@@ -103,11 +104,50 @@
       tetikleyici yazar. Kopya/varsayılan değer yazan kod o grubun zamanını '' (en eski) vermeli (bkz. topluKaydet).
     - Silme = mezar taşı (`senk_gunluk.tz`); `budama` her anahtarın son satırını (silmede mezar taşını) korur.
     - Kalıcı test: `test/ajan_senkron/` (derin denetim) — çoklu cihaz koduna dokununca çalıştır.
+    - Yeni tablo eklenince `senkTetikleyicileriKur` / v13 tabanı HENÜZ OLMAYAN tabloyu atlar (`mevcutTablolar`):
+      yeni kurulumda v13, sonraki migration'ın tablosunu beklemeden çalışır; tetikleyiciyi yeni migration kurar.
+    - KARIŞIK SÜRÜM: eski sürüm bilmediği tablonun kaydını ATAR ama okuma sayacı ilerler. Yeni eşitlenen tablo
+      ekleyen migration `senk_kanallar.son_cekilen = 0` + yeni `taban_nesil` yazmalı (bkz. v15).
+
+20. **Tank & fabrika sevkiyatı (v15, `lib/features/fabrika/`, `FabrikaRepository`):** `fabrikalar`, `sevkiyatlar`
+    (her teslim bir satır; tutar SAKLANMAZ = satır bazında `kurusaYuvarla(kg × birim_fiyat)`, fiyat 0 = sonra "Fiyat uygula"),
+    `fabrika_hareketleri` ('tahsilat' | 'kesinti' | 'ek'), `tank_sayimlari` (gün sonu tankta kalan, günde tek satır,
+    0 = sil). Fabrika bakiyesi = sevk + ek − tahsilat − kesinti (> 0 fabrika bize borçlu); ÜRETİCİ bakiyelerine KARIŞMAZ.
+    Fire = (önceki gün tank + toplanan) − (sevk + gün sonu tank); hesap `fabrika_hesap.dart` (ekransız, testli).
+    Hareketi olan fabrika silinmez (repo + FK RESTRICT) → pasife alınır. Kapalı dönem kilidi BİLEREK YOK (fabrika
+    fiyatı ay kapandıktan sonra gelir); her yazma `islem_gecmisi`'ne. Yedek format v4; eski (v3) yedekle "tamamen
+    değiştir" bu cihazın fabrika verisini SİLMEZ. Temizlik: "hareketler" sevkiyat/ödeme/tankı siler, fabrikalar kalır.
+
+21. **Ürünler — yem türleri artık sabit değil (v16, kullanıcı kararı 2026-11-23):** ⋮ → **Ürünler (Yem, Gübre…)**
+    (`lib/features/urunler/`, `UrunRepository`, `UrunFiyatRepository`). Üreticiye verilip süt parasından düşülen her şey
+    (yem, gübre, saman…) bir `urunler` satırıdır: ad, **birim** (kg / çuval / adet…), sıra, aktif.
+    - **Bir yem satırı = TEK ürün + miktar** (`yemler.urun_id`, `yemler.miktar`). Bir teslimatta birden çok ürün = birden çok
+      satır, `YemRepository.topluEkle` ile tek transaction. Tutar = `kurusaYuvarla(miktar × o günün cari ürün fiyatı)`
+      (`yemTutari(y, urunFiyatlari)` — tek kaynak `cari_hesap_providers.dart`).
+    - Eski 6 sütun (`yemler.sut_yemi`… ve `cari_fiyatlar.sut_yemi_fiyat`…) tabloda durur ama **HİÇBİR kod okumaz/yazmaz**.
+      `CariFiyat` artık yalnız SÜT fiyatıdır.
+    - İlk 6 ürün SABİT uuid'li (`sistemUrunleri`: `urun-sut-yemi`…), yeni kurulumda id 1..6. Eşitleme günlüğünde zamanları
+      "taban": sonradan kurulan telefon başka telefondaki ad değişikliğini / pasife almayı EZMEZ.
+    - Kaydı olan ürün **silinmez** (repo + FK RESTRICT) → pasife alınır; **birimi değiştirilmez**. Pasif ürün Yem Ekle ve
+      Yem Fiyatları'nda görünmez, geçmiş kayıtları ve bakiyesi aynen kalır. Kaydı olmayan ürün silinir (fiyatları CASCADE).
+    - "kg" toplamları (ekstre, Özet, aylık özet, hakediş `yem_kg`, WhatsApp, Excel TOPLAM) yalnız **birimi kg olan**
+      ürünlerdendir (`kgUrunuMu`); çuval / adet yalnız tutara girer. Raporlarda ürün sütunları dinamik.
+    - Yem Fiyatları ekranı `ayFiyatlariniKaydet`: devralınan fiyat değişmediyse satır YAZMAZ; ayın satırı varsa günceller;
+      ayın gün anahtarlı (eski veriden) satırlarını siler (aylık fiyat ayın tamamına). Dönem kapanışı devralınan ürün
+      fiyatını o aya sabitler. `cari_urun_fiyatlari` kapalı dönem kilidi altında (v16 tetikleyicileri).
+    - Eşitleme: `urunler` (uuid) ve `cari_urun_fiyatlari` (doğal anahtar cari+ürün+ay) `senkTablolari`'nda, `urun_id`
+      ilişki sütunu. **Tüm telefonlar v16'ya BİRLİKTE güncellenmeli** (eski sürüm ürün satırlarını göremez).
+    - Yedek format **v5** (`urunler`, `cari_urun_fiyatlari`). Eski (≤ v4) yedek yüklenirken BELLEKTE çevrilir
+      (`_eskiYemBiciminiCevir`): çok türlü satır bölünür (ilk tür aynı id/uuid, diğerleri `uuid~ürün`), id'siz bölünenler
+      EN SONA yazılır (yoksa sonraki satırın id'sini kapardı), fiyatlar değişim noktalarına çevrilir. Birleştirmede id'siz
+      satır uuid ile eşleşir → aynı eski yedek iki kez yüklense de çift olmaz. Temizlik "her şey": ürün tanımları KALIR.
+    - Kuruş notu: v16 öncesi TEK satırda birden çok yem türü varsa eski kod satırı tek seferde yuvarlıyordu, şimdi her ürün
+      ayrı yuvarlanır → o satırlarda ±1 kuruş olabilir (tek türlü satırlarda birebir aynı — testli).
 
 ## Testler
 
 ```bash
-flutter test          # 524 test — hepsi geçmeli
+flutter test          # 615 test — hepsi geçmeli (1 atlanan)
 flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 ```
 
@@ -146,6 +186,9 @@ flutter analyze       # 0 error olmalı (eski kodda info/warning'ler var)
 | `test/features/rota_test.dart` | Toplama rotası: sıra verme/kaydırma (Ahmet Atağ 1 → Ahmet Anıl 2), pasife alma, geri getirme, Cari Ekle/Düzenle/Pasif/Toplama Sırası ekranları |
 | `test/features/sut_alindi_tik_test.dart` | Süt sekmesi yeşil tik: 12:00 öncesi sabah / sonrası akşam, sayaç, dünkü kayıt bugüne tik vermez |
 | `test/features/veri_guvenligi_test.dart` | Otomatik güvenlik yedeği (tamlık, 4 saat aralık, temizlik, yarım .tmp), toplu silme sonrası geri dönüş, tek adımda .db değiştirme + bekleyen çağrı, tutarlı .db kopyası, Hızlı Süt taslağı, yemde çift dokunma |
+| `test/features/fabrika_sevkiyat_test.dart` | v15: v14→v15 yükseltme + eşitleme tetikleyicileri + karışık sürüm sayaç sıfırlama, RESTRICT, doğrulama (kg/tarih/saat/fiyat/tutar, Türkçe aynı ad), fiyat uygula, fabrika bakiyesi = ekstre (satır yuvarlama, aynı gün sırası, devir), tank/fire (tank devri, eşikler, "tank girilmemiş?" deseni, bugün), yedek (v4, eski yedek fabrikayı silmez, tank doğal anahtar, başka telefonun fabrikası), temizlik, iki telefon eşitleme |
+| `test/features/urunler_test.dart` | v16: hazır 6 ürün (sabit uuid, id 1..6); v15→v16 aktarım (her kalemin birim fiyatı eski kuralla BİREBİR, kapalı ay, gün anahtarlı fiyat, açık 0 fiyat, boş satır, bölme uuid'i, günlük, sayaç sıfırlama, kilit yeniden kurulur, iki kez çalışma); tek türlü satırda bakiye kuruşu kuruşuna; ürün kuralları (Türkçe aynı ad, birim kilidi, silme/RESTRICT, pasif, sıra); yem doğrulama + toplu ya-hep-ya-hiç; fiyat (devir, gereksiz satır yok, kapalı ay, dönem sabitleme); çuvallı ürün: ekstre = toplu bakiye = aylık özet = hakediş = raporlar, kg toplamı; fiyat eksik; yedek v5, ESKİ v4 yedek çevrimi + iki kez birleştirme, başka telefonun ürünü; iki telefon eşitleme |
+| `test/features/sevkiyat_ekrani_test.dart` | Ekran akışı: fabrika yokken önce fabrika ister, hatalı kg kaydedilmez, tutar önizlemesi, kayıt listelenir |
 
 Test altyapısı: `test/helpers/test_db.dart` (bellek-içi SQLite, `sqflite_common_ffi`).
 
@@ -861,6 +904,77 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
 - Kontrol turu (widget testi ekran_tarama: temizle penceresi): pencere kapanırken TextEditingController erken dispose → "used after being disposed" hatası (yedekleme + otomatik_yedekler şifre penceresi, ikincisi eskiden beri) düzeltildi; _showSnack kuyrukta bekletmiyor. 543 test.
 - NOT: Excel yedeği geri yüklenemez (yalnız rapor). Elle geri yükleme yolu: DB ile Yedekle → İçeri Al → Veritabanı (.db).
 
+### 2026-11-21 — Tank, fabrikaya sevkiyat ve fabrika cari hesabı (B3) · sürüm 1.3.0+19
+
+- Kullanıcı: "tank, fabrikaya sevkiyat, fabrikadan alacak/borç, alınan ödeme gibi — sen daha iyi bilirsin, titiz çalış".
+- **Migration v15** (`migration_v15_fabrika_sevkiyat.dart`): `fabrikalar`, `sevkiyatlar`, `fabrika_hareketleri`, `tank_sayimlari`
+  (+ uuid/tarih indeksleri, FK RESTRICT). Supabase aynası güncellendi (v15). Eşitleme: 4 tablo `senkTablolari`'na,
+  `fabrika_id` ilişki sütunu, `tank_sayimlari` doğal anahtar `tarih`.
+- Ekran: ⋮ → **Tank & Fabrika Sevkiyatı** (`sevkiyat_ekrani.dart`), ay seçici + 3 sekme:
+  - **Tank / Fire:** ay özeti (bu ayda bugün hariç) + gün gün toplanan / sevk / tank / fark. Durumlar: Normal, Fire yüksek
+    (> %1 ve > 2 kg), Fazla sevk (< −2 kg → süt girişi eksik olabilir), Gün sürüyor (bugün), **Tank girilmemiş?** (bir gün
+    kayıp + ertesi gün fazla sevk + o gün tank yok → akşam sütü ertesi sabah gitmiş; alarm değil hatırlatma). Güne dokun →
+    gün sonu tank. Ay farkı = günlük farkların toplamı (tank devri birbirini götürür).
+  - **Sevkiyat:** ay listesi, toplam kg/tutar, fiyatsız uyarısı; ekle/düzenle/sil. Form: fabrika, tarih (≤ bugün), saat (isteğe
+    bağlı), kg, fabrika fiyatı (son fiyatla dolar), fiş no, plaka, açıklama, tutar önizlemesi.
+  - **Fabrika:** güncel bakiye kartı, ay ekstresi (devir, sevk, prim/ek, kesinti, alınan ödeme, ay sonu, yürüyen bakiye),
+    "Ödeme alındı" / Kesinti / Prim-ek / **Fiyat uygula** (ayın fiyatsız ya da tüm sevkiyatlarına).
+  - Fabrikalar ekranı (ekle, düzenle, pasife al, hareketsizse sil).
+- Kendi denetimimde bulunup düzeltilenler: (1) v13'ün ortak tetikleyici kurucusu yeni kurulumda henüz olmayan v15 tablolarına
+  tetikleyici kurmaya çalışıp çökecekti → `mevcutTablolar` ile atlanıyor. (2) Eski yedekle "tamamen değiştir" fabrika
+  hesabını silecekti → yedekte bölümü olmayan v4 tabloları silinmez. (3) Başka telefonun yedeği "birleştir"de aynı
+  numaralı fabrikayı ezebilirdi → cari gibi uuid/ad denetimi. (4) Karışık sürümde eski telefon fabrika kayıtlarını atıp
+  sayacını ilerletiyordu → v15 okuma sayaçlarını sıfırlar + `taban_nesil` yeniler. (5) Akşam toplayıp sabah sevk edende
+  her gün yanlış "fire" alarmı → "Tank girilmemiş?" deseni.
+  (6) YARIŞ: A boş fabrikayı silerken B aynı anda ona sevkiyat girerse A'da fabrika+sevkiyat kayboluyor, B'de silme FK
+  hatasıyla sonsuza dek bekliyordu → `SenkCekirdek`: bağlı kaydı olan fabrikanın uzaktan silinmesi uygulanmaz, fabrika VE
+  bağlı sevkiyat/ödemeleri yeniden gönderilir (uyarı notuyla); iki sırada da iki telefon aynı sonuca varır (testli,
+  düzeltme kapatılınca test kırıldığı doğrulandı). Kural: RESTRICT çocuğu olan yeni eşitlenen tablo eklenirse aynısı yapılmalı.
+- Temizlik penceresi yazıları güncellendi; Çoklu Cihaz ekranında yeni tablo adları.
+- Testler (593 geçti, 1 atlanan; migration_test hedef sürüm 15): `fabrika_sevkiyat_test.dart` (26), `sevkiyat_ekrani_test.dart` (ekran akışı), ekran taraması (3 sekme + Fabrikalar,
+  tüm boyutlar), ⋮ menüsü. Gerçek telefonda denenmedi.
+- Sıradaki fikirler (istenmedi): Özet'e "fabrika alacağı / dünkü fark" kartı; Raporlar'a sevkiyat & fire Excel'i; fabrika
+  ekstresi PDF/WhatsApp; tahsilat fişi.
+
+### 2026-11-23 — Ürünler: yem türleri eklenebilir (gübre, saman…) · migration v16 · sürüm 1.4.0+20
+
+- Kullanıcı: "süt yemi, besi yemi kayıtlarını başka bir ekrandan eklenebilir yap; 3 de olabilir 10 da; örneğin üreticiye
+  gübre de yem kaydında çıkacak". Henüz gerçek veri girilmemişti. Kural 21'e bakın.
+- **Migration v16** (`migration_v16_urunler.dart`): `urunler`, `cari_urun_fiyatlari`, `yemler.urun_id/miktar`; eski 6 tür
+  sabit uuid'li ürün; eski satırlar bölünür, eski yem fiyatları değişim noktalarına çevrilir; dönüşüm sırasında yem /
+  fiyat kilit tetikleyicileri kaldırılıp sonda yeniden kurulur (kapalı dönemde migration durmaz); okuma sayaçları
+  sıfırlanır (v15 gibi). v13'ün ortak kurucuları (`donemKilitleriniKur`, çocuk silme tetikleyicisi) henüz olmayan
+  tabloyu atlar. Supabase aynası v16.
+- Ekranlar: ⋮ → **Ürünler (Yem, Gübre…)** (ekle / düzenle / sürükleyerek sırala / pasife al / kaydı yoksa sil; birim
+  önerileri kg, çuval, adet, balya, litre, ton). **Yem Ekle** ve **Yem Fiyatları** aktif ürünlerden kendiliğinden oluşur
+  (Yem Fiyatları'nda Ürünler kısayolu; "Tümüne uygula" ürün seçer, ₺/birim). Cari Detay yem kartı: ürün adı + miktar
+  birimiyle; düzenle penceresi ürün + miktar (yanlış ürün düzeltilebilir; 0 → silme onayı). Ekstre satırı
+  "Gübre 3 çuval × 450,50 ₺". Raporlar (Yem Teslimleri, Yem Türü Bazlı, Cari Yem Toplamı, Fiyatı Eksik), Excel yem
+  sayfası (ürün sütunları dinamik, aynı gün tek satır), WhatsApp yem raporu, Özet yem dağılımı ürün adıyla.
+- Kendi denetimimde bulunup düzeltilenler: (1) Eski yedekte bölünen satırlar araya yazılınca yedekteki SONRAKİ satırın
+  id'sini kapıyor, o satır bunun üzerine yazılıyordu (veri kaybı) → bölünenler en sona. (2) Sonradan kurulan telefonun hazır
+  ürünleri, başka telefondaki ad değişikliğini/pasife almayı eşitlemede ezecekti → günlük zamanı "taban". (3) Eski
+  yedeği iki kez "birleştir" yüklemek bölünen satırları çiftliyordu → id'siz satır uuid ile eşleşir. (4) Fiyat ekranında
+  12,345 ₺ "12.35" görünüp dokunmadan kaydedince fiyat değişiyordu → dokunulmamış alan gerçek değeri korur. (5) Yem
+  doğrulama hatası Future dışında fırlıyordu → async. (6) Aynı günün birden çok yem satırı ekstrede/raporda rastgele
+  sıralanabiliyordu → kayıt id'siyle sabit sıra.
+- Testler: 615 geçti (1 atlanan). Yeni `urunler_test.dart` (15); eski testler yeni yapıya çevrildi (eski şemalı v12
+  veritabanı kuran testler eski sütunlarla yazıp v16 aktarımını da sınıyor). Gerçek telefonda denenmedi.
+- **Dikkat:** birden çok telefon kullanılıyorsa hepsi bu sürüme birlikte güncellenmeli.
+- APK: `build/app/outputs/flutter-apk/Sutyem-1.4.0+20.apk` (84.5 MB), com.sutyem.pro, versionCode 20, imza
+  `CN=SUTYEM PRO` SHA-256 9E:B0:EA:…:52:8D (telefondakiyle aynı anahtar — güncelleme olarak yüklenir).
+
+### 2026-11-24 — Claude skill'leri (Sütyem, Fırın ERP, Ürün Güncelleme)
+- Proje kökünde `CLAUDE.md` (her oturumda kendiliğinden okunur: Türkçe, SUTYEM.md'yi oku, anahtar git'e girmez).
+- `.claude/skills/sutyem-apk-derle` (sürüm → analiz → test → derle → imza doğrula → defter) ve
+  `.claude/skills/sutyem-sema-degisikligi` (yeni tablo/sütunda migration, senkron, dönem kilidi, yedek, temizlik,
+  Supabase aynası, testler — v16'da yapılanların listesi).
+- Kullanıcı geneli (`~/.claude/skills/`): `apk-dogrula` (dogrula.ps1: paket + versionCode + imza parmak izi; 3 uygulama),
+  resmi Flutter skill'leri (flutter/skills: widget/unit test, static analysis, layout, responsive, paket çakışması) ve
+  Supabase `supabase-postgres-best-practices`.
+- Fırın ERP (`firin-derle`, `firin-sema-degisikligi`) ve Ürün Güncelleme (`urun-derle-dagit`, `urun-yeni-islem`,
+  `urun-pdf-bicimi`) için de CLAUDE.md + skill'ler yazıldı.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"
@@ -919,7 +1033,7 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
 **B. Yeni ekranlar**
 - [ ] B1. Toplama turu (sabah/akşam vardiya, üretici sırası/rota, gelmeyenler).
 - [~] B2. Süt kalitesi — İPTAL (2026-11-04, kullanıcı: "süt kalite ekranına gerek yok").
-- [ ] B3. Tank ve sevkiyat (fabrikaya teslim, fire = toplanan − sevk).
+- [x] B3. Tank, fabrikaya sevkiyat, fabrika cari hesabı (migration v15) — 2026-11-21. Ayrıntı: oturum günlüğü 2026-11-21.
 - [x] B4. Aylık dönem kapanışı + hakediş bordrosu + DB seviyesinde kilit (migration v9). Ayrıntı: oturum günlüğü (7).
 - [ ] B5. Kesintiler (stopaj vb. — oranlar ayarlanabilir) + müstahsil makbuzu çıktısı.
 - [ ] B6. Yem stok/depo (alış, tedarikçi, stok, kritik stok uyarısı).

@@ -2,13 +2,14 @@ import '../../data/repositories/cari_odeme_repository.dart';
 import '../../data/repositories/cari_repository.dart';
 import '../../data/repositories/fiyat_repository.dart';
 import '../../data/repositories/sut_repository.dart';
+import '../../data/repositories/urun_repository.dart';
 import '../../data/repositories/yem_repository.dart';
 import '../../models/cari_model.dart';
-import '../../models/yem_model.dart';
+import '../../models/urun_model.dart';
 import '../../utils/sayi_format.dart';
 import '../../utils/turkce.dart';
 import '../cari_hesap/models/cari_fiyat_lookup.dart';
-import '../cari_hesap/providers/cari_hesap_providers.dart' show sutTutari, yemTutari;
+import '../cari_hesap/providers/cari_hesap_providers.dart' show kgUrunuMu, sutTutari, yemTutari;
 import 'rapor_modeli.dart';
 
 /// ─────────────────────────────────────────────────────────────
@@ -25,15 +26,26 @@ class RaporServisi {
   final YemRepository yemRepo;
   final CariFiyatRepository fiyatRepo;
   final CariOdemeRepository odemeRepo;
-  RaporServisi({required this.cariRepo, required this.sutRepo, required this.yemRepo, required this.fiyatRepo, required this.odemeRepo});
+  final UrunRepository urunRepo;
+  final UrunFiyatRepository urunFiyatRepo;
+  RaporServisi({
+    required this.cariRepo,
+    required this.sutRepo,
+    required this.yemRepo,
+    required this.fiyatRepo,
+    required this.odemeRepo,
+    required this.urunRepo,
+    required this.urunFiyatRepo,
+  });
 
   static const _enEski = '1970-01-01';
 
   static String gun(String tarih) => tarih.length >= 10 ? tarih.substring(0, 10) : tarih;
   static String _tarihYaz(String iso) => '${iso.substring(8, 10)}.${iso.substring(5, 7)}.${iso.substring(0, 4)}';
 
-  static const yemTurleri = ['Süt Yemi', 'Besi Yemi', 'B. Başlangıç', 'B. Büyütme', 'Kuzu Yemi', 'Tavuk Yemi'];
-  static List<double> _yemKg(Yem y) => [y.sutYemi, y.besiYemi, y.bBaslangic, y.bBuyutme, y.kuzuYemi, y.tavukYemi];
+  /// Ürünün raporda görünen adı ve birimi (silinmiş / henüz eşitlenmemiş ürün de yazılır).
+  static String urunAdi(Map<int, Urun> u, int id) => u[id]?.ad ?? 'Ürün #$id';
+  static String urunBirimi(Map<int, Urun> u, int id) => u[id]?.birim ?? '';
 
   Future<RaporTablosu> olustur(RaporTuru tur, RaporFiltresi f) async {
     final cariler = await cariRepo.getAll();
@@ -47,6 +59,8 @@ class RaporServisi {
     }
 
     final lookup = CariFiyatLookup(await fiyatRepo.getTumFiyatlar());
+    final urunFiyatlari = await urunFiyatRepo.lookup();
+    final urunler = {for (final u in await urunRepo.getAll()) u.id!: u};
     final alt = f.bas == f.bit ? _tarihYaz(f.bas) : '${_tarihYaz(f.bas)} – ${_tarihYaz(f.bit)}';
 
     if (tur.cariZorunlu && f.cariId == null) {
@@ -192,66 +206,86 @@ class RaporServisi {
           ],
         );
 
-      // ── YEM ───────────────────────────────────────────────────
+      // ── YEM / ÜRÜN ────────────────────────────────────────────
+      // v16: her satır TEK ürün + miktar (ürünün kendi biriminde). Miktar sütunları farklı
+      // birimleri (kg, çuval…) karıştırabileceği için toplanmaz; "Toplam kg" yalnız kg ürünlerdir.
       case RaporTuru.yemTeslimleri:
         final l = (await yemRepo.getAllInRange(f.bas, f.bit)).where((y) => f.cariId == null || y.cariId == f.cariId).toList()
           ..sort((a, b) {
             final t = gun(a.tarih).compareTo(gun(b.tarih));
-            return t != 0 ? t : cariKarsilastir(a.cariId, b.cariId);
+            if (t != 0) return t;
+            final c = cariKarsilastir(a.cariId, b.cariId);
+            return c != 0 ? c : (a.id ?? 0).compareTo(b.id ?? 0);
           });
         var eksik = 0;
         final satirlar = <List<Object?>>[];
         for (final y in l) {
-          final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, gun(y.tarih)));
-          if (y.toplam > 0 && tutar <= 0) eksik++;
-          satirlar.add([gun(y.tarih), ad(y.cariId), ..._yemKg(y), y.toplam, tutar]);
+          final birimFiyat = urunFiyatlari.fiyat(y.cariId, y.urunId, gun(y.tarih));
+          final tutar = yemTutari(y, urunFiyatlari);
+          if (y.miktar > 0 && tutar <= 0) eksik++;
+          satirlar.add([gun(y.tarih), ad(y.cariId), urunAdi(urunler, y.urunId), y.miktar, urunBirimi(urunler, y.urunId), birimFiyat, tutar]);
         }
         return RaporTablosu(
           baslik: tur.baslik,
           altBaslik: '$alt$cariAdi',
-          sutunlar: [
-            const RaporSutun('Tarih', SutunTipi.tarih),
-            const RaporSutun('Cari'),
-            for (final t in yemTurleri) RaporSutun(t, SutunTipi.miktar),
-            const RaporSutun('Toplam kg', SutunTipi.miktar),
-            const RaporSutun('Tutar', SutunTipi.para),
+          sutunlar: const [
+            RaporSutun('Tarih', SutunTipi.tarih),
+            RaporSutun('Cari'),
+            RaporSutun('Ürün'),
+            RaporSutun('Miktar', SutunTipi.miktar, false),
+            RaporSutun('Birim'),
+            RaporSutun('Birim fiyat', SutunTipi.para, false),
+            RaporSutun('Tutar', SutunTipi.para),
           ],
           satirlar: satirlar,
           not: _eksikNotu(eksik),
         );
 
       case RaporTuru.yemTuruBazli:
-        final kg = List<double>.filled(6, 0), tl = List<double>.filled(6, 0);
+        final miktar = <int, double>{}, tl = <int, double>{};
         for (final y in await yemRepo.getAllInRange(f.bas, f.bit)) {
-          final fiyat = lookup.fiyatIcin(y.cariId, gun(y.tarih));
-          final birim = [fiyat.sutYemiFiyat, fiyat.besiYemiFiyat, fiyat.bBaslangicFiyat, fiyat.bBuyutmeFiyat, fiyat.kuzuYemiFiyat, fiyat.tavukYemiFiyat];
-          final m = _yemKg(y);
-          for (var i = 0; i < 6; i++) {
-            kg[i] += m[i];
-            tl[i] += m[i] * birim[i];
-          }
+          miktar[y.urunId] = (miktar[y.urunId] ?? 0) + y.miktar;
+          tl[y.urunId] = (tl[y.urunId] ?? 0) + yemTutari(y, urunFiyatlari);
         }
+        // Ürün ekran sırasıyla; listede olmayan (silinmiş / eşitlenmemiş) en sonda.
+        final sira = [for (final u in urunler.values) u.id!];
+        final idler = miktar.keys.toList()
+          ..sort((a, b) {
+            final ia = sira.indexOf(a), ib = sira.indexOf(b);
+            return (ia < 0 ? 1 << 30 : ia).compareTo(ib < 0 ? 1 << 30 : ib);
+          });
         return RaporTablosu(
           baslik: tur.baslik,
           altBaslik: alt,
           sutunlar: const [
-            RaporSutun('Yem türü'),
-            RaporSutun('Toplam kg', SutunTipi.miktar),
+            RaporSutun('Ürün'),
+            RaporSutun('Birim'),
+            RaporSutun('Miktar', SutunTipi.miktar, false),
             RaporSutun('Ort. fiyat', SutunTipi.para, false),
             RaporSutun('Tutar', SutunTipi.para),
           ],
           satirlar: [
-            for (var i = 0; i < 6; i++)
-              if (kg[i] > 0) [yemTurleri[i], kurusaYuvarla(kg[i]), kurusaYuvarla(tl[i] / kg[i]), kurusaYuvarla(tl[i])],
+            for (final id in idler)
+              if (miktar[id]! > 0)
+                [
+                  urunAdi(urunler, id),
+                  urunBirimi(urunler, id),
+                  kurusaYuvarla(miktar[id]!),
+                  kurusaYuvarla(tl[id]! / miktar[id]!),
+                  kurusaYuvarla(tl[id]!),
+                ],
           ],
-          not: 'Tür tutarları satır bazında yuvarlanmadığı için genel toplam, Yem Teslimleri raporundan birkaç kuruş farklı olabilir.',
         );
 
       case RaporTuru.cariYemToplami:
         final m = <int, ({int adet, double kg, double tutar})>{};
         for (final y in await yemRepo.getAllInRange(f.bas, f.bit)) {
           final o = m[y.cariId] ?? (adet: 0, kg: 0.0, tutar: 0.0);
-          m[y.cariId] = (adet: o.adet + 1, kg: o.kg + y.toplam, tutar: o.tutar + yemTutari(y, lookup.fiyatIcin(y.cariId, gun(y.tarih))));
+          m[y.cariId] = (
+            adet: o.adet + 1,
+            kg: o.kg + (kgUrunuMu(urunler, y.urunId) ? y.miktar : 0),
+            tutar: o.tutar + yemTutari(y, urunFiyatlari),
+          );
         }
         final idler = m.keys.toList()..sort(cariKarsilastir);
         return RaporTablosu(
@@ -259,17 +293,18 @@ class RaporServisi {
           altBaslik: alt,
           sutunlar: const [
             RaporSutun('Cari'),
-            RaporSutun('Teslim', SutunTipi.sayi, false),
+            RaporSutun('Kalem', SutunTipi.sayi, false),
             RaporSutun('Toplam kg', SutunTipi.miktar),
             RaporSutun('Tutar', SutunTipi.para),
           ],
           satirlar: [for (final id in idler) [ad(id), m[id]!.adet, kurusaYuvarla(m[id]!.kg), kurusaYuvarla(m[id]!.tutar)]],
+          not: 'Toplam kg yalnız birimi kg olan ürünlerdir (çuval / adet gibi ürünler yalnız tutara girer).',
         );
 
       // ── CARİ HESAP ────────────────────────────────────────────
       case RaporTuru.cariHesapOzeti:
-        final donem = await _hesaplar(f.bas, f.bit, lookup);
-        final genel = await _hesaplar(_enEski, f.bit, lookup);
+        final donem = await _hesaplar(f.bas, f.bit, lookup, urunFiyatlari, urunler);
+        final genel = await _hesaplar(_enEski, f.bit, lookup, urunFiyatlari, urunler);
         final idler = {...donem.keys, ...genel.entries.where((e) => e.value.bakiye.abs() >= 0.005).map((e) => e.key)}.toList()..sort(cariKarsilastir);
         return RaporTablosu(
           baslik: tur.baslik,
@@ -298,7 +333,7 @@ class RaporServisi {
         );
 
       case RaporTuru.bakiyeListesi:
-        final genel = await _hesaplar(_enEski, f.bit, lookup);
+        final genel = await _hesaplar(_enEski, f.bit, lookup, urunFiyatlari, urunler);
         final idler = genel.entries.where((e) => e.value.bakiye.abs() >= 0.005).map((e) => e.key).toList()..sort(cariKarsilastir);
         return RaporTablosu(
           baslik: tur.baslik,
@@ -362,8 +397,8 @@ class RaporServisi {
 
       case RaporTuru.cariEkstre:
         final id = f.cariId!;
-        final devir = (await _hesaplar(_enEski, _oncekiGun(f.bas), lookup, cariId: id))[id]?.bakiye ?? 0.0;
-        final hareketler = await _hareketler(id, f.bas, f.bit, lookup);
+        final devir = (await _hesaplar(_enEski, _oncekiGun(f.bas), lookup, urunFiyatlari, urunler, cariId: id))[id]?.bakiye ?? 0.0;
+        final hareketler = await _hareketler(id, f.bas, f.bit, lookup, urunFiyatlari, urunler);
         var yuruyen = devir;
         final satirlar = <List<Object?>>[
           [f.bas, 'Devir', 'Önceki bakiye', null, null, devir],
@@ -396,8 +431,8 @@ class RaporServisi {
           }
         }
         for (final y in await yemRepo.getAllInRange(f.bas, f.bit)) {
-          if (y.toplam > 0 && yemTutari(y, lookup.fiyatIcin(y.cariId, gun(y.tarih))) <= 0) {
-            satirlar.add([gun(y.tarih), ad(y.cariId), 'Yem', y.toplam]);
+          if (y.miktar > 0 && yemTutari(y, urunFiyatlari) <= 0) {
+            satirlar.add([gun(y.tarih), ad(y.cariId), urunAdi(urunler, y.urunId), y.miktar]);
           }
         }
         satirlar.sort((a, b) {
@@ -407,7 +442,7 @@ class RaporServisi {
         return RaporTablosu(
           baslik: tur.baslik,
           altBaslik: alt,
-          sutunlar: const [RaporSutun('Tarih', SutunTipi.tarih), RaporSutun('Cari'), RaporSutun('Tür'), RaporSutun('kg', SutunTipi.miktar)],
+          sutunlar: const [RaporSutun('Tarih', SutunTipi.tarih), RaporSutun('Cari'), RaporSutun('Tür'), RaporSutun('Miktar', SutunTipi.miktar, false)],
           satirlar: satirlar,
           not: satirlar.isEmpty ? 'Sorun yok: bu dönemde fiyatı eksik kayıt bulunmadı.' : 'Bu kayıtlar 0 TL sayıldı. Süt / Yem Fiyatları ekranından fiyat tanımlayın.',
         );
@@ -425,7 +460,9 @@ class RaporServisi {
   }
 
   /// Cari başına süt/yem/ödeme/tahsilat ve net (ekstre / tumKalanBorclar ile aynı formül).
-  Future<Map<int, _Hesap>> _hesaplar(String bas, String bit, CariFiyatLookup lookup, {int? cariId}) async {
+  Future<Map<int, _Hesap>> _hesaplar(
+      String bas, String bit, CariFiyatLookup lookup, UrunFiyatLookup urunFiyatlari, Map<int, Urun> urunler,
+      {int? cariId}) async {
     final m = <int, _Hesap>{};
     _Hesap h(int id) => m.putIfAbsent(id, _Hesap.new);
     if (bit.compareTo(bas) < 0) return m;
@@ -438,8 +475,8 @@ class RaporServisi {
     for (final y in await yemRepo.getAllInRange(bas, bit)) {
       if (cariId != null && y.cariId != cariId) continue;
       h(y.cariId)
-        ..yemKg += y.toplam
-        ..yem += yemTutari(y, lookup.fiyatIcin(y.cariId, gun(y.tarih)));
+        ..yemKg += kgUrunuMu(urunler, y.urunId) ? y.miktar : 0
+        ..yem += yemTutari(y, urunFiyatlari);
     }
     for (final o in await odemeRepo.getTumOdemeTahsilatlar()) {
       if (cariId != null && o.cariId != cariId) continue;
@@ -460,7 +497,7 @@ class RaporServisi {
 
   /// Ekstre hareketleri, eskiden yeniye; aynı gün sırası süt, yem, ödeme, tahsilat.
   Future<List<({String tarih, String islem, String aciklama, double arti, double eksi})>> _hareketler(
-      int cariId, String bas, String bit, CariFiyatLookup lookup) async {
+      int cariId, String bas, String bit, CariFiyatLookup lookup, UrunFiyatLookup urunFiyatlari, Map<int, Urun> urunler) async {
     final l = <({String tarih, int sira, int id, String islem, String aciklama, double arti, double eksi})>[];
     for (final s in await sutRepo.getByCari(cariId, bas, bit)) {
       final fiyat = lookup.fiyatIcin(cariId, gun(s.tarih));
@@ -475,15 +512,14 @@ class RaporServisi {
       ));
     }
     for (final y in await yemRepo.getByCari(cariId, bas, bit)) {
-      final m = _yemKg(y);
       l.add((
         tarih: gun(y.tarih),
         sira: 1,
         id: y.id ?? 0,
         islem: 'Yem verişi',
-        aciklama: [for (var i = 0; i < 6; i++) if (m[i] > 0) '${yemTurleri[i]} ${kgYaz(m[i])} kg'].join(', '),
+        aciklama: '${urunAdi(urunler, y.urunId)} ${kgYaz(y.miktar)} ${urunBirimi(urunler, y.urunId)} × ${tlYaz(urunFiyatlari.fiyat(cariId, y.urunId, gun(y.tarih)))}',
         arti: 0.0,
-        eksi: yemTutari(y, lookup.fiyatIcin(cariId, gun(y.tarih))),
+        eksi: yemTutari(y, urunFiyatlari),
       ));
     }
     for (final o in await odemeRepo.getByCariInRange(cariId, bas, bit)) {

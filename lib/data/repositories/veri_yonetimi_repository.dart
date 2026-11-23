@@ -9,10 +9,11 @@ typedef KayitSayilari = ({int cari, int sut, int yem, int odeme});
 
 /// Veritabanı temizliğinin kapsamı (Fırın ERP ile aynı yapı, 2026-11-19).
 enum TemizlikTuru {
-  /// Süt, yem, ödeme/tahsilat, dönem kapanışları silinir; cariler ve fiyatlar KALIR.
+  /// Süt, yem, ödeme/tahsilat, fabrika sevkiyat/ödemeleri, tank sayımları, dönem kapanışları
+  /// silinir; cariler, fabrikalar ve fiyatlar KALIR.
   hareketler,
 
-  /// SIFIRDAN BAŞLA: hareketler + cariler, cari fiyatları, piyasa fiyat notları.
+  /// SIFIRDAN BAŞLA: hareketler + cariler, fabrikalar, cari fiyatları, piyasa fiyat notları.
   /// Ayarlar (şifre, aktivasyon, yazıcı, terazi, eşitleme) ve işlem geçmişi KALIR.
   hepsi,
 }
@@ -56,7 +57,12 @@ class VeriYonetimiRepository {
           'cari_odemeler',
           'yemler',
           'sutler',
-          if (tur == TemizlikTuru.hepsi) ...['cari_fiyatlar', 'fiyatlar', 'cariler'],
+          // v15: fabrika hareketleri hareket sayılır; fabrikalar (kart) yalnız "her şey"de gider.
+          'tank_sayimlari',
+          'fabrika_hareketleri',
+          'sevkiyatlar',
+          // Ürün tanımları (Süt Yemi, Gübre…) ayar gibidir, kalır; fiyatları gider.
+          if (tur == TemizlikTuru.hepsi) ...['cari_urun_fiyatlari', 'cari_fiyatlar', 'fiyatlar', 'cariler', 'fabrikalar'],
         ];
         for (final t in tablolar) {
           silinen[t] = await txn.delete(t);

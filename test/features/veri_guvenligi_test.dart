@@ -65,7 +65,7 @@ void main() {
       db = await testVeritabaniAc();
       final ali = await cariEkle(db, ad: 'Ali');
       await db.insert('sutler', {'cari_id': ali, 'tarih': '2026-11-01', 'sabah': 20, 'aksam': 18, 'toplam': 38});
-      await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-02', 'sut_yemi': 50, 'toplam': 50});
+      await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-02', 'urun_id': 1, 'miktar': 50, 'toplam': 50});
       await db.insert('cari_odemeler', {
         'cari_id': ali, 'tarih': '2026-11-03', 'islem_turu': 'odeme',
         'miktar': 1, 'birim_fiyat': 100, 'toplam_tutar': 100,
@@ -378,8 +378,13 @@ void main() {
       ali = await cariEkle(db, ad: 'Ali', soyad: 'Kaya');
     });
     await tester.pumpWidget(_uygulama(db, YemGirisPage(cari: Cari(id: ali, ad: 'Ali', soyad: 'Kaya'))));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.enterText(find.byType(TextField).first, '50');
+    // v16: alanlar ürün listesinden (veritabanı) oluşur; ilk ürün (Süt Yemi) alanı çizilene kadar beklenir.
+    final alan = find.byKey(const ValueKey('yemAlani_1'));
+    for (var i = 0; i < 100 && alan.evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.enterText(alan, '50');
     await tester.pump();
     final kaydet = find.text('KAYDET');
     await tester.ensureVisible(kaydet);

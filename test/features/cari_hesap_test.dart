@@ -43,7 +43,7 @@ void main() {
     await fiyatTanimla(db, ali, '2026-05', sut: 18.5, sutYemi: 12);
     await sutGir(ali, '2026-05-01', 20, 18); // 38 kg × 18,5 = 703,00
     await sutGir(ali, '2026-05-02', 21.5); // 21,5 × 18,5 = 397,75
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-03', 'sut_yemi': 25, 'toplam': 25}); // 300
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-03', 'urun_id': 1, 'miktar': 25, 'toplam': 25}); // 300
     final notifier = container.read(cariHesapNotifierProvider.notifier);
     await notifier.odemeYap(cariId: ali, tutar: 500, tarih: DateTime(2026, 5, 10));
     await notifier.tahsilatAl(cariId: ali, tutar: 50, tarih: DateTime(2026, 5, 11));
@@ -98,7 +98,7 @@ void main() {
       await sutGir(ali, t, 17.3, 15.9);
       await sutGir(veli, t, 33.33);
     }
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-20', 'sut_yemi': 33.3, 'toplam': 33.3});
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-20', 'urun_id': 1, 'miktar': 33.3, 'toplam': 33.3});
     await container.read(cariHesapNotifierProvider.notifier).odemeYap(cariId: veli, tutar: 1234.56);
 
     final toplu = await container.read(tumKalanBorclarProvider.future);

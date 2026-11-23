@@ -25,7 +25,11 @@ import 'package:sutyem_pro/ekranlar/otomatik_yedekler_ekrani.dart';
 import 'package:sutyem_pro/features/cari/cari_excel_ekrani.dart';
 import 'package:sutyem_pro/features/cari_hesap/screens/cari_hesap_ekstresi_ekrani.dart';
 import 'package:sutyem_pro/features/donem/donem_ekrani.dart';
+import 'package:sutyem_pro/features/fabrika/fabrikalar_ekrani.dart';
+import 'package:sutyem_pro/features/fabrika/sevkiyat_ekrani.dart';
 import 'package:sutyem_pro/features/fis/fis_ekranlari.dart';
+import 'package:sutyem_pro/features/urunler/urunler_ekrani.dart';
+import 'package:sutyem_pro/data/repositories/urun_repository.dart';
 import 'package:sutyem_pro/features/terazi/providers/terazi_providers.dart';
 import 'package:sutyem_pro/features/terazi/services/terazi_baglanti_durumu.dart';
 import 'package:sutyem_pro/models/cari_model.dart';
@@ -56,6 +60,7 @@ Future<void> veriHazirla() async {
     await cariEkle(db, ad: 'Ayşe', soyad: 'Kaya'),
   ];
   await db.update('cariler', {'telefon': '05551234567', 'adres': 'Yeşilköy'}, where: 'id = ?', whereArgs: [idler[0]]);
+  final gubre = await UrunRepository(db).ekle(ad: 'Gübre (Amonyum Sülfat 21)', birim: 'çuval');
   for (final id in idler) {
     for (final ay in [gecenAy, buAy]) {
       await fiyatTanimla(db, id, ay, sut: 18.5, sutYemi: 12, besiYemi: 11);
@@ -64,10 +69,11 @@ Future<void> veriHazirla() async {
       final t = f.format(DateTime(n.year, n.month, n.day - g));
       await db.insert('sutler', {'cari_id': id, 'tarih': t, 'sabah': 1234.5, 'aksam': 987.25, 'toplam': 2221.75});
     }
-    await db.insert('yemler', {
-      'cari_id': id, 'tarih': f.format(n), 'sut_yemi': 50, 'besi_yemi': 25, 'b_baslangic': 5,
-      'b_buyutme': 5, 'kuzu_yemi': 3, 'tavuk_yemi': 2, 'toplam': 90,
-    });
+    // v16: her ürün ayrı satır; uzun adlı, çuvalla verilen bir ürün de (Gübre) taşma denetimine girer.
+    for (final (u, m) in [(urunSutYemi, 50.0), (urunBesiYemi, 25.0), (urunBBaslangic, 5.0), (urunBBuyutme, 5.0), (urunKuzuYemi, 3.0), (urunTavukYemi, 2.0), (gubre, 4.0)]) {
+      await yemSatiriEkle(db, id, f.format(n), m, urunId: u);
+    }
+    await urunFiyatiTanimla(db, id, gubre, buAy, 450);
     await db.insert('cari_odemeler', {
       'cari_id': id, 'tarih': f.format(n), 'islem_turu': 'odeme', 'toplam_tutar': 125000.5,
       'aciklama': 'Elden ödeme, uzun bir açıklama metni ekrana sığıyor mu',
@@ -80,6 +86,18 @@ Future<void> veriHazirla() async {
   final pasif = await cariEkle(db, ad: 'HÜSEYİN HASAN', soyad: 'PASİFOĞULLARI UZUNSOYADLI');
   await db.update('cariler', {'aktif': 0, 'telefon': '05559998877'}, where: 'id = ?', whereArgs: [pasif]);
   await db.insert('cari_odemeler', {'cari_id': pasif, 'tarih': f.format(n), 'islem_turu': 'odeme', 'toplam_tutar': 98765.43});
+  // Tank ve fabrika sevkiyatı: iki fabrika (biri pasif, uzun ad), fiyatsız sevkiyat, tank, ödemeler.
+  final fab = await db.insert('fabrikalar', {'ad': 'ÇOK UZUN ADLI BÜYÜK SÜT VE SÜT ÜRÜNLERİ SANAYİ FABRİKASI A.Ş.', 'telefon': '02321234567'});
+  final fab2 = await db.insert('fabrikalar', {'ad': 'Eski Fabrika', 'aktif': 0});
+  for (var g = 0; g < 20; g++) {
+    final t = f.format(DateTime(n.year, n.month, n.day - g));
+    await db.insert('sevkiyatlar', {'fabrika_id': fab, 'tarih': t, 'saat': '07:30', 'kg': 6000.5, 'birim_fiyat': g.isEven ? 18.75 : 0, 'fis_no': 'IRS-2026-000$g', 'plaka': '35 ABC 123', 'aciklama': 'Sabah tankeri, uzun bir açıklama'});
+    if (g % 3 == 0) await db.insert('tank_sayimlari', {'tarih': t, 'kalan_kg': 650.25});
+  }
+  await db.insert('sevkiyatlar', {'fabrika_id': fab2, 'tarih': f.format(n), 'kg': 100, 'birim_fiyat': 17});
+  await db.insert('fabrika_hareketleri', {'fabrika_id': fab, 'tarih': f.format(n), 'tur': 'tahsilat', 'tutar': 1250000.75, 'aciklama': 'Banka havalesi, uzun açıklama metni'});
+  await db.insert('fabrika_hareketleri', {'fabrika_id': fab, 'tarih': f.format(n), 'tur': 'kesinti', 'tutar': 3500});
+  await db.insert('fabrika_hareketleri', {'fabrika_id': fab, 'tarih': f.format(n), 'tur': 'ek', 'tutar': 1200});
   ali = Cari(
       id: idler[1], ad: 'MEHMET ALİ', soyad: 'UZUNİSİMLİOĞULLARI BÜYÜKÇEKMECELİ', telefon: '05551234567', sira: 99);
 }
@@ -160,6 +178,11 @@ void main() {
     'Pasif Cariler': () => const PasifCarilerEkrani(),
     'Toplama Sırası (Rota)': () => const ToplamaSirasiEkrani(),
     'Otomatik Güvenlik Yedekleri': () => const OtomatikYedeklerEkrani(),
+    'Tank / Fire': () => const SevkiyatEkrani(),
+    'Sevkiyatlar': () => const SevkiyatEkrani(baslangicSekmesi: 1),
+    'Fabrika Hesabı': () => const SevkiyatEkrani(baslangicSekmesi: 2),
+    'Fabrikalar': () => const FabrikalarEkrani(),
+    'Ürünler (Yem, Gübre…)': () => const UrunlerEkrani(),
   };
 
   for (final e in ekranlar.entries) {
@@ -247,7 +270,7 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
-    for (final oge in ['Hızlı Süt Girişi', "Excel'den Cari İçeri Al", 'Süt Fiyatları', 'Dönem Kapanışı & Hakediş', 'Fiş Yazıcısı', 'Yedekleme']) {
+    for (final oge in ['Hızlı Süt Girişi', 'Tank & Fabrika Sevkiyatı', "Excel'den Cari İçeri Al", 'Süt Fiyatları', 'Dönem Kapanışı & Hakediş', 'Fiş Yazıcısı', 'Yedekleme']) {
       expect(find.text(oge), findsOneWidget, reason: oge);
     }
     expect(tester.takeException(), isNull);

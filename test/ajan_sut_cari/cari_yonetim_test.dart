@@ -90,7 +90,7 @@ void main() {
       final id = await repo.insert(Cari(ad: 'ŞÜKRÜ', soyad: 'ÖZ'), sira: 1);
       await fiyatTanimla(db, id, '2026-10', sut: 20, sutYemi: 10);
       await db.insert('sutler', {'cari_id': id, 'tarih': '2026-10-05', 'sabah': 10, 'aksam': 5, 'toplam': 15});
-      await db.insert('yemler', {'cari_id': id, 'tarih': '2026-10-06', 'sut_yemi': 3, 'toplam': 3});
+      await db.insert('yemler', {'cari_id': id, 'tarih': '2026-10-06', 'urun_id': 1, 'miktar': 3, 'toplam': 3});
       final c = testContainer(db);
       addTearDown(c.dispose);
       final once = (await c.read(tumKalanBorclarProvider.future))[id];

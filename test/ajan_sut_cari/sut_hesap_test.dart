@@ -183,7 +183,7 @@ void main() {
       beklenen += kurusaYuvarla((s + a) * f);
       kg += s + a;
     }
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-01-05', 'sut_yemi': 0.333, 'toplam': 0.333});
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-01-05', 'urun_id': 1, 'miktar': 0.333, 'toplam': 0.333});
     final n = c.read(cariHesapNotifierProvider.notifier);
     await n.odemeYap(cariId: ali, tutar: 1000.005, tarih: DateTime(2026, 1, 20));
     final e = await ekstre(ali);
@@ -208,7 +208,7 @@ void main() {
   test('KONTROL: bakiye işareti — süt > yem+ödeme → pozitif (cari alacaklı)', () async {
     await fiyatTanimla(db, ali, '2026-11', sut: 20, sutYemi: 10);
     await sut(ali, '2026-11-02', 50); // 1000
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-03', 'sut_yemi': 30, 'toplam': 30}); // 300
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-11-03', 'urun_id': 1, 'miktar': 30, 'toplam': 30}); // 300
     final n = c.read(cariHesapNotifierProvider.notifier);
     await n.odemeYap(cariId: ali, tutar: 200, tarih: DateTime(2026, 11, 4));
     await n.tahsilatAl(cariId: ali, tutar: 50, tarih: DateTime(2026, 11, 5));

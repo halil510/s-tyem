@@ -102,7 +102,7 @@ void main() {
     final ali = await cariEkle(a.db, ad: 'Ali', soyad: 'Kaya');
     await fiyatTanimla(a.db, ali, '2026-11', sut: 20, sutYemi: 12);
     await a.sut.gunlukKaydet(cariId: ali, tarih: gun, sabah: 40, aksam: 35.5);
-    await a.yem.insert(Yem(cariId: ali, tarih: gun, sutYemi: 25));
+    await a.yem.insert(Yem(cariId: ali, tarih: gun, urunId: 1, miktar: 25));
     await a.odeme.insert(CariOdeme(cariId: ali, tarih: gun, islemTuru: 'odeme', miktar: 1, birimFiyat: 500, toplamTutar: 500));
 
     await esitle(a, b);
@@ -173,7 +173,7 @@ void main() {
   test('Silme yayılır: yem silinince ve cari silinince (bağlı kayıtlarıyla) diğer telefondan da gider', () async {
     await aliHazirla();
     final aAli = await a.cariId('Ali');
-    final yemId = await a.yem.insert(Yem(cariId: aAli, tarih: gun, besiYemi: 10));
+    final yemId = await a.yem.insert(Yem(cariId: aAli, tarih: gun, urunId: 2, miktar: 10));
     await a.sut.gunlukKaydet(cariId: aAli, tarih: gun, sabah: 10, aksam: 0);
     await esitle(a, b);
     expect(await say(b.db, 'yemler'), 1);
@@ -190,14 +190,14 @@ void main() {
   test('Kapalı dönem: A ayı kapatınca B\'de de kilitli; kapanmadan önce B\'de girilen kayıt kaybolmaz', () async {
     await aliHazirla();
     final bAli = await b.cariId('Ali');
-    await b.yem.insert(Yem(cariId: bAli, tarih: '2026-10-15', sutYemi: 5)); // B internetsiz
+    await b.yem.insert(Yem(cariId: bAli, tarih: '2026-10-15', urunId: 1, miktar: 5)); // B internetsiz
     await DonemServisi(a.db).kapat('2026-10', simdi: DateTime(2026, 11, 12));
     await esitle(a, b);
     expect((await b.db.query('donemler')).single['durum'], 'kapali');
     expect(await say(a.db, 'yemler'), 1, reason: 'kapalı aya B\'den gelen kayıt A\'da reddedilip kaybolmamalı');
     expect(await say(b.db, 'donem_hakedisleri'), await say(a.db, 'donem_hakedisleri'));
     // B'de artık o aya yerel yazım yapılamaz.
-    await expectLater(b.yem.insert(Yem(cariId: bAli, tarih: '2026-10-20', sutYemi: 1)), throwsA(anything));
+    await expectLater(b.yem.insert(Yem(cariId: bAli, tarih: '2026-10-20', urunId: 1, miktar: 1)), throwsA(anything));
   });
 
   test('Rota: iki telefon aynı anda yeni cari eklerse sıra numaraları çakışmaz (1..N boşluksuz, iki telefonda aynı)', () async {
@@ -215,7 +215,7 @@ void main() {
   test('JSON yedekten geri yükleme diğer telefondaki kaydı SİLMEZ; o kayıt geri gelir', () async {
     await aliHazirla();
     final json = YedekServisi.coz(await YedekServisi.disaAktarJson(a.db));
-    await b.yem.insert(Yem(cariId: await b.cariId('Ali'), tarih: gun, sutYemi: 7));
+    await b.yem.insert(Yem(cariId: await b.cariId('Ali'), tarih: gun, urunId: 1, miktar: 7));
     await esitle(a, b);
     expect(await say(a.db, 'yemler'), 1);
     await YedekServisi.iceAktar(a.db, json, tamamenDegistir: true); // A eski yedeğe döner (yem yok)

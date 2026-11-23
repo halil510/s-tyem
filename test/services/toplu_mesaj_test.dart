@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sutyem_pro/ekranlar/cari/cari_dialoglari.dart';
 import 'package:sutyem_pro/models/cari_model.dart';
 import 'package:sutyem_pro/models/sut_model.dart';
+import 'package:sutyem_pro/models/urun_model.dart';
 import 'package:sutyem_pro/models/yem_model.dart';
 import 'package:sutyem_pro/services/toplu_mesaj_servisi.dart';
 import 'package:sutyem_pro/services/whatsapp_service.dart';
@@ -77,12 +78,23 @@ void main() {
     });
   });
 
-  test('yem raporu tüm yem türlerini listeler', () {
+  test('yem raporu tüm ürünleri listeler; aynı günün ürünleri tek satırda; kg toplamına çuval girmez', () {
+    const urunler = {
+      1: Urun(id: 1, ad: 'Süt Yemi'),
+      3: Urun(id: 3, ad: 'B. Başlangıç'),
+      4: Urun(id: 4, ad: 'B. Büyütme'),
+      6: Urun(id: 6, ad: 'Tavuk Yemi'),
+      7: Urun(id: 7, ad: 'Gübre', birim: 'çuval'),
+    };
     final r = yemRaporuDetayi([
-      Yem(cariId: 1, tarih: '2026-11-01', sutYemi: 25, bBaslangic: 5, bBuyutme: 2.5),
-      Yem(cariId: 1, tarih: '2026-11-02', tavukYemi: 10),
-    ]);
+      Yem(cariId: 1, tarih: '2026-11-02', urunId: 6, miktar: 10),
+      Yem(cariId: 1, tarih: '2026-11-01', urunId: 1, miktar: 25),
+      Yem(cariId: 1, tarih: '2026-11-01', urunId: 3, miktar: 5),
+      Yem(cariId: 1, tarih: '2026-11-01', urunId: 4, miktar: 2.5),
+      Yem(cariId: 1, tarih: '2026-11-02', urunId: 7, miktar: 3),
+    ], urunler);
     expect(r.toplam, 42.5);
+    expect(r.detay, contains('02.11.2026: Tavuk Yemi: 10 kg, Gübre: 3 çuval'));
     expect(r.detay, contains('01.11.2026: Süt Yemi: 25 kg, B. Başlangıç: 5 kg, B. Büyütme: 2.5 kg'));
     expect(r.detay, contains('02.11.2026: Tavuk Yemi: 10 kg'));
   });

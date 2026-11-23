@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../data/repositories/cari_repository.dart' show cariSirala;
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
+import '../models/urun_model.dart';
 import '../models/yem_model.dart';
 import '../features/cari_hesap/providers/cari_hesap_providers.dart' show AylikCariOzet;
 import '../features/donem/donem_servisi.dart' show HakedisSatiri;
@@ -212,21 +213,17 @@ class ExcelExport {
 
   // ─── 🐮 YEM RAPORU ─────────────────────────────────────────────────
 
-  static const _yemBasliklari = [
-    'İsim Soyisim', 'Tarih', 'Süt Yemi (kg)', 'Besi Yemi (kg)', 'B. Başlangıç (kg)',
-    'B. Büyütme (kg)', 'Kuzu Yemi (kg)', 'Tavuk Yemi (kg)', 'TOPLAM (kg)',
-  ];
-
   static Future<File> exportYemRaporu({
     required List<Cari> cariler,
     required List<Yem> yemler,
+    required List<Urun> urunler,
     required DateTime startDate,
     required DateTime endDate,
     required String raporAdi,
   }) async {
     try {
       final excel = _yeniKitap('Yem Raporu');
-      _yemSayfasi(excel['Yem Raporu'], cariler, yemler, startDate, endDate);
+      _yemSayfasi(excel['Yem Raporu'], cariler, yemler, urunler, startDate, endDate);
       return await _kaydet(excel, raporAdi);
     } catch (e, st) {
       debugPrint('❌ Yem raporu hatası: $e\n$st');
@@ -235,32 +232,58 @@ class ExcelExport {
   }
 
   /// Cari (Türkçe alfabetik) → tarih sırasıyla; her carinin altında ara toplam,
-  /// en altta her yem türünün genel toplamı.
-  static void _yemSayfasi(
-      Sheet sheet, List<Cari> cariler, List<Yem> yemler, DateTime startDate, DateTime endDate) {
+  /// en altta her ürünün genel toplamı. v16: sütunlar = aralıkta kaydı olan ürünler
+  /// (ürün sırasıyla, "Ad (birim)"); aynı cari + aynı günün ürünleri tek satırda.
+  /// "TOPLAM (kg)" yalnız birimi kg olan ürünlerin toplamıdır.
+  static void _yemSayfasi(Sheet sheet, List<Cari> cariler, List<Yem> yemler, List<Urun> urunler,
+      DateTime startDate, DateTime endDate) {
     final bas = _gunFormat.format(startDate), bit = _gunFormat.format(endDate);
     final secili = yemler.where((y) {
       final g = _gunAnahtari(y.tarih);
-      return g.compareTo(bas) >= 0 && g.compareTo(bit) <= 0;
+      return g.compareTo(bas) >= 0 && g.compareTo(bit) <= 0 && y.miktar > 0;
     }).toList(); // kopya: çağıranın listesi değişmez
 
-    final cariYemleri = <int, List<Yem>>{};
+    final urunMap = {for (final u in urunler) if (u.id != null) u.id!: u};
+    final kullanilan = secili.map((y) => y.urunId).toSet();
+    final sutunlar = [
+      for (final u in urunler) if (kullanilan.contains(u.id)) u.id!,
+      for (final id in kullanilan) if (!urunMap.containsKey(id)) id, // silinmiş / eşitlenmemiş ürün
+    ];
+    final kgSutunu = [for (final id in sutunlar) urunMap[id]?.kgMi ?? true];
+    final n = sutunlar.length;
+
+    // cari → gün → ürün sütunu → miktar
+    final cariGunleri = <int, Map<String, List<double>>>{};
     for (final y in secili) {
-      cariYemleri.putIfAbsent(y.cariId, () => []).add(y);
+      final gunler = cariGunleri.putIfAbsent(y.cariId, () => {});
+      final d = gunler.putIfAbsent(_gunAnahtari(y.tarih), () => List<double>.filled(n, 0));
+      d[sutunlar.indexOf(y.urunId)] += y.miktar;
     }
 
-    _basliklar(sheet, 0, _yemBasliklari);
-    final genel = List<double>.filled(7, 0);
+    double kgToplami(List<double> d) {
+      var t = 0.0;
+      for (var i = 0; i < n; i++) {
+        if (kgSutunu[i]) t += d[i];
+      }
+      return t;
+    }
+
+    _basliklar(sheet, 0, [
+      'İsim Soyisim',
+      'Tarih',
+      for (final id in sutunlar) urunMap[id] == null ? 'Ürün #$id' : '${urunMap[id]!.ad} (${urunMap[id]!.birim})',
+      'TOPLAM (kg)',
+    ]);
+    final genel = List<double>.filled(n + 1, 0);
     var satir = 1;
-    for (final cari in _carileriTamamla(cariler, cariYemleri.keys)) {
-      final liste = cariYemleri[cari.id];
-      if (liste == null || liste.isEmpty) continue;
-      liste.sort((a, b) => a.tarih.compareTo(b.tarih));
-      final ara = List<double>.filled(7, 0);
-      for (final y in liste) {
-        final d = [y.sutYemi, y.besiYemi, y.bBaslangic, y.bBuyutme, y.kuzuYemi, y.tavukYemi, y.toplam];
+    for (final cari in _carileriTamamla(cariler, cariGunleri.keys)) {
+      final gunler = cariGunleri[cari.id];
+      if (gunler == null || gunler.isEmpty) continue;
+      final ara = List<double>.filled(n + 1, 0);
+      for (final g in gunler.keys.toList()..sort()) {
+        final d = [...gunler[g]!, kgToplami(gunler[g]!)];
         _yaz(sheet, 0, satir, cari.tamAd);
-        _yaz(sheet, 1, satir, _tarihYazi(y.tarih));
+        _yaz(sheet, 1, satir, _tarihYazi(g));
         for (var i = 0; i < d.length; i++) {
           _yaz(sheet, 2 + i, satir, d[i]);
           ara[i] += d[i];
@@ -268,7 +291,7 @@ class ExcelExport {
         }
         satir++;
       }
-      if (liste.length > 1) {
+      if (gunler.length > 1) {
         _yaz(sheet, 0, satir, '${cari.tamAd} — toplam', _isimStil);
         for (var i = 0; i < ara.length; i++) {
           _yaz(sheet, 2 + i, satir, ara[i], _isimStil);
@@ -296,6 +319,7 @@ class ExcelExport {
     required List<Cari> cariler,
     required List<Sut> sutler,
     required List<Yem> yemler,
+    required List<Urun> urunler,
     required DateTime startDate,
     required DateTime endDate,
     required String raporAdi,
@@ -303,7 +327,7 @@ class ExcelExport {
     final excel = _yeniKitap('Süt Raporu');
     final toplamlar = _sutSayfasi(excel['Süt Raporu'], cariler, sutler, startDate, endDate);
     _sutToplamSayfasi(excel[sutToplamSayfasi], toplamlar, startDate, endDate);
-    _yemSayfasi(excel['Yem Raporu'], cariler, yemler, startDate, endDate);
+    _yemSayfasi(excel['Yem Raporu'], cariler, yemler, urunler, startDate, endDate);
     return _kaydet(excel, raporAdi);
   }
 

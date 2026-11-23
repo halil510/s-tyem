@@ -8,6 +8,8 @@ import '../../data/repositories/cari_odeme_repository.dart';
 import '../../data/repositories/fiyat_repository.dart';
 import '../../data/repositories/terazi_cihaz_repository.dart';
 import '../../data/repositories/veri_yonetimi_repository.dart';
+import '../../data/repositories/fabrika_repository.dart';
+import '../../data/repositories/urun_repository.dart';
 
 /// ─────────────────────────────────────────────────────────────
 /// REPOSITORY PROVIDER'LARI
@@ -57,4 +59,20 @@ final teraziCihazRepositoryProvider = FutureProvider<TeraziCihazRepository>((ref
 final veriYonetimiRepositoryProvider = FutureProvider<VeriYonetimiRepository>((ref) async {
   final db = await ref.watch(databaseProvider.future);
   return VeriYonetimiRepository(db);
+});
+
+final fabrikaRepositoryProvider = FutureProvider<FabrikaRepository>((ref) async {
+  final db = await ref.watch(databaseProvider.future);
+  return FabrikaRepository(db);
+});
+
+/// v16: ürünler (yem, gübre…) ve cari ürün fiyatları.
+final urunRepositoryProvider = FutureProvider<UrunRepository>((ref) async {
+  final db = await ref.watch(databaseProvider.future);
+  return UrunRepository(db);
+});
+
+final urunFiyatRepositoryProvider = FutureProvider<UrunFiyatRepository>((ref) async {
+  final db = await ref.watch(databaseProvider.future);
+  return UrunFiyatRepository(db);
 });

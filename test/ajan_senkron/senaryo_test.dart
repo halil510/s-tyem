@@ -16,6 +16,7 @@ import 'package:sutyem_pro/data/repositories/cari_odeme_repository.dart';
 import 'package:sutyem_pro/data/repositories/cari_repository.dart';
 import 'package:sutyem_pro/data/repositories/fiyat_repository.dart';
 import 'package:sutyem_pro/data/repositories/sut_repository.dart';
+import 'package:sutyem_pro/data/repositories/urun_repository.dart';
 import 'package:sutyem_pro/data/repositories/yem_repository.dart';
 import 'package:sutyem_pro/features/donem/donem_servisi.dart';
 import 'package:sutyem_pro/features/raporlar/rapor_modeli.dart';
@@ -48,6 +49,8 @@ RaporServisi rapor(Database db) => RaporServisi(
       yemRepo: YemRepository(db),
       fiyatRepo: CariFiyatRepository(db),
       odemeRepo: CariOdemeRepository(db),
+      urunRepo: UrunRepository(db),
+      urunFiyatRepo: UrunFiyatRepository(db),
     );
 
 Future<String> raporMetni(Database db, RaporTuru tur) async {
@@ -122,7 +125,7 @@ void main() {
       await SutRepository(t2.db).topluGunlukKaydet(g20, girdiler(await m(t2, [36, 26, 16], sabah: false)), kayitliOgunuKoru: true);
       // Patron: Can'ın süt fiyatı 15 Kasım'dan itibaren 25; Ali'ye yem, Veli'ye ödeme, Can'dan tahsilat.
       await fiyatTanimla(p.db, await p.cariId('Can'), '2026-11-15', sut: 25, sutYemi: 12);
-      await p.yem.insert(Yem(cariId: await p.cariId('Ali'), tarih: g10, sutYemi: 50));
+      await p.yem.insert(Yem(cariId: await p.cariId('Ali'), tarih: g10, urunId: 1, miktar: 50));
       await p.odeme.insert(CariOdeme(cariId: await p.cariId('Veli'), tarih: g10, islemTuru: 'odeme', miktar: 1, birimFiyat: 300, toplamTutar: 300));
       await p.odeme.insert(CariOdeme(cariId: await p.cariId('Can'), tarih: g20, islemTuru: 'tahsilat', miktar: 1, birimFiyat: 100, toplamTutar: 100));
 
@@ -254,7 +257,7 @@ void main() {
         final t = '${tarih.year}-${tarih.month.toString().padLeft(2, '0')}-${tarih.day.toString().padLeft(2, '0')}';
         for (var i = 0; i < 3; i++) {
           await t2.sut.gunlukKaydet(cariId: idler[i], tarih: t, sabah: 10.0 + i, aksam: 0);
-          yemIdleri.add(await t2.yem.insert(Yem(cariId: idler[i], tarih: t, sutYemi: 1)));
+          yemIdleri.add(await t2.yem.insert(Yem(cariId: idler[i], tarih: t, urunId: 1, miktar: 1)));
           await p.sut.gunlukKaydet(cariId: pIdler[i], tarih: t, sabah: 0, aksam: 5.0 + i);
         }
       }

@@ -20,12 +20,18 @@ const _turuncu = Color(0xFFE65100);
 const _tabloAdi = {
   'cariler': 'Cari',
   'cari_fiyatlar': 'Cari fiyatı',
+  'urunler': 'Ürün',
+  'cari_urun_fiyatlari': 'Yem / ürün fiyatı',
   'fiyatlar': 'Piyasa fiyat notu',
   'sutler': 'Süt',
   'yemler': 'Yem',
   'cari_odemeler': 'Ödeme/tahsilat',
   'donemler': 'Dönem',
   'donem_hakedisleri': 'Hakediş',
+  'fabrikalar': 'Fabrika',
+  'sevkiyatlar': 'Sevkiyat',
+  'fabrika_hareketleri': 'Fabrika ödemesi',
+  'tank_sayimlari': 'Tank sayımı',
 };
 
 String _saat(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';

@@ -39,7 +39,7 @@ void main() {
     await fiyatTanimla(db, ali, '2026-10', sut: 18, sutYemi: 12);
     await sutGir(ali, '2026-10-01', 40); //   Ekim: 40 × 18 = 720
     await sutGir(ali, '2026-10-02', 60); //   60 × 18 = 1080
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-10-05', 'sut_yemi': 50, 'toplam': 50}); // 600
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-10-05', 'urun_id': 1, 'miktar': 50, 'toplam': 50}); // 600
     final n = container.read(cariHesapNotifierProvider.notifier);
     await n.odemeYap(cariId: ali, tutar: 1000, tarih: DateTime(2026, 10, 15));
     await n.tahsilatAl(cariId: ali, tutar: 20, tarih: DateTime(2026, 10, 16));
@@ -85,7 +85,7 @@ void main() {
     final mevcut = await sutRepo.getGunluk(ali, '2026-10-01');
     await expectLater(sutRepo.delete(mevcut!.id!), throwsA(isA<DonemKapaliHatasi>()));
     await expectLater(
-        yemRepo.insert(Yem(cariId: ali, tarih: '2026-10-09', sutYemi: 1)),
+        yemRepo.insert(Yem(cariId: ali, tarih: '2026-10-09', urunId: 1, miktar: 1)),
         throwsA(isA<DonemKapaliHatasi>()));
     await expectLater(n.odemeYap(cariId: ali, tutar: 5, tarih: DateTime(2026, 10, 20)),
         throwsA(isA<DonemKapaliHatasi>()));

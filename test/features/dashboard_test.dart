@@ -65,7 +65,8 @@ void main() {
       await sut(veli, gun(0), 15, 0);
       await sut(ali, gun(1), 30, 0);
       await sut(can, gun(1), 12, 0); // dün geldi, bugün yok
-      await db.insert('yemler', {'cari_id': ali, 'tarih': gun(0), 'b_baslangic': 5, 'b_buyutme': 3, 'toplam': 8});
+      await yemSatiriEkle(db, ali, gun(0), 5, urunId: urunBBaslangic);
+      await yemSatiriEkle(db, ali, gun(0), 3, urunId: urunBBuyutme);
     });
 
     tearDown(() => container.dispose());
@@ -80,10 +81,11 @@ void main() {
       expect(d.gelmeyenler.map((c) => c.id), [can]);
     });
 
-    test('buzağı yemleri "Besi" değil kendi diliminde', () async {
+    test('yem dağılımı ürün adıyla: buzağı yemleri "Besi" değil kendi diliminde', () async {
       final d = await container.read(dashboardDataProvider.future);
       final dilim = {for (final y in d.yemDagilimi) y.tur: y.miktar};
-      expect(dilim['Buzağı'], 8);
+      expect(dilim, {'B. Başlangıç': 5, 'B. Büyütme': 3});
+      expect(d.bugunToplamYem, 8);
       expect(dilim.containsKey('Besi'), isFalse);
     });
 

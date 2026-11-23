@@ -5,9 +5,11 @@ import 'package:intl/intl.dart';
 import '../core/database/app_database.dart';
 import '../data/repositories/cari_repository.dart';
 import '../data/repositories/sut_repository.dart';
+import '../data/repositories/urun_repository.dart';
 import '../data/repositories/yem_repository.dart';
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
+import '../models/urun_model.dart';
 import '../models/yem_model.dart';
 import 'excel_export.dart';
 
@@ -26,6 +28,7 @@ class ExcelYedekleme {
     required List<Cari> cariler,
     required List<Sut> sutler,
     required List<Yem> yemler,
+    required List<Urun> urunler,
     required DateTime startDate,
     required DateTime endDate,
     required String raporAdi,
@@ -34,6 +37,7 @@ class ExcelYedekleme {
         cariler: cariler,
         sutler: sutler,
         yemler: yemler,
+        urunler: urunler,
         startDate: startDate,
         endDate: endDate,
         raporAdi: raporAdi,
@@ -92,6 +96,7 @@ class _YedeklemeDialogState extends State<_YedeklemeDialog> {
       cariler: cariler,
       sutler: sutler,
       yemler: yemler,
+      urunler: await UrunRepository(db).getAll(),
       startDate: start,
       endDate: end,
       raporAdi: 'Sut_Yem_Raporu_${DateFormat('yyyy_MM_dd').format(now)}',

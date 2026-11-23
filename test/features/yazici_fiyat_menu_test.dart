@@ -258,7 +258,8 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('topluYemFiyati')), '9,50');
     await tester.tap(find.textContaining('Tümüne'));
     await tester.pump();
-    expect((await tester.runAsync(() => db.query('cari_fiyatlar')))!.single['besi_yemi_fiyat'], 0,
+    expect((await tester.runAsync(() => db.query('cari_urun_fiyatlari', where: 'urun_id = ?', whereArgs: [urunBesiYemi])))!,
+        isEmpty,
         reason: 'Kaydet basılmadan veritabanı değişmez');
 
     await tester.tap(find.text('Kaydet'));
@@ -266,12 +267,14 @@ void main() {
     for (var i = 0; i < 100 && satirlar.length < 2; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump();
-      satirlar = (await tester.runAsync(() =>
-          db.query('cari_fiyatlar', where: 'ay = ?', whereArgs: [ay], orderBy: 'cari_id')))!;
+      satirlar = (await tester.runAsync(() => db.query('cari_urun_fiyatlari',
+          where: 'ay = ? AND urun_id = ?', whereArgs: [ay, urunBesiYemi], orderBy: 'cari_id')))!;
     }
-    expect(satirlar.map((r) => r['besi_yemi_fiyat']), [9.5, 9.5]);
-    expect(satirlar.first['sut_yemi_fiyat'], 11, reason: 'Ali\'nin süt yemi fiyatı korunur');
-    expect(satirlar.first['sut_fiyat'], 15, reason: 'süt fiyatına dokunulmaz');
+    expect(satirlar.map((r) => r['fiyat']), [9.5, 9.5]);
+    final sutYemi = (await tester.runAsync(() => db.query('cari_urun_fiyatlari', where: 'urun_id = ?', whereArgs: [urunSutYemi])))!;
+    expect(sutYemi.map((r) => r['fiyat']), [11],
+        reason: 'Ali\'nin süt yemi fiyatı korunur; Veli\'ye boş (0) fiyat satırı yazılmaz');
+    expect((await tester.runAsync(() => db.query('cari_fiyatlar')))!.single['sut_fiyat'], 15, reason: 'süt fiyatına dokunulmaz');
     await tester.pump(const Duration(seconds: 10)); // bildirimler kapansın
     await tester.runAsync(() => db.close());
   });

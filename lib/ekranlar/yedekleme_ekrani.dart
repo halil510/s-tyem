@@ -491,14 +491,14 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
                       contentPadding: EdgeInsets.zero,
                       value: TemizlikTuru.hareketler,
                       title: Text('Yalnız hareketler'),
-                      subtitle: Text('Süt, yem, ödeme/tahsilat ve dönem kapanışları silinir.\n'
-                          'Cariler ve fiyatlar KORUNUR.'),
+                      subtitle: Text('Süt, yem, ödeme/tahsilat, fabrika sevkiyat/ödemeleri, tank sayımları '
+                          've dönem kapanışları silinir.\nCariler, fabrikalar ve fiyatlar KORUNUR.'),
                     ),
                     RadioListTile(
                       contentPadding: EdgeInsets.zero,
                       value: TemizlikTuru.hepsi,
                       title: Text('Her şey (sıfırdan başla)'),
-                      subtitle: Text('Hareketler + cariler ve tüm fiyatlar silinir.\n'
+                      subtitle: Text('Hareketler + cariler, fabrikalar ve tüm fiyatlar silinir.\n'
                           'Şifre, aktivasyon, yazıcı, terazi ve ayarlar KALIR.'),
                     ),
                   ]),

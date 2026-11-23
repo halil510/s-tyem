@@ -16,6 +16,8 @@ import 'migration_v11_gunluk_fiyat.dart';
 import 'migration_v12_cari_sira.dart';
 import 'migration_v13_senkron.dart';
 import 'migration_v14_senkron_gruplar.dart';
+import 'migration_v15_fabrika_sevkiyat.dart';
+import 'migration_v16_urunler.dart';
 
 /// ─────────────────────────────────────────────────────────────
 /// MIGRATION RUNNER
@@ -57,6 +59,8 @@ class MigrationRunner {
     MigrationV12CariSira(),
     MigrationV13Senkron(),
     MigrationV14SenkronGruplar(),
+    MigrationV15FabrikaSevkiyat(),
+    MigrationV16Urunler(),
   ]..sort((a, b) => a.version.compareTo(b.version));
 
   /// Bu örneğin uygulayacağı migration listesi. Uygulamada daima [_all];

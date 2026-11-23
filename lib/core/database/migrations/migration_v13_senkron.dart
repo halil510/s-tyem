@@ -114,13 +114,20 @@ class MigrationV13Senkron extends Migration {
     await donemKilitleriniKur(db);
     await senkTetikleyicileriKur(db);
 
-    for (final t in senkTablolari) {
+    // Sonraki sürümlerin eklediği tablolar (ör. v15 fabrika) bu noktada henüz yok: atlanır.
+    // Kendi migration'ları tetikleyicilerini kurar (yeni tablo boş olduğundan tabana gerek yok).
+    final mevcut = await mevcutTablolar(db);
+    for (final t in senkTablolari.where(mevcut.contains)) {
       await db.execute('''
         INSERT INTO senk_gunluk (tablo, anahtar, islem, zaman, cihaz)
         SELECT '$t', k, 'y', '$tabanZaman', '' FROM (SELECT ${anahtarIfadesi(t, 'x')} AS k FROM $t x) WHERE k IS NOT NULL''');
     }
   }
 }
+
+/// Veritabanında var olan tablo adları.
+Future<Set<String>> mevcutTablolar(DatabaseExecutor db) async =>
+    {for (final r in await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'")) r['name'] as String};
 
 /// Uzaktan değişiklik uygulanmıyorsa (bu cihazın kendi işlemi) koşulu.
 const _yerelIslem = 'NOT EXISTS (SELECT 1 FROM senk_durum s WHERE s.tek = 1 AND s.uygulaniyor = 1)';
@@ -132,10 +139,13 @@ Future<void> donemKilitleriniKur(DatabaseExecutor db) async {
     'yemler': 'substr(%s.tarih, 1, 7)',
     'cari_odemeler': 'substr(%s.tarih, 1, 7)',
     'cari_fiyatlar': 'substr(%s.ay, 1, 7)',
+    'cari_urun_fiyatlari': 'substr(%s.ay, 1, 7)', // v16
   };
+  // Sonraki migration'ın tablosu (ör. v13 sırasında v16'nın cari_urun_fiyatlari) henüz yoksa atlanır.
+  final mevcut = await mevcutTablolar(db);
   String kapali(String t, String r) =>
       "EXISTS (SELECT 1 FROM donemler WHERE ay = ${ayIfadesi[t]!.replaceAll('%s', r)} AND durum = 'kapali')";
-  for (final t in ayIfadesi.keys) {
+  for (final t in ayIfadesi.keys.where(mevcut.contains)) {
     for (final s in ['ekle', 'guncelle', 'sil']) {
       await db.execute('DROP TRIGGER IF EXISTS trg_${t}_donem_$s');
     }
@@ -189,7 +199,9 @@ Future<void> senkTetikleyicileriKur(DatabaseExecutor db) async {
   const cihaz = 'CASE WHEN d.uygulaniyor = 1 THEN d.uzak_cihaz ELSE d.yerel_cihaz END';
   const kaynak = 'CASE WHEN d.uygulaniyor = 1 THEN d.kaynak ELSE NULL END';
 
-  for (final t in senkTablolari) {
+  // Henüz oluşturulmamış tablo (eski migration'dan çağrılınca, ör. v13 sırasında v15 tabloları) atlanır.
+  final mevcut = await mevcutTablolar(db);
+  for (final t in senkTablolari.where(mevcut.contains)) {
     for (final s in ['ins', 'upd', 'upd_eski', 'del', 'uuid', 'ogun_ins', 'ogun_upd', 'grup_ins', 'grup_upd', 'cocuk_sil']) {
       await db.execute('DROP TRIGGER IF EXISTS senk_${t}_$s');
     }
@@ -222,9 +234,10 @@ Future<void> senkTetikleyicileriKur(DatabaseExecutor db) async {
 
   // Ebeveyn silinmeden ÖNCE: doğal anahtarlı çocukların (süt, fiyat, hakediş) silinmesi,
   // ebeveyn henüz varken doğru anahtarla günlüğe yazılır.
-  for (final ebeveyn in {...iliskiSutunlari.values}) {
+  // Henüz olmayan ebeveyn / çocuk tablo (eski migration sırasında v16 urunler…) atlanır.
+  for (final ebeveyn in {...iliskiSutunlari.values}.where(mevcut.contains)) {
     final govde = StringBuffer();
-    for (final cocuk in dogalAnahtarlar.keys) {
+    for (final cocuk in dogalAnahtarlar.keys.where(mevcut.contains)) {
       for (final c in dogalAnahtarlar[cocuk]!.where((c) => iliskiSutunlari[c] == ebeveyn)) {
         govde.write('''
           INSERT INTO senk_gunluk (tablo, anahtar, islem, zaman, cihaz, kaynak)

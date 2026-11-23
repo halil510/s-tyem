@@ -17,22 +17,32 @@ library;
 /// kendi denetim izi), `_migration_log`, `senk_*`.
 const senkTablolari = [
   'cariler',
+  // v16: ürünler (yem, gübre…) — yem satırları ve ürün fiyatlarının ebeveyni.
+  'urunler',
   'cari_fiyatlar',
+  'cari_urun_fiyatlari',
   'fiyatlar',
   'sutler',
   'yemler',
   'cari_odemeler',
   'donemler',
   'donem_hakedisleri',
+  // v15: tank ve fabrikaya sevkiyat (fabrika ebeveyn önce).
+  'fabrikalar',
+  'sevkiyatlar',
+  'fabrika_hareketleri',
+  'tank_sayimlari',
 ];
 
 /// uuid yerine DOĞAL ANAHTARLA eşleşen tablolar (UNIQUE kısıtıyla aynı).
 /// Değerler '|' ile birleşir; ilişki sütunu ebeveynin anahtarıyla yazılır.
 const dogalAnahtarlar = <String, List<String>>{
   'cari_fiyatlar': ['cari_id', 'ay'],
+  'cari_urun_fiyatlari': ['cari_id', 'urun_id', 'ay'], // cari + ürün + ay için tek fiyat
   'sutler': ['cari_id', 'tarih'],
   'donemler': ['ay'],
   'donem_hakedisleri': ['donem_id', 'cari_id'],
+  'tank_sayimlari': ['tarih'], // günde tek tank sayımı: iki telefon aynı güne girerse birleşir
 };
 
 /// İlişki sütunu → ebeveyn tablo. Hepsi gerçek yabancı anahtar ("sert"):
@@ -40,6 +50,8 @@ const dogalAnahtarlar = <String, List<String>>{
 const iliskiSutunlari = <String, String>{
   'cari_id': 'cariler',
   'donem_id': 'donemler',
+  'fabrika_id': 'fabrikalar',
+  'urun_id': 'urunler',
 };
 
 /// v13'te uuid sütunu eklenen tablolar.
@@ -81,7 +93,13 @@ const alanGruplari = <String, Map<String, List<String>>>{
 const parcaliSilinir = {'sutler', 'cari_fiyatlar'};
 
 /// Kapalı dönem kilidi altındaki tablolar: ayı veren sütun.
-const donemAyiSutunu = {'sutler': 'tarih', 'yemler': 'tarih', 'cari_odemeler': 'tarih', 'cari_fiyatlar': 'ay'};
+const donemAyiSutunu = {
+  'sutler': 'tarih',
+  'yemler': 'tarih',
+  'cari_odemeler': 'tarih',
+  'cari_fiyatlar': 'ay',
+  'cari_urun_fiyatlari': 'ay', // v16
+};
 
 bool dogalMi(String tablo) => dogalAnahtarlar.containsKey(tablo);
 bool grupluMu(String tablo) => alanGruplari.containsKey(tablo);

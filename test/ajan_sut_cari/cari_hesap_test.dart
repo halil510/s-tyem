@@ -67,14 +67,12 @@ Future<void> _biraz(WidgetTester tester, [int n = 10]) async {
 String _iso(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-Future<void> _tamFiyat(Database db, int cariId, String ay, {double sut = 0, double sutYemi = 0, double besi = 0}) =>
-    db.insert('cari_fiyatlar', {
-      'cari_id': cariId,
-      'ay': ay,
-      'sut_fiyat': sut,
-      'sut_yemi_fiyat': sutYemi,
-      'besi_yemi_fiyat': besi,
-    });
+/// Bir anahtarın TÜM fiyatları (0 dahil — 0 da "o tarihten itibaren fiyat 0" demektir).
+Future<void> _tamFiyat(Database db, int cariId, String ay, {double sut = 0, double sutYemi = 0, double besi = 0}) async {
+  await db.insert('cari_fiyatlar', {'cari_id': cariId, 'ay': ay, 'sut_fiyat': sut});
+  await urunFiyatiTanimla(db, cariId, urunSutYemi, ay, sutYemi);
+  await urunFiyatiTanimla(db, cariId, urunBesiYemi, ay, besi);
+}
 
 void main() {
   // ─────────────────────── HESAP / RAPOR UYUMU ───────────────────────
@@ -103,9 +101,10 @@ void main() {
       await sut.gunlukKaydet(cariId: ali, tarih: '2026-10-31', sabah: 9.99, aksam: 9.99);
       await sut.gunlukKaydet(cariId: ali, tarih: '2026-11-01', sabah: 3.33, aksam: 0);
       await sut.gunlukKaydet(cariId: veli, tarih: '2026-10-10', sabah: 40.05, aksam: 0);
-      await yem.insert(Yem(cariId: ali, tarih: '2026-10-20', sutYemi: 33.3));
-      await yem.insert(Yem(cariId: ali, tarih: '2026-11-02', sutYemi: 7.7, besiYemi: 1.1));
-      await yem.insert(Yem(cariId: veli, tarih: '2026-10-10', sutYemi: 100));
+      await yem.insert(Yem(cariId: ali, tarih: '2026-10-20', urunId: 1, miktar: 33.3));
+      await yem.insert(Yem(cariId: ali, tarih: '2026-11-02', urunId: urunSutYemi, miktar: 7.7));
+      await yem.insert(Yem(cariId: ali, tarih: '2026-11-02', urunId: urunBesiYemi, miktar: 1.1));
+      await yem.insert(Yem(cariId: veli, tarih: '2026-10-10', urunId: 1, miktar: 100));
 
       final n = c.read(cariHesapNotifierProvider.notifier);
       await n.odemeYap(cariId: ali, tutar: 150.555, tarih: DateTime(2026, 10, 31));
@@ -118,6 +117,8 @@ void main() {
         yemRepo: yem,
         fiyatRepo: await c.read(cariFiyatRepositoryProvider.future),
         odemeRepo: await c.read(cariOdemeRepositoryProvider.future),
+        urunRepo: await c.read(urunRepositoryProvider.future),
+        urunFiyatRepo: await c.read(urunFiyatRepositoryProvider.future),
       );
     });
 
@@ -302,7 +303,7 @@ void main() {
       final id = await cariEkle(db, ad: 'Ali', soyad: 'Kaya');
       ali = Cari.fromMap((await db.query('cariler', where: 'id = ?', whereArgs: [id])).single);
       await _tamFiyat(db, id, _iso(gecenAy).substring(0, 7), sut: 20, sutYemi: 10);
-      await db.insert('yemler', {'cari_id': id, 'tarih': _iso(gecenAy), 'sut_yemi': 100, 'toplam': 100});
+      await db.insert('yemler', {'cari_id': id, 'tarih': _iso(gecenAy), 'urun_id': 1, 'miktar': 100, 'toplam': 100});
       await db.insert('sutler', {'cari_id': id, 'tarih': _iso(buAyBasi), 'sabah': 10, 'aksam': 0, 'toplam': 10});
     });
     await tester.pumpWidget(_uygulama(db, CariHesapEkstresiEkrani(cari: ali)));

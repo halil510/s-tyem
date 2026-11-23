@@ -7,10 +7,11 @@ import '../../data/repositories/denetim_kaydi.dart';
 export '../../data/repositories/donem_kilidi.dart';
 import '../../models/cari_fiyat_model.dart';
 import '../../models/sut_model.dart';
+import '../../models/urun_model.dart';
 import '../../models/yem_model.dart';
 import '../../utils/sayi_format.dart';
 import '../cari_hesap/models/cari_fiyat_lookup.dart';
-import '../cari_hesap/providers/cari_hesap_providers.dart' show donemSutFiyati, sutTutari, yemTutari;
+import '../cari_hesap/providers/cari_hesap_providers.dart' show donemSutFiyati, kgUrunuMu, sutTutari, yemTutari;
 
 /// Dönem işlemi kurala aykırı (ör. bitmemiş ay kapatılmak istendi).
 class DonemIslemHatasi implements Exception {
@@ -170,6 +171,8 @@ class DonemServisi {
     final bas = '$ay-01', bit = '$ay-31';
     final lookup = CariFiyatLookup(
         (await e.query('cari_fiyatlar')).map((m) => CariFiyat.fromMap(m)).toList());
+    final urunFiyatlari = UrunFiyatLookup((await e.query('cari_urun_fiyatlari')).map(UrunFiyat.fromMap));
+    final urunler = {for (final m in await e.query('urunler')) m['id'] as int: Urun.fromMap(m)};
 
     final devir = <int, double>{};
     final sutKg = <int, double>{}, sutTl = <int, double>{};
@@ -194,12 +197,12 @@ class DonemServisi {
     }
     for (final m in await e.query('yemler', where: 'tarih <= ?', whereArgs: [bit])) {
       final y = Yem.fromMap(m);
-      final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih));
+      final tutar = yemTutari(y, urunFiyatlari);
       if (y.tarih.compareTo(bas) < 0) {
         ekle(devir, y.cariId, -tutar);
       } else {
-        if (y.toplam > 0 && tutar <= 0) eksik.add(y.cariId);
-        ekle(yemKg, y.cariId, y.toplam);
+        if (y.miktar > 0 && tutar <= 0) eksik.add(y.cariId);
+        ekle(yemKg, y.cariId, kgUrunuMu(urunler, y.urunId) ? y.miktar : 0);
         ekle(yemTl, y.cariId, tutar);
       }
     }
@@ -277,6 +280,19 @@ class DonemServisi {
             ..['yem_zaman'] = '';
           await txn.insert('cari_fiyatlar', f);
         }
+      }
+      // Aynısı ürün (yem) fiyatları için (v16): devralınan fiyat bu ayın başına yazılır.
+      final urunSatirlari = (await txn.query('cari_urun_fiyatlari')).map(UrunFiyat.fromMap).toList();
+      final urunLookup = UrunFiyatLookup(urunSatirlari);
+      final hakedisCarileri = {for (final s in satirlar) s.cariId};
+      final cifti = <String>{};
+      for (final f in urunSatirlari) {
+        if (!hakedisCarileri.contains(f.cariId) || f.ay.compareTo(ay) >= 0) continue; // yalnız devralınanlar
+        if (!cifti.add('${f.cariId}|${f.urunId}')) continue;
+        final ayinSatiriVar = urunSatirlari.any((x) => x.cariId == f.cariId && x.urunId == f.urunId && x.ay == ay);
+        if (ayinSatiriVar) continue;
+        await txn.insert('cari_urun_fiyatlari',
+            {'cari_id': f.cariId, 'urun_id': f.urunId, 'ay': ay, 'fiyat': urunLookup.fiyat(f.cariId, f.urunId, ay)});
       }
 
       final zaman = sqliteSimdi();

@@ -293,6 +293,7 @@ class _CariListesiState extends ConsumerState<CariListesi> {
           : await ExcelExport.exportYemRaporu(
               cariler: cariler,
               yemler: yemler!,
+              urunler: await (await ref.read(urunRepositoryProvider.future)).getAll(),
               startDate: aralik.start,
               endDate: aralik.end,
               raporAdi: ad,
@@ -339,8 +340,9 @@ class _CariListesiState extends ConsumerState<CariListesi> {
         });
       case WhatsappSecenek.yemRaporu:
         final bas = gun.format(DateTime(bugun.year, bugun.month, 1));
+        final urunler = {for (final u in await (await ref.read(urunRepositoryProvider.future)).getAll()) u.id!: u};
         await _topluGonder(secili, 'yem raporu', (cari) async {
-          final y = yemRaporuDetayi(await _yemRepo.getByCari(cari.id!, bas, gun.format(bugun)));
+          final y = yemRaporuDetayi(await _yemRepo.getByCari(cari.id!, bas, gun.format(bugun)), urunler);
           return WhatsAppService.createYemRaporuMessage(
             cariAd: '${cari.ad} ${cari.soyad}',
             toplamYem: y.toplam,

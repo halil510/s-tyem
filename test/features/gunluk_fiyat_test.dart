@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sutyem_pro/core/providers/repository_providers.dart';
 import 'package:sutyem_pro/data/repositories/donem_kilidi.dart';
 import 'package:sutyem_pro/data/repositories/fiyat_repository.dart';
+import 'package:sutyem_pro/data/repositories/urun_repository.dart';
 import 'package:sutyem_pro/features/cari_hesap/providers/cari_hesap_providers.dart';
 import 'package:sutyem_pro/features/donem/donem_servisi.dart';
 import 'package:sutyem_pro/models/cari_fiyat_model.dart';
@@ -114,22 +115,20 @@ void main() {
     await repo.topluKaydet([CariFiyat(cariId: ali, ay: '2026-11-04', sutFiyat: 27)]);
   });
 
-  test('aylık yem fiyatı kaydedilince aynı ayın gün satırlarına da yayılır', () async {
-    await fiyatTanimla(db, ali, '2026-11', sut: 25, sutYemi: 10);
-    await fiyatTanimla(db, ali, '2026-11-04', sut: 27, sutYemi: 10);
-    await fiyatTanimla(db, ali, '2026-12-04', sut: 30, sutYemi: 10); // başka ay: dokunulmaz
+  test('aylık yem fiyatı kaydedilince aynı ayın gün başlangıçlı (eski) ürün fiyatları kalkar; ay bütünüyle yeni fiyattan', () async {
+    // v16: eski veriden gelen gün anahtarlı ürün fiyatı (4 Kasım'dan itibaren 11) + başka ay.
+    await urunFiyatiTanimla(db, ali, urunSutYemi, '2026-11', 10);
+    await urunFiyatiTanimla(db, ali, urunSutYemi, '2026-11-04', 11);
+    await urunFiyatiTanimla(db, ali, urunSutYemi, '2026-12-04', 13); // başka ay: dokunulmaz
 
-    await CariFiyatRepository(db).topluKaydet(
-      [CariFiyat(cariId: ali, ay: '2026-11', sutFiyat: 25, sutYemiFiyat: 12)],
-      yemFiyatiniAyaYay: true,
-    );
+    await UrunFiyatRepository(db).ayFiyatlariniKaydet('2026-11', [(cariId: ali, urunId: urunSutYemi, fiyat: 12)]);
     final satirlar = {
-      for (final m in await db.query('cari_fiyatlar', where: 'cari_id = ?', whereArgs: [ali]))
-        m['ay']: (m['sut_fiyat'], m['sut_yemi_fiyat'])
+      for (final m in await db.query('cari_urun_fiyatlari', where: 'cari_id = ?', whereArgs: [ali])) m['ay']: m['fiyat'],
     };
-    expect(satirlar['2026-11'], (25.0, 12.0));
-    expect(satirlar['2026-11-04'], (27.0, 12.0), reason: 'süt fiyatı korunur, yem güncellenir');
-    expect(satirlar['2026-12-04'], (30.0, 10.0));
+    expect(satirlar, {'2026-11': 12.0, '2026-12-04': 13.0});
+    final l = await UrunFiyatRepository(db).lookup();
+    expect(l.fiyat(ali, urunSutYemi, '2026-11-20'), 12.0, reason: 'ayın tamamı yeni aylık fiyattan');
+    expect(l.fiyat(ali, urunSutYemi, '2026-12-10'), 13.0);
   });
 
   test('seçilen günde geçerli fiyat (Süt Fiyatları ekranının ön dolgusu)', () async {

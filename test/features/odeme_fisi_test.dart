@@ -78,7 +78,7 @@ void main() {
 
   test('tahsilat: önceki borç + tahsilat = kalan borç; borç kapanınca "HESAP KAPANDI"', () async {
     await fiyatTanimla(db, ali, '2026-05', sut: 20, sutYemi: 10);
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-03', 'sut_yemi': 30, 'toplam': 30}); // 300 borç
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-03', 'urun_id': 1, 'miktar': 30, 'toplam': 30}); // 300 borç
     final n = container.read(cariHesapNotifierProvider.notifier);
     final t1 = await n.tahsilatAl(cariId: ali, tutar: 100, tarih: DateTime(2026, 5, 4));
     final t2 = await n.tahsilatAl(cariId: ali, tutar: 200, tarih: DateTime(2026, 5, 4));

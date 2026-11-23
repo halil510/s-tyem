@@ -236,7 +236,7 @@ void main() {
   test('BUG: A cariyi siler, B (daha sonra) carinin telefonunu düzeltir → iki telefon FARKLI süt/fiyat/bakiye ile kalır', () async {
     await aliHazirla();
     await a.sut.gunlukKaydet(cariId: await a.cariId('Ali'), tarih: gun, sabah: 40, aksam: 0);
-    await a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: gun, sutYemi: 5));
+    await a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: gun, urunId: 1, miktar: 5));
     await esitle(a, b);
     await a.cari.delete(await a.cariId('Ali'));
     await bekle();
@@ -256,7 +256,7 @@ void main() {
     await aliHazirla();
     final aAli = await a.cariId('Ali');
     await fiyatTanimla(a.db, aAli, '2026-10', sut: 20, sutYemi: 12);
-    await a.yem.insert(Yem(cariId: aAli, tarih: '2026-10-15', sutYemi: 5));
+    await a.yem.insert(Yem(cariId: aAli, tarih: '2026-10-15', urunId: 1, miktar: 5));
     await esitle(a, b);
     await DonemServisi(a.db).kapat('2026-10', simdi: DateTime(2026, 11, 12)); // t1 (A)
     await bekle();
@@ -340,7 +340,7 @@ void main() {
     final cariUuid = (await a.db.query('cariler')).single['uuid'] as String;
     // tarih yok (NOT NULL) → insert hata verir
     final bozuk = SenkKayit(tablo: 'yemler', anahtar: 'bozuk-uuid', zaman: SenkCekirdek.simdiUtc(), cihaz: 'X', veri: {
-      'sut_yemi': 1.0,
+      'miktar': 1.0,
       '_ref': {'cari_id': cariUuid}
     });
     final s = await a.db.transaction((t) => SenkCekirdek(t).uygula([bozuk], kanal: 'kanal:X'));
@@ -348,7 +348,7 @@ void main() {
     expect((await a.db.query('senk_durum')).single['uygulaniyor'], 0);
     expect(await say(a.db, 'senk_hatalar'), 1);
     expect(await say(a.db, 'senk_bekleyen'), 1);
-    await expectLater(a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: '2026-10-20', sutYemi: 1)), throwsA(anything));
+    await expectLater(a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: '2026-10-20', urunId: 1, miktar: 1)), throwsA(anything));
     await expectLater(a.db.insert('sutler', {'cari_id': await a.cariId('Ali'), 'tarih': '2026-10-20', 'sabah': 1}), throwsA(anything));
   });
 
@@ -378,7 +378,7 @@ void main() {
   test('KONTROL: dönem kapatma (donemler + donem_hakedisleri iç içe doğal anahtar) karşıya çoğalmadan geçer, tekrar eşitlemede değişmez', () async {
     await aliHazirla();
     await fiyatTanimla(a.db, await a.cariId('Ali'), '2026-10', sut: 20, sutYemi: 12);
-    await a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: '2026-10-15', sutYemi: 5));
+    await a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: '2026-10-15', urunId: 1, miktar: 5));
     await DonemServisi(a.db).kapat('2026-10', simdi: DateTime(2026, 11, 12));
     await esitle(a, b);
     expect(await say(b.db, 'donemler'), 1);

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/database/migrations/migration_v16_urunler.dart';
+import '../../models/urun_model.dart';
 import '../../senkron/senk_cekirdek.dart';
 
 /// Yedek okunamadığında / uygulanamadığında fırlatılır. Mesaj doğrudan
@@ -45,18 +47,28 @@ class YedekServisi {
 
   /// v1: yalnızca cariler/sutler/yemler. v2: tüm iş tabloları.
   /// v3: + dönemler ve kapanmış dönem bordroları.
-  static const formatSurumu = 3;
+  /// v4: + fabrikalar, sevkiyatlar, fabrika hareketleri, tank sayımları (migration v15).
+  /// v5: + ürünler ve cari ürün fiyatları; yem satırı = ürün + miktar (migration v16).
+  ///     Eski (v1–v4) yedek yüklenirken 6 sütunlu yem satırları ve yem fiyatları
+  ///     [_eskiYemBiciminiCevir] ile çevrilir (bakiye kuruşu kuruşuna aynı).
+  static const formatSurumu = 5;
 
   /// Yabancı anahtar sırasına göre (önce ebeveyn tablo).
   static const tablolar = [
     'cariler',
+    'urunler',
     'cari_fiyatlar',
+    'cari_urun_fiyatlari',
     'fiyatlar',
     'sutler',
     'yemler',
     'cari_odemeler',
     'donemler',
     'donem_hakedisleri',
+    'fabrikalar',
+    'sevkiyatlar',
+    'fabrika_hareketleri',
+    'tank_sayimlari',
   ];
 
   /// "Tam yedek" sayılmak için gereken tablolar (format v2). Dönem
@@ -72,7 +84,12 @@ class YedekServisi {
   ];
 
   /// Tarih sütunu gün biçiminde (`yyyy-MM-dd`) tutulan tablolar.
-  static const _gunTarihliTablolar = {'sutler', 'yemler', 'cari_odemeler'};
+  static const _gunTarihliTablolar = {'sutler', 'yemler', 'cari_odemeler', 'sevkiyatlar', 'fabrika_hareketleri', 'tank_sayimlari'};
+
+  /// Sonradan eklenen (v4) tablolar: yedekte bölümü YOKSA (eski yedek) "tamamen değiştir"de
+  /// bu cihazdaki kayıtları SİLİNMEZ — eski bir yedeği yüklemek fabrika hesabını yok etmesin.
+  /// (Üretici tablolarına bağlı değiller; kalmaları tutarlılığı bozmaz.)
+  static const _istegeBagliTablolar = {'fabrikalar', 'sevkiyatlar', 'fabrika_hareketleri', 'tank_sayimlari', 'urunler'};
 
   // ──────────────────────────────────────────
   // DIŞA AKTAR
@@ -190,11 +207,15 @@ class YedekServisi {
         // dönem durumları aşağıda yeniden yazılır.
         await txn.update('donemler', {'durum': 'acik'});
         for (final tablo in tablolar.reversed) {
+          if (_istegeBagliTablolar.contains(tablo) && veri[tablo] is! List) continue;
           await txn.delete(tablo);
         }
       }
 
       if (!tamamenDegistir) await _baskaVeritabaniMi(txn, veri);
+
+      // v16 öncesi yedek: yem satırları 6 sütunlu, yem fiyatları cari_fiyatlar'da.
+      veri = await _eskiYemBiciminiCevir(txn, veri);
 
       final sayilar = <String, int>{};
       for (final tablo in tablolar) {
@@ -249,6 +270,101 @@ class YedekServisi {
         );
       }
     }
+    // Aynı denetim ürünler için (v5 yedek): aynı numaralı başka ürün ezilirse yem kayıtları
+    // yanlış ürüne (ör. "Gübre" → "Saman") geçerdi. Ürünlerde uuid her zaman vardır.
+    final urunler = veri['urunler'];
+    if (urunler is List && urunler.isNotEmpty) {
+      final yerelU = {for (final r in await txn.query('urunler', columns: ['id', 'ad', 'uuid'])) r['id']: r};
+      for (final ham in urunler) {
+        final y = ham as Map;
+        final l = yerelU[y['id']];
+        if (l == null) continue;
+        final yu = y['uuid'], lu = l['uuid'];
+        final ayni = (yu != null && lu != null) ? yu == lu : ad(y) == ad(l);
+        if (!ayni) {
+          throw YedekHatasi(
+            'Bu yedek başka bir veritabanına ait görünüyor: ${y['id']} numaralı ürün telefonda '
+            '"${l['ad']}", yedekte "${y['ad']}". Birleştirilirse yem kayıtları yanlış ürüne geçer; '
+            'yükleme yapılmadı. "Yedekteki hale getir" seçeneğini kullanın.',
+          );
+        }
+      }
+    }
+    // Aynı denetim fabrikalar için (v4 yedek): aynı numaralı başka fabrika ezilirse
+    // sevkiyat ve ödemeleri yanlış fabrikaya geçerdi. Fabrikalarda uuid her zaman vardır.
+    final fabrikalar = veri['fabrikalar'];
+    if (fabrikalar is List && fabrikalar.isNotEmpty) {
+      final yerelF = {for (final r in await txn.query('fabrikalar', columns: ['id', 'ad', 'uuid'])) r['id']: r};
+      for (final ham in fabrikalar) {
+        final y = ham as Map;
+        final l = yerelF[y['id']];
+        if (l == null) continue;
+        final yu = y['uuid'], lu = l['uuid'];
+        final ayni = (yu != null && lu != null) ? yu == lu : ad(y) == ad(l);
+        if (!ayni) {
+          throw YedekHatasi(
+            'Bu yedek başka bir veritabanına ait görünüyor: ${y['id']} numaralı fabrika telefonda '
+            '"${l['ad']}", yedekte "${y['ad']}". Birleştirilirse sevkiyatlar yanlış fabrikaya geçer; '
+            'yükleme yapılmadı. "Yedekteki hale getir" seçeneğini kullanın.',
+          );
+        }
+      }
+    }
+  }
+
+  /// ESKİ (v16 öncesi, format ≤ 4) YEDEK: bellekte yeni biçime çevrilir — veritabanına
+  /// eski sütunlar hiç yazılmaz. Kural migration v16 ile AYNI (ortak fonksiyonlar):
+  ///  • 6 sütunlu yem satırı → ürün başına bir satır; ilk dolu tür satırın kendi id/uuid'iyle,
+  ///    diğerleri "uuid~ürün" kimliğiyle (aynı yedek iki kez birleştirilse de çift satır olmaz).
+  ///    Tamamen boş (0 kg) satır atlanır.
+  ///  • cari_fiyatlar'daki yem fiyatları → cari_urun_fiyatlari değişim noktaları.
+  ///  • Gereken eski ürünler (Süt Yemi…) bu telefonda yoksa sabit kimlikleriyle eklenir.
+  /// Yeni biçim yedekte `cari_urun_fiyatlari` bölümü HER ZAMAN vardır (boş olsa da): işaret odur.
+  static Future<Map<String, dynamic>> _eskiYemBiciminiCevir(Transaction txn, Map<String, dynamic> veri) async {
+    if (veri['cari_urun_fiyatlari'] is List) return veri;
+    final yemler = [for (final r in (veri['yemler'] as List?) ?? const []) Map<String, Object?>.from(r as Map)];
+    final fiyatlar = [for (final r in (veri['cari_fiyatlar'] as List?) ?? const []) Map<String, Object?>.from(r as Map)];
+    final noktalar = eskiFiyatNoktalari(fiyatlar);
+
+    final gerekli = <String>{
+      for (final y in yemler) for (final (t, _) in eskiYemKalemleri(y)) t.uuid,
+      for (final n in noktalar) n.tur.uuid,
+    };
+    final urunIdleri = gerekli.isEmpty ? <String, int>{} : await sistemUrunleriniEkle(txn, yalniz: gerekli);
+
+    final yeniYemler = <Map<String, Object?>>[];
+    // Bölünen (id'siz) satırlar EN SONA: önce yedekteki id'li satırlar yazılsın. Araya girselerdi otomatik
+    // numara alıp yedekte SONRAKİ satırın id'sini kapar, o satır "id eşleşti" diye bunun üzerine yazılırdı.
+    final bolunenler = <Map<String, Object?>>[];
+    for (final y in yemler) {
+      final kalemler = eskiYemKalemleri(y);
+      if (kalemler.isEmpty) continue;
+      final sifir = {for (final t in sistemUrunleri) t.yemSutunu: 0.0};
+      final (ilkTur, ilkMiktar) = kalemler.first;
+      yeniYemler.add({...y, ...sifir, 'urun_id': urunIdleri[ilkTur.uuid], 'miktar': ilkMiktar, 'toplam': ilkMiktar});
+      final anaUuid = (y['uuid'] as String?) ?? 'yedek-${y['id']}-${y['cari_id']}-${y['tarih']}';
+      for (final (tur, miktar) in kalemler.skip(1)) {
+        bolunenler.add({
+          'cari_id': y['cari_id'],
+          'tarih': y['tarih'],
+          ...sifir,
+          'urun_id': urunIdleri[tur.uuid],
+          'miktar': miktar,
+          'toplam': miktar,
+          'aciklama': y['aciklama'],
+          if (y['created_at'] != null) 'created_at': y['created_at'],
+          if (y['updated_at'] != null) 'updated_at': y['updated_at'],
+          'uuid': bolunmusYemUuid(anaUuid, tur),
+        });
+      }
+    }
+    return {
+      ...veri,
+      if (veri['yemler'] is List) 'yemler': [...yeniYemler, ...bolunenler],
+      'cari_urun_fiyatlari': [
+        for (final n in noktalar) {'cari_id': n.cariId, 'urun_id': urunIdleri[n.tur.uuid], 'ay': n.ay, 'fiyat': n.fiyat},
+      ],
+    };
   }
 
   /// Bu telefon bulut ya da yerel ağ eşitlemesine bağlı mı?
@@ -316,11 +432,22 @@ class YedekServisi {
       if (guncellenen > 0) return;
     }
 
+    // id'siz satır (ör. eski yedekten bölünen yem satırı) kimliğiyle eşleşir: aynı yedek
+    // ikinci kez birleştirilirse çift satır (ya da "aynı kayıt iki kez var" hatası) olmaz.
+    final uuid = satir['uuid'];
+    if (id == null && uuid is String && uuid.isNotEmpty) {
+      if (await ayniMi('uuid = ?', [uuid])) return;
+      final guncellenen = await txn.update(tablo, idsiz, where: 'uuid = ?', whereArgs: [uuid]);
+      if (guncellenen > 0) return;
+    }
+
     final dogalAnahtar = switch (tablo) {
       'sutler' => ['cari_id', 'tarih'],
       'cari_fiyatlar' => ['cari_id', 'ay'],
+      'cari_urun_fiyatlari' => ['cari_id', 'urun_id', 'ay'],
       'donemler' => ['ay'],
       'donem_hakedisleri' => ['donem_id', 'cari_id'],
+      'tank_sayimlari' => ['tarih'],
       _ => const <String>[],
     };
     if (dogalAnahtar.isNotEmpty && dogalAnahtar.every((k) => satir[k] != null)) {

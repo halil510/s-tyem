@@ -49,7 +49,7 @@ void main() {
       await db.insert('sutler', {'cari_id': ali, 'tarih': t, 'sabah': 20.5, 'aksam': 18, 'toplam': 38.5});
       await db.insert('sutler', {'cari_id': ayse, 'tarih': t, 'sabah': 11, 'aksam': 9.25, 'toplam': 20.25});
     }
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-10-03', 'sut_yemi': 50, 'toplam': 50});
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-10-03', 'urun_id': 1, 'miktar': 50, 'toplam': 50});
     await db.insert('cari_odemeler', {
       'cari_id': ali, 'tarih': '2026-10-15', 'islem_turu': 'odeme',
       'miktar': 1, 'birim_fiyat': 1000, 'toplam_tutar': 1000, 'odenen_tutar': 1000,

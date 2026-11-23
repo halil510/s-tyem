@@ -25,6 +25,10 @@ class CariHareket {
   /// (kullanıcıyı fiyat girmeye yönlendirmek için)
   final bool fiyatEksik;
 
+  /// Aynı gün aynı türdeki satırların SABİT sırası için kaynak satır id'si (yem satırları);
+  /// silme yetkisi vermez (bkz. [kayitId]).
+  final int? siraId;
+
   const CariHareket({
     required this.tarih,
     required this.tur,
@@ -34,6 +38,7 @@ class CariHareket {
     this.aciklama,
     this.kayitId,
     this.fiyatEksik = false,
+    this.siraId,
   });
 
   bool get silinebilir => kayitId != null;

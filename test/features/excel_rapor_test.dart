@@ -10,6 +10,7 @@ import 'package:sutyem_pro/features/cari_hesap/providers/cari_hesap_providers.da
 import 'package:sutyem_pro/features/donem/donem_servisi.dart';
 import 'package:sutyem_pro/models/cari_model.dart';
 import 'package:sutyem_pro/models/sut_model.dart';
+import 'package:sutyem_pro/models/urun_model.dart';
 import 'package:sutyem_pro/models/yem_model.dart';
 import 'package:sutyem_pro/utils/excel_export.dart';
 
@@ -107,18 +108,31 @@ void main() {
     });
   });
 
+  // v16: sütunlar = aralıkta kaydı olan ürünler (ürün sırasıyla, "Ad (birim)");
+  // aynı cari + aynı günün ürünleri tek satır; TOPLAM (kg) yalnız kg ürünleri.
+  const urunler = [
+    Urun(id: 1, ad: 'Süt Yemi', sira: 1),
+    Urun(id: 2, ad: 'Besi Yemi', sira: 2),
+    Urun(id: 3, ad: 'B. Başlangıç', sira: 3),
+    Urun(id: 6, ad: 'Tavuk Yemi', sira: 6),
+    Urun(id: 7, ad: 'Gübre', birim: 'çuval', sira: 7),
+  ];
+
   group('Yem raporu', () {
-    test('cariye göre gruplu, tür toplamları, çağıranın listesi değişmez', () async {
+    test('cariye göre gruplu, ürün sütunları, aynı gün tek satır, çağıranın listesi değişmez', () async {
       final yemler = [
-        Yem(cariId: 4, tarih: '2026-11-03', sutYemi: 50),
-        Yem(cariId: 1, tarih: '2026-11-02', besiYemi: 25.5),
-        Yem(cariId: 1, tarih: '2026-11-01', sutYemi: 0.1, bBaslangic: 0.2),
-        Yem(cariId: 2, tarih: '2026-11-01', tavukYemi: 10),
+        Yem(cariId: 4, tarih: '2026-11-03', urunId: 1, miktar: 50),
+        Yem(cariId: 1, tarih: '2026-11-02', urunId: 2, miktar: 25.5),
+        Yem(cariId: 1, tarih: '2026-11-01', urunId: 1, miktar: 0.1),
+        Yem(cariId: 1, tarih: '2026-11-01', urunId: 3, miktar: 0.2),
+        Yem(cariId: 2, tarih: '2026-11-01', urunId: 6, miktar: 10),
+        Yem(cariId: 2, tarih: '2026-11-01', urunId: 7, miktar: 2),
       ];
       final onceki = yemler.map((y) => y.tarih).toList();
       final f = await ExcelExport.exportYemRaporu(
           cariler: [zeki, ali],
           yemler: yemler,
+          urunler: urunler,
           startDate: DateTime(2026, 11, 1),
           endDate: DateTime(2026, 11, 30),
           raporAdi: 'yem');
@@ -126,13 +140,19 @@ void main() {
       final x = _oku(f);
       expect(x.tables.keys.toList(), ['Yem Raporu']);
       final r = _satirlar(x, 'Yem Raporu');
+      expect(r.first, [
+        'İsim Soyisim', 'Tarih', 'Süt Yemi (kg)', 'Besi Yemi (kg)', 'B. Başlangıç (kg)', 'Tavuk Yemi (kg)', 'Gübre (çuval)',
+        'TOPLAM (kg)',
+      ]);
       expect(r.map((s) => s.first).toList(), [
         'İsim Soyisim', 'ALİ VELİ', 'ALİ VELİ', 'ALİ VELİ — toplam',
         'Silinmiş/pasif cari #2', 'ZEKİ ÖZ', 'GENEL TOPLAM',
       ]);
-      expect(r[1][1], '01.11.2026');
-      expect(r[3], ['ALİ VELİ — toplam', null, 0.1, 25.5, 0.2, 0.0, 0.0, 0.0, 25.8]);
-      expect(r.last, ['GENEL TOPLAM', null, 50.1, 25.5, 0.2, 0.0, 0.0, 10.0, 85.8]);
+      expect(r[1], ['ALİ VELİ', '01.11.2026', 0.1, 0.0, 0.2, 0.0, 0.0, closeTo(0.3, 1e-9)]);
+      expect(r[3], ['ALİ VELİ — toplam', null, 0.1, 25.5, 0.2, 0.0, 0.0, closeTo(25.8, 1e-9)]);
+      expect(r[4], ['Silinmiş/pasif cari #2', '01.11.2026', 0.0, 0.0, 0.0, 10.0, 2.0, 10.0],
+          reason: 'çuval TOPLAM (kg)\'a girmez');
+      expect(r.last, ['GENEL TOPLAM', null, 50.1, 25.5, 0.2, 10.0, 2.0, closeTo(85.8, 1e-9)]);
     });
   });
 
@@ -140,7 +160,8 @@ void main() {
     final f = await ExcelExport.exportSutVeYemRaporu(
         cariler: [ali],
         sutler: [Sut(cariId: 1, tarih: '2026-11-01', sabah: 3)],
-        yemler: [Yem(cariId: 1, tarih: '2026-11-01', sutYemi: 2)],
+        yemler: [Yem(cariId: 1, tarih: '2026-11-01', urunId: 1, miktar: 2)],
+        urunler: urunler,
         startDate: DateTime(2026, 11, 1),
         endDate: DateTime(2026, 11, 30),
         raporAdi: 'ikisi');

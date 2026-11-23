@@ -134,12 +134,6 @@ class _SutFiyatEkraniState extends ConsumerState<SutFiyatEkrani> {
           cariId: cari.id!,
           ay: _anahtar,
           sutFiyat: fiyat,
-          sutYemiFiyat: mevcut.sutYemiFiyat,
-          besiYemiFiyat: mevcut.besiYemiFiyat,
-          bBaslangicFiyat: mevcut.bBaslangicFiyat,
-          bBuyutmeFiyat: mevcut.bBuyutmeFiyat,
-          kuzuYemiFiyat: mevcut.kuzuYemiFiyat,
-          tavukYemiFiyat: mevcut.tavukYemiFiyat,
         ));
       }
       // Tek transaction: ya hepsi ya hiçbiri.

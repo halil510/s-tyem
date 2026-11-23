@@ -23,6 +23,7 @@ import 'package:sutyem_pro/data/repositories/cari_odeme_repository.dart';
 import 'package:sutyem_pro/data/repositories/cari_repository.dart';
 import 'package:sutyem_pro/data/repositories/fiyat_repository.dart';
 import 'package:sutyem_pro/data/repositories/sut_repository.dart';
+import 'package:sutyem_pro/data/repositories/urun_repository.dart';
 import 'package:sutyem_pro/data/repositories/veri_yonetimi_repository.dart';
 import 'package:sutyem_pro/data/repositories/yem_repository.dart';
 import 'package:sutyem_pro/data/yedek/yedek_servisi.dart';
@@ -49,6 +50,7 @@ class Cihaz {
   CariRepository get cari => CariRepository(db);
   CariOdemeRepository get odeme => CariOdemeRepository(db);
   CariFiyatRepository get fiyat => CariFiyatRepository(db);
+  UrunFiyatRepository get urunFiyat => UrunFiyatRepository(db);
   Future<Map<int, double>> bakiyeler() async {
     c.invalidate(tumKalanBorclarProvider);
     return c.read(tumKalanBorclarProvider.future);
@@ -131,10 +133,11 @@ void main() {
     final ali = await db.insert('cariler', {'ad': 'Ali', 'soyad': 'Kaya', 'sira': 1});
     final veli = await db.insert('cariler', {'ad': 'Veli', 'soyad': '', 'telefon': null, 'adres': null, 'aktif': 0});
     for (final c in [ali, veli]) {
-      await fiyatTanimla(db, c, '2026-10', sut: 18, sutYemi: 11);
+      // Eski şema (v12): yem fiyatı cari_fiyatlar'da, yem satırı 6 sütunlu.
+      await db.insert('cari_fiyatlar', {'cari_id': c, 'ay': '2026-10', 'sut_fiyat': 18, 'sut_yemi_fiyat': 11});
     }
     await db.insert('sutler', {'cari_id': ali, 'tarih': '2026-10-05', 'sabah': 30, 'aksam': 20, 'toplam': 50});
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-10-06', 'sut_yemi': 4, 'toplam': 4});
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-10-06', 'sut_yemi': 4, 'besi_yemi': 1, 'toplam': 5});
     await db.insert('cari_odemeler',
         {'cari_id': veli, 'tarih': '2026-10-07', 'islem_turu': 'odeme', 'miktar': 1, 'birim_fiyat': 100, 'toplam_tutar': 100});
     await db.insert('donemler', {'ay': '2026-10', 'durum': 'kapali'});
@@ -148,6 +151,10 @@ void main() {
     expect(hata, isNull, reason: 'kapalı dönemi olan her kullanıcının uygulaması güncellemeden sonra AÇILMAZ');
     expect(await say(db, 'yemler WHERE uuid IS NULL'), 0);
     expect(await say(db, 'cari_odemeler WHERE uuid IS NULL'), 0);
+    // v16 aktarımı da kapalı Ekim'e takılmadı: 2 türlü satır ikiye bölündü, fiyat korunur.
+    expect(await say(db, 'yemler WHERE urun_id IS NULL'), 0);
+    expect(await say(db, 'yemler'), 2);
+    expect((await UrunFiyatRepository(db).lookup()).fiyat(ali, urunSutYemi, '2026-10-06'), 11);
   });
 
   test('KONTROL: v12→v13 migration kapalı dönem YOKKEN çok cari / pasif / NULL alanla sorunsuz; taban günlük her satırı içerir', () async {
@@ -159,7 +166,7 @@ void main() {
     ]).run(db);
     for (var i = 0; i < 30; i++) {
       final id = await db.insert('cariler', {'ad': 'C$i', 'soyad': i.isEven ? '' : 'S', 'telefon': null, 'aktif': i % 5 == 0 ? 0 : 1});
-      await fiyatTanimla(db, id, '2026-11', sut: 20, sutYemi: 10);
+      await db.insert('cari_fiyatlar', {'cari_id': id, 'ay': '2026-11', 'sut_fiyat': 20, 'sut_yemi_fiyat': 10});
       await db.insert('sutler', {'cari_id': id, 'tarih': gun, 'sabah': i + 1.0, 'aksam': null, 'toplam': i + 1.0});
       await db.insert('yemler', {'cari_id': id, 'tarih': gun, 'sut_yemi': 1, 'toplam': 1});
     }
@@ -183,17 +190,16 @@ void main() {
     final aAli = await a.cariId('Ali'), bAli = await b.cariId('Ali');
     await a.sut.gunlukKaydet(cariId: aAli, tarih: gun, sabah: 100, aksam: 0);
     await esitle(a, b);
-    // A: Süt Fiyatı ekranı — Kasım süt fiyatı 20 → 25 (yem fiyatları ekrandaki mevcutlar).
-    final aMevcut = (await a.fiyat.getAyFiyatlariHepsi([aAli], '2026-11'))[aAli]!;
-    await a.fiyat.topluKaydet([CariFiyat(cariId: aAli, ay: '2026-11', sutFiyat: 25, sutYemiFiyat: aMevcut.sutYemiFiyat)]);
+    // A: Süt Fiyatı ekranı — Kasım süt fiyatı 20 → 25.
+    await a.fiyat.topluKaydet([CariFiyat(cariId: aAli, ay: '2026-11', sutFiyat: 25)]);
     await bekle();
-    // B: Yem Fiyatı ekranı — TÜM cariler yazılır, süt fiyatı B'nin gördüğü (eski) 20.
-    final bMevcut = (await b.fiyat.getAyFiyatlariHepsi([bAli], '2026-11'))[bAli]!;
-    await b.fiyat.topluKaydet([CariFiyat(cariId: bAli, ay: '2026-11', sutFiyat: bMevcut.sutFiyat, sutYemiFiyat: 13)], yemFiyatiniAyaYay: true);
+    // B: Yem Fiyatı ekranı (v16: ayrı tablo, ürün bazlı) — Kasım süt yemi 12 → 13.
+    await b.urunFiyat.kaydet(cariId: bAli, urunId: urunSutYemi, ay: '2026-11', fiyat: 13);
     await esitle(a, b);
     for (final c in [a, b]) {
       final f = (await c.db.query('cari_fiyatlar', where: "ay = '2026-11'")).single;
-      expect([f['sut_fiyat'], f['sut_yemi_fiyat']], [25.0, 13.0], reason: '${c.ad}: iki ekranın değişikliği de korunmalı');
+      final y = (await c.db.query('cari_urun_fiyatlari', where: "ay = '2026-11'")).single;
+      expect([f['sut_fiyat'], y['fiyat']], [25.0, 13.0], reason: '${c.ad}: iki ekranın değişikliği de korunmalı');
     }
     expect((await a.bakiyeler())[aAli], 100 * 25.0);
   });
@@ -304,22 +310,24 @@ void main() {
     expect(await say(a.db, 'cariler'), 4);
     expect(await say(b.db, 'cariler'), 4);
     for (final ad in ['Ex1', 'Ex2', 'Bcari']) {
-      await a.fiyat.kaydet(CariFiyat(cariId: await a.cariId(ad), ay: '2026-11', sutFiyat: 19.75, sutYemiFiyat: 11.5));
-      await a.fiyat.kaydet(CariFiyat(cariId: await a.cariId(ad), ay: '2026-10', sutFiyat: 17.3, sutYemiFiyat: 10));
+      await a.fiyat.kaydet(CariFiyat(cariId: await a.cariId(ad), ay: '2026-11', sutFiyat: 19.75));
+      await a.fiyat.kaydet(CariFiyat(cariId: await a.cariId(ad), ay: '2026-10', sutFiyat: 17.3));
+      await a.urunFiyat.kaydet(cariId: await a.cariId(ad), urunId: urunSutYemi, ay: '2026-11', fiyat: 11.5);
+      await a.urunFiyat.kaydet(cariId: await a.cariId(ad), urunId: urunSutYemi, ay: '2026-10', fiyat: 10);
     }
     final aAli = await a.cariId('Ali');
     // Ay ortası fiyat değişikliği (gün anahtarlı satır) — B'de girilir.
-    await b.fiyat.topluKaydet([CariFiyat(cariId: await b.cariId('Ali'), ay: '2026-11-15', sutFiyat: 21.35, sutYemiFiyat: 12)]);
+    await b.fiyat.topluKaydet([CariFiyat(cariId: await b.cariId('Ali'), ay: '2026-11-15', sutFiyat: 21.35)]);
     await a.sut.gunlukKaydet(cariId: aAli, tarih: gun, sabah: 33.3, aksam: 21.7);
     await a.sut.gunlukKaydet(cariId: aAli, tarih: '2026-11-20', sabah: 12.35, aksam: 0);
     await b.sut.gunlukKaydet(cariId: await b.cariId('Ex1'), tarih: '2026-10-03', sabah: 9.9, aksam: 9.9);
-    final yemId = await a.yem.insert(Yem(cariId: aAli, tarih: gun, sutYemi: 3.5, besiYemi: 2));
+    final yemId = await a.yem.insert(Yem(cariId: aAli, tarih: gun, urunId: 1, miktar: 3.5));
     final odemeId = await b.odeme.insert(CariOdeme(cariId: await b.cariId('Ex2'), tarih: gun, islemTuru: 'odeme', miktar: 1, birimFiyat: 333.33, toplamTutar: 333.33));
     await a.odeme.insert(CariOdeme(cariId: aAli, tarih: '2026-10-20', islemTuru: 'tahsilat', miktar: 1, birimFiyat: 50, toplamTutar: 50));
     await esitle(a, b);
     // Düzenlemeler (karşı cihazda).
     final bYem = (await b.db.query('yemler')).single;
-    await b.yem.update(Yem.fromMap(bYem)..sutYemi = 4.25);
+    await b.yem.update(Yem.fromMap(bYem)..miktar = 4.25);
     final aOdeme = (await a.db.query('cari_odemeler', where: "islem_turu = 'odeme'")).single;
     await a.odeme.update(CariOdeme.fromMap(aOdeme)
       ..toplamTutar = 444.44
@@ -371,11 +379,11 @@ void main() {
     await aliHazirla();
     final aAli = await a.cariId('Ali');
     await a.sut.gunlukKaydet(cariId: aAli, tarih: gun, sabah: 10, aksam: 0);
-    await a.yem.insert(Yem(cariId: aAli, tarih: gun, sutYemi: 1));
+    await a.yem.insert(Yem(cariId: aAli, tarih: gun, urunId: 1, miktar: 1));
     await esitle(a, b);
     await VeriYonetimiRepository(a.db).sutVeYemSil();
     await bekle();
-    await b.yem.insert(Yem(cariId: await b.cariId('Ali'), tarih: gun, sutYemi: 2));
+    await b.yem.insert(Yem(cariId: await b.cariId('Ali'), tarih: gun, urunId: 1, miktar: 2));
     await esitle(a, b);
     for (final c in [a, b]) {
       expect(await say(c.db, 'sutler'), 0, reason: c.ad);
@@ -389,7 +397,7 @@ void main() {
     await aliHazirla();
     final aAli = await a.cariId('Ali');
     await a.sut.gunlukKaydet(cariId: aAli, tarih: gun, sabah: 40, aksam: 30);
-    await a.yem.insert(Yem(cariId: aAli, tarih: gun, sutYemi: 5));
+    await a.yem.insert(Yem(cariId: aAli, tarih: gun, urunId: 1, miktar: 5));
     final json = YedekServisi.coz(await YedekServisi.disaAktarJson(a.db));
     final yedekSut = (json['sutler'] as List).single as Map;
     expect(yedekSut['sabah_zaman'], isNotNull);
@@ -410,20 +418,20 @@ void main() {
   test('BUG: A eski JSON yedeğe döner; A\'nın yedekten SONRA yapıp B\'ye gönderdiği düzeltme A\'ya geri gelmeli (iki telefon farklı kalmamalı)', () async {
     await aliHazirla();
     final aAli = await a.cariId('Ali');
-    final yemId = await a.yem.insert(Yem(cariId: aAli, tarih: gun, sutYemi: 5));
+    final yemId = await a.yem.insert(Yem(cariId: aAli, tarih: gun, urunId: 1, miktar: 5));
     await esitle(a, b);
     final json = YedekServisi.coz(await YedekServisi.disaAktarJson(a.db)); // yedek: 5 çuval
     await bekle();
-    await a.yem.update(Yem(id: yemId, cariId: aAli, tarih: gun, sutYemi: 10)); // A düzeltir: 10
+    await a.yem.update(Yem(id: yemId, cariId: aAli, tarih: gun, urunId: 1, miktar: 10)); // A düzeltir: 10
     await esitle(a, b);
-    expect((await b.db.query('yemler')).single['sut_yemi'], 10.0);
+    expect((await b.db.query('yemler')).single['miktar'], 10.0);
     // A, otomatik güvenlik yedeğine / eski yedeğe döner (tamamenDegistir).
     await YedekServisi.iceAktar(a.db, json, tamamenDegistir: true);
     a.gonderilen.clear();
     b.gonderilen.clear();
     await esitle(a, b);
-    final aYem = (await a.db.query('yemler')).single['sut_yemi'];
-    final bYem = (await b.db.query('yemler')).single['sut_yemi'];
+    final aYem = (await a.db.query('yemler')).single['miktar'];
+    final bYem = (await b.db.query('yemler')).single['miktar'];
     expect(aYem, bYem, reason: 'A=5, B=10 kalıyor: B, A\'dan aldığı kaydı "yankı" sayıp A\'ya hiç geri göndermiyor');
     expect(await a.adliBakiyeler(), await b.adliBakiyeler());
   });
@@ -443,7 +451,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'sutyem_cihaz_id': 'cihaz-A', senkTabanBayragi: true});
     addTearDown(() => SenkronYoneticisi().testSifirla());
     await aliHazirla();
-    await a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: gun, sutYemi: 1));
+    await a.yem.insert(Yem(cariId: await a.cariId('Ali'), tarih: gun, urunId: 1, miktar: 1));
     await a.db.insert('senk_kanallar', {'kanal': 'bulut', 'son_gonderilen': 99, 'son_cekilen': 77});
     await SenkronYoneticisi().testSifirla();
     SenkronYoneticisi.testCihaz = null;

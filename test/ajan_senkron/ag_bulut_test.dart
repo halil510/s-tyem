@@ -402,15 +402,17 @@ void main() {
       ]);
       expect(await cariAdlari(ana), ['Bora', 'Can']);
       // Her istemciye kendi kaydı geri gönderilmez.
-      expect(sonuc[0].$1.where((k) => k.anahtar == gb.single.anahtar), isEmpty);
-      expect(sonuc[1].$1.where((k) => k.anahtar == gc.single.anahtar), isEmpty);
+      // (v16: her yeni telefon hazır 6 ürünü de gönderir — ortak kimlikli; burada yalnız cari.)
+      final gbCari = gb.singleWhere((k) => k.tablo == 'cariler'), gcCari = gc.singleWhere((k) => k.tablo == 'cariler');
+      expect(sonuc[0].$1.where((k) => k.anahtar == gbCari.anahtar), isEmpty);
+      expect(sonuc[1].$1.where((k) => k.anahtar == gcCari.anahtar), isEmpty);
       // Tekrar aynı gönderim çoğaltmaz.
       await YerelAgIstemcisi.tur(adres: '127.0.0.1', kod: '123456', cihaz: 'cihaz-B', sonCekilen: 0, giden: gb);
       expect((await ana.query('cariler')).length, 2);
       // sonCekilen sunucudakinden büyükse sunucu baştan verir (veritabanı yenilenmiş).
       final (gelen, sonId, sunucuSon, _) =
           await YerelAgIstemcisi.tur(adres: '127.0.0.1', kod: '123456', cihaz: 'cihaz-B', sonCekilen: 999999, giden: const []);
-      expect(gelen.map((k) => k.anahtar), contains(gc.single.anahtar));
+      expect(gelen.map((k) => k.anahtar), contains(gcCari.anahtar));
       expect(sonId, lessThanOrEqualTo(sunucuSon));
     } finally {
       await s.durdur();

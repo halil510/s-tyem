@@ -6,6 +6,7 @@ import '../../../core/providers/veri_surumu_provider.dart';
 import '../../../models/cari_fiyat_model.dart';
 import '../../../models/cari_odeme_model.dart';
 import '../../../models/sut_model.dart';
+import '../../../models/urun_model.dart';
 import '../../../models/yem_model.dart';
 import '../../../utils/sayi_format.dart';
 import '../models/cari_fiyat_lookup.dart';
@@ -39,8 +40,13 @@ final _gunFormat = DateFormat('yyyy-MM-dd');
 /// genel toplamla kuruşu kuruşuna aynıdır.
 double sutTutari(Sut s, CariFiyat fiyat) => kurusaYuvarla(s.toplam * fiyat.sutFiyat);
 
-double yemTutari(Yem y, CariFiyat fiyat) => kurusaYuvarla(fiyat.yemBorc(
-    y.sutYemi, y.besiYemi, y.bBaslangic, y.bBuyutme, y.kuzuYemi, y.tavukYemi));
+/// Yem / ürün satırının tutarı: miktar × o GÜN geçerli cari ürün fiyatı (v16).
+double yemTutari(Yem y, UrunFiyatLookup urunFiyatlari) =>
+    kurusaYuvarla(y.miktar * urunFiyatlari.fiyat(y.cariId, y.urunId, y.tarih));
+
+/// Yem toplamlarında "kg" yalnız birimi kg olan ürünlerden toplanır (çuval / adet kg değildir).
+/// Ürün bulunamazsa (eşitleme sırasında) kg sayılır.
+bool kgUrunuMu(Map<int, Urun> urunler, int urunId) => urunler[urunId]?.kgMi ?? true;
 
 /// Bir ay / dönem için GÖSTERİLECEK süt fiyatı. [kullanilan]: o ayın süt
 /// kayıtlarına uygulanan fiyatlar. Tek fiyatsa kendisi; ay içinde fiyat
@@ -90,6 +96,8 @@ final cariEkstreProvider = FutureProvider.autoDispose
 
   final tumFiyatlar = await fiyatRepo.getTumFiyatlar(cariId: params.cariId);
   final lookup = CariFiyatLookup(tumFiyatlar);
+  final urunFiyatlari = await (await ref.watch(urunFiyatRepositoryProvider.future)).lookup(cariId: params.cariId);
+  final urunler = {for (final u in await (await ref.watch(urunRepositoryProvider.future)).getAll()) u.id!: u};
 
   final hareketler = <CariHareket>[];
   double toplamSut = 0, toplamYem = 0, toplamOdeme = 0, toplamTahsilat = 0;
@@ -115,20 +123,22 @@ final cariEkstreProvider = FutureProvider.autoDispose
   }
 
   for (final y in yemler) {
-    final fiyat = lookup.fiyatIcin(params.cariId, y.tarih);
-    final tutar = yemTutari(y, fiyat);
-    final eksik = y.toplam > 0 && tutar <= 0;
+    final birimFiyat = urunFiyatlari.fiyat(params.cariId, y.urunId, y.tarih);
+    final tutar = yemTutari(y, urunFiyatlari);
+    final eksik = y.miktar > 0 && tutar <= 0;
     if (eksik) herhangiFiyatEksikMi = true;
     toplamYem += tutar;
-    toplamYemKg += y.toplam;
+    if (kgUrunuMu(urunler, y.urunId)) toplamYemKg += y.miktar;
+    final urun = urunler[y.urunId];
     hareketler.add(CariHareket(
       tarih: DateTime.parse(y.tarih),
       tur: 'yem',
       tutar: tutar,
       kredi: false,
       baslik: 'Yem Verişi',
-      aciklama: '${sayiGoster(y.toplam)} kg',
+      aciklama: '${urun?.ad ?? 'Ürün'} ${sayiGoster(y.miktar)} ${urun?.birim ?? ''} × ${birimFiyat.toStringAsFixed(2)} ₺',
       fiyatEksik: eksik,
+      siraId: y.id,
     ));
   }
 
@@ -158,7 +168,7 @@ final cariEkstreProvider = FutureProvider.autoDispose
     final t = b.tarih.compareTo(a.tarih);
     if (t != 0) return t;
     final s = (turSirasi[a.tur] ?? 9).compareTo(turSirasi[b.tur] ?? 9);
-    return s != 0 ? s : (b.kayitId ?? 0).compareTo(a.kayitId ?? 0);
+    return s != 0 ? s : (b.kayitId ?? b.siraId ?? 0).compareTo(a.kayitId ?? a.siraId ?? 0);
   });
 
   return CariEkstreSonucu(
@@ -191,6 +201,7 @@ final tumKalanBorclarProvider = FutureProvider<Map<int, double>>((ref) async {
   final sutler = await sutRepo.getAllInRange(_tumZamanlarBaslangic, _tumZamanlarBitis);
   final yemler = await yemRepo.getAllInRange(_tumZamanlarBaslangic, _tumZamanlarBitis);
   final lookup = CariFiyatLookup(await fiyatRepo.getTumFiyatlar());
+  final urunFiyatlari = await (await ref.watch(urunFiyatRepositoryProvider.future)).lookup();
 
   final bakiyeler = <int, double>{};
   void ekle(int cariId, double tutar) => bakiyeler[cariId] = (bakiyeler[cariId] ?? 0) + tutar;
@@ -199,7 +210,7 @@ final tumKalanBorclarProvider = FutureProvider<Map<int, double>>((ref) async {
     ekle(s.cariId, sutTutari(s, lookup.fiyatIcin(s.cariId, s.tarih)));
   }
   for (final y in yemler) {
-    ekle(y.cariId, -yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih)));
+    ekle(y.cariId, -yemTutari(y, urunFiyatlari));
   }
   for (final o in await odemeRepo.getTumOdemeTahsilatlar()) {
     final tutar = kurusaYuvarla(o.toplamTutar);
@@ -227,6 +238,7 @@ class AylikCariOzet {
 
   /// Bu ay içinde süt fiyatı değişti mi (birden çok fiyat uygulandı mı)?
   final bool fiyatDegisti;
+  /// Yalnız birimi kg olan ürünlerin toplamı (çuval / adet kg'ye eklenmez; tutarları [yemTutar]'da).
   final double yemKg;
   final double yemTutar;
   final double odeme;
@@ -255,7 +267,7 @@ class AylikCariOzet {
   /// Bu ayın net etkisi: (süt + tahsilat) − (yem + ödeme).
   double get ayNet => kurusaYuvarla((sutTutar + tahsilat) - (yemTutar + odeme));
 
-  bool get hareketVar => sutKg > 0 || yemKg > 0 || odeme > 0 || tahsilat > 0;
+  bool get hareketVar => sutKg > 0 || yemKg > 0 || yemTutar > 0 || fiyatEksik || odeme > 0 || tahsilat > 0;
 }
 
 /// [ay]: 'yyyy-MM'. Dönen haritada yalnızca o ay hareketi olan ya da
@@ -271,6 +283,8 @@ final aylikOzetProvider = FutureProvider.autoDispose
   final bas = '$ay-01';
   final bit = '$ay-31';
   final lookup = CariFiyatLookup(await fiyatRepo.getTumFiyatlar());
+  final urunFiyatlari = await (await ref.watch(urunFiyatRepositoryProvider.future)).lookup();
+  final urunler = {for (final u in await (await ref.watch(urunRepositoryProvider.future)).getAll()) u.id!: u};
 
   // Genel bakiye AY SONU itibarıyla (Raporlar → Cari Hesap Özeti ile aynı). Eskiden bugünkü
   // bakiye kullanılıyordu: geçmiş bir ayın özeti / WhatsApp mesajı sonraki ayların süt, yem ve
@@ -282,7 +296,7 @@ final aylikOzetProvider = FutureProvider.autoDispose
     bEkle(s.cariId, sutTutari(s, lookup.fiyatIcin(s.cariId, s.tarih)));
   }
   for (final y in await yemRepo.getAllInRange(_tumZamanlarBaslangic, aySonu)) {
-    bEkle(y.cariId, -yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih)));
+    bEkle(y.cariId, -yemTutari(y, urunFiyatlari));
   }
   final odemeler = await odemeRepo.getTumOdemeTahsilatlar();
   for (final o in odemeler) {
@@ -308,9 +322,9 @@ final aylikOzetProvider = FutureProvider.autoDispose
     ekle(sutTl, s.cariId, tutar);
   }
   for (final y in await yemRepo.getAllInRange(bas, bit)) {
-    final tutar = yemTutari(y, lookup.fiyatIcin(y.cariId, y.tarih));
-    if (y.toplam > 0 && tutar <= 0) eksik.add(y.cariId);
-    ekle(yemKg, y.cariId, y.toplam);
+    final tutar = yemTutari(y, urunFiyatlari);
+    if (y.miktar > 0 && tutar <= 0) eksik.add(y.cariId);
+    ekle(yemKg, y.cariId, kgUrunuMu(urunler, y.urunId) ? y.miktar : 0);
     ekle(yemTl, y.cariId, tutar);
   }
   for (final o in odemeler) {

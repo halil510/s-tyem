@@ -362,9 +362,17 @@ class SenkCekirdek {
         EXISTS (SELECT 1 FROM sutler x WHERE x.cari_id = ? AND substr(x.tarih, 1, 7) = d.ay) OR
         EXISTS (SELECT 1 FROM yemler x WHERE x.cari_id = ? AND substr(x.tarih, 1, 7) = d.ay) OR
         EXISTS (SELECT 1 FROM cari_odemeler x WHERE x.cari_id = ? AND substr(x.tarih, 1, 7) = d.ay) OR
-        EXISTS (SELECT 1 FROM cari_fiyatlar x WHERE x.cari_id = ? AND substr(x.ay, 1, 7) = d.ay))) AS v''', [cariId, cariId, cariId, cariId]);
+        EXISTS (SELECT 1 FROM cari_fiyatlar x WHERE x.cari_id = ? AND substr(x.ay, 1, 7) = d.ay) OR
+        EXISTS (SELECT 1 FROM cari_urun_fiyatlari x WHERE x.cari_id = ? AND substr(x.ay, 1, 7) = d.ay))) AS v''', [cariId, cariId, cariId, cariId, cariId]);
     return (r.first['v'] as int?) == 1;
   }
+
+  /// Fabrikaya bağlı sevkiyat ve ödemeler: (tablo, uuid).
+  Future<List<(String, String)>> _fabrikaKayitlari(int fabrikaId) async => [
+        for (final t in const ['sevkiyatlar', 'fabrika_hareketleri'])
+          for (final r in await db.query(t, columns: ['uuid'], where: 'fabrika_id = ? AND uuid IS NOT NULL', whereArgs: [fabrikaId]))
+            (t, r['uuid'] as String),
+      ];
 
   /// Uzaktan gelen SİLME kapalı dönemdeki kaydı siliyorsa: silinmez, korunur ve karşıya geri
   /// gönderilir (kapanışı görmeden silen telefonda kayıt geri gelir). Gruplu tablolarda dolu
@@ -415,6 +423,22 @@ class SenkCekirdek {
         await _korumaliGeriGonder(k.tablo, k.anahtar, mevcut,
             'Başka telefon KAPALI $ay ayındaki bir kaydı silmek istedi (kapanışı görmeden). Kayıt korundu ve geri gönderildi.');
         return true;
+      }
+      // Fabrika: başka telefon (kaydı yokken) sildi ama bu telefonda AYNI ANDA ona sevkiyat/ödeme
+      // girilmiş. Silinmez (FK RESTRICT hatasıyla sonsuza dek beklemesin); fabrika VE bağlı kayıtları
+      // yerel değişiklik olarak yeniden gönderilir → silen telefon fabrikayı geri alır, orada
+      // "fabrikası yok" diye atlanmış sevkiyatlar da yeniden gelir. Her iki telefon aynı sonuca varır.
+      if (k.tablo == 'fabrikalar') {
+        final cocuklar = await _fabrikaKayitlari(mevcut['id'] as int);
+        if (cocuklar.isNotEmpty) {
+          await _korumaliGeriGonder(k.tablo, k.anahtar, mevcut,
+              'Başka telefon "${mevcut['ad']}" fabrikasını sildi ama bu telefonda ona bağlı ${cocuklar.length} kayıt '
+                  '(sevkiyat / ödeme) vardı. Fabrika korundu ve geri gönderildi; kullanmıyorsanız pasife alın.');
+          for (final (t, uuid) in cocuklar) {
+            await _yerelGunluk(t, uuid, 'y');
+          }
+          return true;
+        }
       }
       await db.delete(k.tablo, where: 'rowid = ?', whereArgs: [mevcut['_rowid']]);
       _onbellekTemizle(k.tablo);

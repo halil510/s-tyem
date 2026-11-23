@@ -37,7 +37,7 @@ void main() {
     await fiyatTanimla(db, veli, '2026-05', sut: 20);
     await sutGir(ali, '2026-05-01', 20, 18); // 38 kg × 18,5 = 703
     await sutGir(veli, '2026-05-01', 10); //     10 kg × 20   = 200
-    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-03', 'sut_yemi': 25, 'toplam': 25}); // 300
+    await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-03', 'urun_id': 1, 'miktar': 25, 'toplam': 25}); // 300
     final n = container.read(cariHesapNotifierProvider.notifier);
     await n.odemeYap(cariId: ali, tutar: 100, tarih: DateTime(2026, 5, 10));
     await n.tahsilatAl(cariId: ali, tutar: 40, tarih: DateTime(2026, 5, 11));

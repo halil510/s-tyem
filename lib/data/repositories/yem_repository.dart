@@ -6,18 +6,35 @@ class YemRepository {
   final Database db;
   const YemRepository(this.db);
 
+  /// Tek satır miktarı için üst sınır (yazım hatası: "50" yerine "50000").
+  static const maksimumMiktar = 100000.0;
+
   /// Aynı gün birden çok yem teslimatı olabilir; bu yüzden (sütün aksine)
-  /// her teslimat ayrı satırdır.
-  Future<int> insert(Yem yem) {
+  /// her teslimat — ve her ürün — ayrı satırdır.
+  Future<int> insert(Yem yem) async {
     _dogrula(yem);
     return donemKilidiyle(() => db.insert('yemler', yem.toMap()..remove('id')));
   }
 
-  static void _dogrula(Yem y) {
-    final miktarlar = [y.sutYemi, y.besiYemi, y.bBaslangic, y.bBuyutme, y.kuzuYemi, y.tavukYemi];
-    if (miktarlar.any((m) => !m.isFinite || m < 0)) {
-      throw ArgumentError('Yem miktarı negatif veya geçersiz olamaz');
+  /// Bir teslimattaki birden çok ürünü TEK transaction'da yazar: ya hepsi ya hiçbiri
+  /// (ortada hata olursa cariye yarım yem borcu yazılmaz).
+  Future<List<int>> topluEkle(List<Yem> yemler) async {
+    for (final y in yemler) {
+      _dogrula(y);
     }
+    return donemKilidiyle(() => db.transaction((txn) async => [
+          for (final y in yemler) await txn.insert('yemler', y.toMap()..remove('id')),
+        ]));
+  }
+
+  static void _dogrula(Yem y) {
+    if (!y.miktar.isFinite || y.miktar <= 0) {
+      throw ArgumentError('Miktar sıfırdan büyük olmalı');
+    }
+    if (y.miktar > maksimumMiktar) {
+      throw ArgumentError('Miktar çok büyük; yazımı kontrol edin');
+    }
+    if (y.urunId <= 0) throw ArgumentError('Ürün seçilmedi');
   }
 
   Future<List<Yem>> getByCari(int cariId, String start, String end) async {
@@ -25,7 +42,7 @@ class YemRepository {
       'yemler',
       where: 'cari_id = ? AND tarih BETWEEN ? AND ?',
       whereArgs: [cariId, start, end],
-      orderBy: 'tarih ASC',
+      orderBy: 'tarih ASC, id ASC',
     );
     return maps.map(Yem.fromMap).toList();
   }
@@ -35,12 +52,12 @@ class YemRepository {
       'yemler',
       where: 'tarih BETWEEN ? AND ?',
       whereArgs: [start, end],
-      orderBy: 'tarih ASC',
+      orderBy: 'tarih ASC, id ASC',
     );
     return maps.map(Yem.fromMap).toList();
   }
 
-  Future<int> update(Yem yem) {
+  Future<int> update(Yem yem) async {
     _dogrula(yem);
     return donemKilidiyle(
         () => db.update('yemler', yem.toMap()..remove('id'), where: 'id = ?', whereArgs: [yem.id]));

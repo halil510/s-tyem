@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 
 import '../models/cari_model.dart';
 import '../models/sut_model.dart';
+import '../models/urun_model.dart';
 import '../models/yem_model.dart';
 import '../utils/sayi_format.dart';
 import 'whatsapp_service.dart';
@@ -99,24 +100,28 @@ DateTime sutRaporuBaslangici(DateTime bugun) {
   return haftaBas.isBefore(ayBas) ? haftaBas : ayBas;
 }
 
-/// Yem raporu: toplam kg ve gün gün tüm yem türlerinin dökümü.
-({double toplam, String detay}) yemRaporuDetayi(List<Yem> yemler) {
+/// Yem raporu: toplam kg (yalnız birimi kg olan ürünler) ve gün gün tüm ürünlerin
+/// dökümü. Aynı günün ürünleri tek satırda: "01.11.2026: Süt Yemi: 25 kg, Gübre: 2 çuval".
+({double toplam, String detay}) yemRaporuDetayi(List<Yem> yemler, Map<int, Urun> urunler) {
   double toplam = 0;
-  final satirlar = <String>[];
-  for (final y in yemler) {
-    toplam += y.toplam;
-    final kalemler = <String>[
-      if (y.sutYemi > 0) 'Süt Yemi: ${sayiGoster(y.sutYemi)} kg',
-      if (y.besiYemi > 0) 'Besi Yemi: ${sayiGoster(y.besiYemi)} kg',
-      if (y.bBaslangic > 0) 'B. Başlangıç: ${sayiGoster(y.bBaslangic)} kg',
-      if (y.bBuyutme > 0) 'B. Büyütme: ${sayiGoster(y.bBuyutme)} kg',
-      if (y.kuzuYemi > 0) 'Kuzu Yemi: ${sayiGoster(y.kuzuYemi)} kg',
-      if (y.tavukYemi > 0) 'Tavuk Yemi: ${sayiGoster(y.tavukYemi)} kg',
-    ];
-    if (kalemler.isNotEmpty) {
-      final tarih = DateFormat('dd.MM.yyyy').format(DateTime.parse(y.tarih));
-      satirlar.add('$tarih: ${kalemler.join(', ')}');
-    }
+  final gunler = <String, List<String>>{};
+  // Tarih, sonra kayıt sırası (id); eşitlikte gelen sıra korunur (Dart'ın sort'u kararlı değildir).
+  final sirali = [for (var i = 0; i < yemler.length; i++) (i, yemler[i])]..sort((a, b) {
+      final t = a.$2.tarih.compareTo(b.$2.tarih);
+      if (t != 0) return t;
+      final k = (a.$2.id ?? 0).compareTo(b.$2.id ?? 0);
+      return k != 0 ? k : a.$1.compareTo(b.$1);
+    });
+  for (final (_, y) in sirali) {
+    if (y.miktar <= 0) continue;
+    final u = urunler[y.urunId];
+    if (u?.kgMi ?? true) toplam += y.miktar;
+    gunler
+        .putIfAbsent(y.tarih.substring(0, 10), () => [])
+        .add('${u?.ad ?? 'Ürün'}: ${sayiGoster(y.miktar)} ${u?.birim ?? ''}'.trimRight());
   }
+  final satirlar = [
+    for (final e in gunler.entries) '${DateFormat('dd.MM.yyyy').format(DateTime.parse(e.key))}: ${e.value.join(', ')}',
+  ];
   return (toplam: toplam, detay: satirlar.join('\n'));
 }

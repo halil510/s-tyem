@@ -16,6 +16,8 @@ final raporServisiProvider = FutureProvider<RaporServisi>((ref) async => RaporSe
       yemRepo: await ref.watch(yemRepositoryProvider.future),
       fiyatRepo: await ref.watch(cariFiyatRepositoryProvider.future),
       odemeRepo: await ref.watch(cariOdemeRepositoryProvider.future),
+      urunRepo: await ref.watch(urunRepositoryProvider.future),
+      urunFiyatRepo: await ref.watch(urunFiyatRepositoryProvider.future),
     ));
 
 /// Veri değişince (süt/yem/ödeme/fiyat girişi) açık rapor kendiliğinden yenilenir.

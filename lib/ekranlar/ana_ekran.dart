@@ -9,12 +9,14 @@ import 'yem_ekrani.dart';
 import 'ode_ekrani.dart';
 import 'sut_fiyat_ekrani.dart';
 import 'yem_fiyat_ekrani.dart';
+import '../features/urunler/urunler_ekrani.dart';
 import 'fiyat_yonetim_ekrani.dart';
 import 'fiyat_hesaplama_ekrani.dart';
 import 'hizli_sut_giris.dart';
 import '../ekranlar/yedekleme_ekrani.dart';
 import '../core/router/app_router.dart';
 import '../features/donem/donem_ekrani.dart';
+import '../features/fabrika/sevkiyat_ekrani.dart';
 import '../features/fis/fis_ekranlari.dart';
 import '../features/cari/cari_excel_ekrani.dart';
 import '../features/raporlar/rapor_ekrani.dart';
@@ -110,11 +112,13 @@ class _AnaEkranState extends State<AnaEkran> {
           itemBuilder: (ctx) => [
             _menuOgesi('hizli_sut', Icons.speed_rounded, Colors.blue[700], 'Hızlı Süt Girişi'),
             _menuOgesi('rota', Icons.route_outlined, Colors.blue[700], 'Toplama Sırası (Rota)'),
+            _menuOgesi('sevkiyat', Icons.local_shipping_outlined, Colors.blue[700], 'Tank & Fabrika Sevkiyatı'),
             _menuOgesi('pasif', Icons.person_off_outlined, Colors.blueGrey[600], 'Pasif Cariler'),
             _menuOgesi('excel_cari', Icons.upload_file_rounded, Colors.green[700], "Excel'den Cari İçeri Al"),
             const PopupMenuDivider(),
             _menuOgesi('sut_fiyat', Icons.water_drop, Colors.blue[700], 'Süt Fiyatları'),
             _menuOgesi('yem_fiyat', Icons.grass, Colors.green[700], 'Yem Fiyatları'),
+            _menuOgesi('urunler', Icons.category_outlined, Colors.green[700], 'Ürünler (Yem, Gübre…)'),
             _menuOgesi('fiyat_gecmisi', Icons.trending_up_rounded, Colors.indigo[700], 'Piyasa Fiyat Notları'),
             _menuOgesi('raporlar', Icons.insights_rounded, Colors.indigo[700], 'Raporlar'),
             _menuOgesi('aylik_hesaplama', Icons.calculate_outlined, Colors.deepPurple[700], 'Aylık Hesaplama & Rapor'),
@@ -131,6 +135,8 @@ class _AnaEkranState extends State<AnaEkran> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const HizliSutGiris()));
             } else if (value == 'rota') {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const ToplamaSirasiEkrani()));
+            } else if (value == 'sevkiyat') {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SevkiyatEkrani()));
             } else if (value == 'pasif') {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const PasifCarilerEkrani()));
             } else if (value == 'excel_cari') {
@@ -138,6 +144,7 @@ class _AnaEkranState extends State<AnaEkran> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const CariExcelIceAktarmaEkrani()));
             } else if (value == 'sut_fiyat') Navigator.push(context, MaterialPageRoute(builder: (_) => const SutFiyatEkrani()));
             else if (value == 'yem_fiyat') Navigator.push(context, MaterialPageRoute(builder: (_) => const YemFiyatEkrani()));
+            else if (value == 'urunler') Navigator.push(context, MaterialPageRoute(builder: (_) => const UrunlerEkrani()));
             else if (value == 'fiyat_gecmisi') Navigator.push(context, MaterialPageRoute(builder: (_) => const FiyatYonetimEkrani()));
             else if (value == 'raporlar') Navigator.push(context, MaterialPageRoute(builder: (_) => const RaporAnaEkrani()));
             else if (value == 'aylik_hesaplama') Navigator.push(context, MaterialPageRoute(builder: (_) => const FiyatHesaplamaEkrani()));

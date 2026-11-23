@@ -15,7 +15,7 @@ Future<void> ornekVeriYukle(Database db) async {
   await fiyatTanimla(db, veli, '2026-05', sut: 19);
   await db.insert('sutler', {'cari_id': ali, 'tarih': '2026-05-01', 'sabah': 20, 'aksam': 18, 'toplam': 38});
   await db.insert('sutler', {'cari_id': veli, 'tarih': '2026-05-01', 'sabah': 30, 'aksam': 0, 'toplam': 30});
-  await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-02', 'sut_yemi': 50, 'toplam': 50});
+  await db.insert('yemler', {'cari_id': ali, 'tarih': '2026-05-02', 'urun_id': 1, 'miktar': 50, 'toplam': 50});
   await db.insert('cari_odemeler', {
     'cari_id': ali, 'tarih': '2026-05-15', 'islem_turu': 'odeme',
     'miktar': 1, 'birim_fiyat': 100, 'toplam_tutar': 100,
@@ -55,7 +55,7 @@ void main() {
     final ozet = await YedekServisi.iceAktar(hedef, YedekServisi.coz(json), tamamenDegistir: true);
 
     expect(await sayilar(hedef), await sayilar(db));
-    expect(ozet.toplam, 9);
+    expect(ozet.toplam, 16); // 9 + v16: 6 ürün + 1 ürün fiyatı
     final cariler = await hedef.query('cariler', orderBy: 'id');
     expect(cariler.map((c) => c['ad']), ['Ali', 'Veli']);
   });

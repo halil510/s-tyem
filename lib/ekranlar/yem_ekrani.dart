@@ -6,7 +6,10 @@ import '../features/donem/donem_kapali_bandi.dart';
 import 'package:intl/intl.dart';
 
 import '../models/cari_model.dart';
+import '../models/urun_model.dart';
 import '../models/yem_model.dart';
+import '../features/urunler/urun_providers.dart';
+import '../data/repositories/donem_kilidi.dart';
 import '../utils/tarih_secici.dart';
 import '../core/providers/repository_providers.dart';
 import '../core/providers/veri_surumu_provider.dart';
@@ -155,6 +158,9 @@ class _CariKarti extends StatelessWidget {
 
 // ==================== YEM GİRİŞ SAYFASI ====================
 
+/// Bir cariye bir günde verilen yem / ürünler. Alanlar Menü → Ürünler'deki AKTİF
+/// ürünlerden oluşur (Süt Yemi, Besi Yemi, Gübre…). Dolu her alan ayrı bir satır
+/// olarak TEK transaction'da yazılır (ya hepsi ya hiçbiri).
 class YemGirisPage extends ConsumerStatefulWidget {
   final Cari cari;
   const YemGirisPage({required this.cari, super.key});
@@ -164,56 +170,63 @@ class YemGirisPage extends ConsumerStatefulWidget {
 }
 
 class _YemGirisPageState extends ConsumerState<YemGirisPage> {
-  final _sutCtrl = TextEditingController();
-  final _besiCtrl = TextEditingController();
-  final _bBasCtrl = TextEditingController();
-  final _bBuyCtrl = TextEditingController();
-  final _kuzuCtrl = TextEditingController();
-  final _tavukCtrl = TextEditingController();
+  /// urunId → miktar alanı. Ürün listesi yenilense de yazılmış değer kaybolmaz.
+  final Map<int, TextEditingController> _alanlar = {};
+  final _alanDegisti = _Bildirici();
   DateTime _tarih = DateTime.now();
   bool _kaydediliyor = false;
 
-  double _parse(String s) => sayiCoz(s) ?? 0;
+  @override
+  void dispose() {
+    for (final c in _alanlar.values) {
+      c.dispose();
+    }
+    _alanDegisti.dispose();
+    super.dispose();
+  }
 
-  List<TextEditingController> get _alanlar => [_sutCtrl, _besiCtrl, _bBasCtrl, _bBuyCtrl, _kuzuCtrl, _tavukCtrl];
+  TextEditingController _alan(int urunId) => _alanlar.putIfAbsent(urunId, () {
+        final c = TextEditingController();
+        c.addListener(_alanDegisti.bildir);
+        return c;
+      });
 
-  /// Hatalı yazılmış bir alan varsa kayıt yapılmaz (sessizce 0 kg sayılmasın).
-  bool get _gecersizAlanVar => _alanlar.any((c) => sayiCoz(c.text) == null);
+  /// Hatalı yazılmış bir alan varsa kayıt yapılmaz (sessizce 0 sayılmasın).
+  bool _gecersizAlanVar(List<Urun> urunler) => urunler.any((u) => sayiCoz(_alan(u.id!).text) == null);
 
-  double get _toplam => _parse(_sutCtrl.text) + _parse(_besiCtrl.text) + _parse(_bBasCtrl.text) + _parse(_bBuyCtrl.text) + _parse(_kuzuCtrl.text) + _parse(_tavukCtrl.text);
+  /// Girilmiş (> 0) kalemler, ürün sırasıyla.
+  List<(Urun, double)> _kalemler(List<Urun> urunler) => [
+        for (final u in urunler)
+          if ((sayiCoz(_alan(u.id!).text) ?? 0) > 0) (u, sayiCoz(_alan(u.id!).text)!),
+      ];
 
-  Future<void> _kaydet() async {
+  Future<void> _kaydet(List<Urun> urunler) async {
     // Çift dokunma: aynı yem İKİ KEZ yazılıp cariye iki kat borç çıkmasın.
     if (_kaydediliyor) return;
-    if (_gecersizAlanVar) {
+    if (_gecersizAlanVar(urunler)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Geçersiz miktar var, lütfen kontrol edin'), backgroundColor: Colors.red),
       );
       return;
     }
-    if (_toplam == 0) {
+    final kalemler = _kalemler(urunler);
+    if (kalemler.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('En az bir yem türü giriniz'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+        SnackBar(content: const Text('En az bir ürünün miktarını girin'), backgroundColor: Colors.orange, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       );
       return;
     }
     setState(() => _kaydediliyor = true);
     try {
       final repo = await ref.read(yemRepositoryProvider.future);
-      await repo.insert(Yem(
-        cariId: widget.cari.id!,
-        tarih: DateFormat('yyyy-MM-dd').format(_tarih),
-        sutYemi: _parse(_sutCtrl.text),
-        besiYemi: _parse(_besiCtrl.text),
-        bBaslangic: _parse(_bBasCtrl.text),
-        bBuyutme: _parse(_bBuyCtrl.text),
-        kuzuYemi: _parse(_kuzuCtrl.text),
-        tavukYemi: _parse(_tavukCtrl.text),
-      ));
+      final tarih = DateFormat('yyyy-MM-dd').format(_tarih);
+      await repo.topluEkle([
+        for (final (u, m) in kalemler) Yem(cariId: widget.cari.id!, tarih: tarih, urunId: u.id!, miktar: m),
+      ]);
       ref.veriDegisti();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Yem kaydı başarıyla eklendi'),
+        content: Text(kalemler.length == 1 ? 'Yem kaydı başarıyla eklendi' : '${kalemler.length} kalem yem kaydı eklendi'),
         backgroundColor: Colors.green[700],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -222,19 +235,28 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _kaydediliyor = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e'), backgroundColor: Colors.red));
+      final mesaj = donemKapaliHatasiMi(e)
+          ? const DonemKapaliHatasi().toString()
+          : e is ArgumentError
+              ? '${e.message}'
+              : 'Kaydedilemedi: $e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mesaj), backgroundColor: Colors.red));
     }
   }
 
-  Widget _alanOlustur(TextEditingController ctrl, String etiket, IconData ikon, Color renk) {
+  static const _renkler = [Colors.blue, Colors.brown, Colors.purple, Colors.indigo, Colors.orange, Colors.amber, Colors.teal, Colors.green, Colors.red, Colors.cyan];
+
+  Widget _alanOlustur(Urun u, int sira) {
+    final renk = _renkler[sira % _renkler.length];
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
-        controller: ctrl,
+        key: ValueKey('yemAlani_${u.id}'),
+        controller: _alan(u.id!),
         decoration: InputDecoration(
-          labelText: '$etiket (kg)',
-          prefixIcon: Icon(ikon, color: renk, size: 20),
-          hintText: '0.0',
+          labelText: '${u.ad} (${u.birim})',
+          prefixIcon: Icon(Icons.grass, color: renk, size: 20),
+          hintText: '0',
         ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: (_) => setState(() {}),
@@ -242,23 +264,26 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
     );
   }
 
-  late final _alanDinleyici = Listenable.merge(_alanlar);
-
   /// Bir alana miktar yazılmış (ya da hatalı yazılmış) ama kaydedilmemiş.
-  bool get _kaydedilmemisVar => !_kaydediliyor && _alanlar.any((c) => sayiCoz(c.text) != 0);
+  bool get _kaydedilmemisVar => !_kaydediliyor && _alanlar.values.any((c) => sayiCoz(c.text) != 0);
 
   @override
   Widget build(BuildContext context) {
+    final urunlerAsync = ref.watch(aktifUrunlerProvider);
+    final urunler = urunlerAsync.valueOrNull ?? const <Urun>[];
     return KaydedilmemisKoruma(
-      dinle: _alanDinleyici,
+      dinle: _alanDegisti,
       degisiklikVar: () => _kaydedilmemisVar,
-      kaydet: _kaydet,
+      kaydet: () => _kaydet(urunler),
       baslik: 'Yem kaydedilmedi',
-      child: _ekran(context),
+      child: _ekran(context, urunlerAsync),
     );
   }
 
-  Widget _ekran(BuildContext context) {
+  Widget _ekran(BuildContext context, AsyncValue<List<Urun>> urunlerAsync) {
+    final urunler = urunlerAsync.valueOrNull ?? const <Urun>[];
+    final kalemler = _kalemler(urunler);
+    final kgToplam = kalemler.where((k) => k.$1.kgMi).fold(0.0, (t, k) => t + k.$2);
     return Scaffold(
       backgroundColor: const Color(0xFFF8FFF8),
       appBar: AppBar(
@@ -308,22 +333,31 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
                   Row(children: [
                     Icon(Icons.grass, color: Colors.green[700], size: 18),
                     const SizedBox(width: 8),
-                    const Text('Yem Türleri', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    const Spacer(),
-                    if (_toplam > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
-                        child: Text('Toplam: ${sayiGoster(_toplam)} kg', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Expanded(child: Text('Yem / Ürünler', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                    if (kalemler.isNotEmpty)
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
+                          child: Text(
+                            kgToplam > 0 ? '${kalemler.length} kalem · ${sayiGoster(kgToplam)} kg' : '${kalemler.length} kalem',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
                       ),
                   ]),
                   const SizedBox(height: 16),
-                  _alanOlustur(_sutCtrl, 'Süt Yemi', Icons.water_drop, Colors.blue),
-                  _alanOlustur(_besiCtrl, 'Besi Yemi', Icons.agriculture, Colors.brown),
-                  _alanOlustur(_bBasCtrl, 'B. Başlangıç', Icons.start, Colors.purple),
-                  _alanOlustur(_bBuyCtrl, 'B. Büyütme', Icons.trending_up, Colors.indigo),
-                  _alanOlustur(_kuzuCtrl, 'Kuzu Yemi', Icons.pets, Colors.orange),
-                  _alanOlustur(_tavukCtrl, 'Tavuk Yemi', Icons.egg, Colors.amber),
+                  ...urunlerAsync.when(
+                    loading: () => const [Center(child: CircularProgressIndicator())],
+                    error: (e, _) => [Text('Ürünler okunamadı: $e', style: const TextStyle(color: Colors.red))],
+                    data: (l) => l.isEmpty
+                        ? [
+                            Text('Aktif ürün yok. Menü → Ürünler (Yem, Gübre…) ekranından ürün ekleyin.',
+                                style: TextStyle(color: Colors.orange[800])),
+                          ]
+                        : [for (var i = 0; i < l.length; i++) _alanOlustur(l[i], i)],
+                  ),
                 ],
               ),
             ),
@@ -331,7 +365,7 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _kaydediliyor ? null : _kaydet,
+                onPressed: _kaydediliyor || urunler.isEmpty ? null : () => _kaydet(urunler),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green[700],
                   foregroundColor: Colors.white,
@@ -350,4 +384,9 @@ class _YemGirisPageState extends ConsumerState<YemGirisPage> {
       ),
     );
   }
+}
+
+/// Alanlardan herhangi biri değişince "kaydedilmemiş değişiklik" korumasını uyandırır.
+class _Bildirici extends ChangeNotifier {
+  void bildir() => notifyListeners();
 }
