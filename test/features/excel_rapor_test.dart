@@ -43,6 +43,24 @@ void main() {
   final zeki = Cari(id: 4, ad: 'ZEKİ', soyad: 'ÖZ');
 
   group('Süt raporu', () {
+    test('3 haneli süt (12,345 kg) Excel\'de 2 haneye yuvarlanmaz; günlük hücreler toplamla tutar', () async {
+      final f = await ExcelExport.exportSutRaporu(
+        cariler: [ali],
+        sutler: [
+          Sut(cariId: 1, tarih: '2026-11-01', sabah: 12.345, aksam: 8.5),
+          Sut(cariId: 1, tarih: '2026-11-02', sabah: 0.005, aksam: 0),
+        ],
+        startDate: DateTime(2026, 11, 1),
+        endDate: DateTime(2026, 11, 2),
+        raporAdi: 'uc_hane',
+      );
+      final x = _oku(f);
+      final r = _satirlar(x, 'Süt Raporu');
+      expect(r[1].sublist(0, 6), ['ALİ VELİ', 12.345, 8.5, 0.005, 0.0, closeTo(20.85, 1e-9)]);
+      final t = _satirlar(x, 'Süt Toplamları');
+      expect(t.sublist(3).first, ['ALİ VELİ', closeTo(20.85, 1e-9)]);
+    });
+
     test('boş Sheet1 yok, kuruş yuvarlama, Türkçe sıra, pasif carinin sütü dahil', () async {
       final sutler = [
         Sut(cariId: 1, tarih: '2026-11-01', sabah: 0.1, aksam: 0.2),

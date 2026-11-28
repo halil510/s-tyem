@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 
 import '../../utils/sayi_format.dart';
 
-final _kg = NumberFormat('#,##0.##', 'tr_TR');
+final _kg = NumberFormat('#,##0.###', 'tr_TR');
 final _tl = NumberFormat('#,##0.00', 'tr_TR');
 
 /// Türkçe biçim: 1.234,5
@@ -70,7 +70,8 @@ class RaporTablosu {
           if (i == 0)
             'TOPLAM'
           else if (sutunlar[i].toplanir)
-            kurusaYuvarla(satirlar.fold<double>(0, (a, s) => a + ((s[i] as num?)?.toDouble() ?? 0)))
+            (sutunlar[i].tip == SutunTipi.miktar ? kgYuvarla : kurusaYuvarla)(
+                satirlar.fold<double>(0, (a, s) => a + ((s[i] as num?)?.toDouble() ?? 0)))
           else
             null,
       ];

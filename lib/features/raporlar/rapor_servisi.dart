@@ -130,9 +130,9 @@ class RaporServisi {
               [
                 g,
                 gunler[g]!.cari.length,
-                kurusaYuvarla(gunler[g]!.sabah),
-                kurusaYuvarla(gunler[g]!.aksam),
-                kurusaYuvarla(gunler[g]!.sabah + gunler[g]!.aksam),
+                kgYuvarla(gunler[g]!.sabah),
+                kgYuvarla(gunler[g]!.aksam),
+                kgYuvarla(gunler[g]!.sabah + gunler[g]!.aksam),
                 kurusaYuvarla(gunler[g]!.tutar),
               ],
           ],
@@ -169,7 +169,7 @@ class RaporServisi {
               () {
                 final o = m[id]!;
                 final kg = o.sabah + o.aksam;
-                return [ad(id), o.gun, kurusaYuvarla(o.sabah), kurusaYuvarla(o.aksam), kurusaYuvarla(kg), kg > 0 ? kurusaYuvarla(o.tutar / kg) : 0.0, kurusaYuvarla(o.tutar)];
+                return [ad(id), o.gun, kgYuvarla(o.sabah), kgYuvarla(o.aksam), kgYuvarla(kg), kg > 0 ? kurusaYuvarla(o.tutar / kg) : 0.0, kurusaYuvarla(o.tutar)];
               }(),
           ],
           not: _eksikNotu(m.values.where((o) => o.eksik).length, cari: true),
@@ -199,7 +199,7 @@ class RaporServisi {
               [
                 '${a.substring(5, 7)}.${a.substring(0, 4)}',
                 aylar[a]!.cari.length,
-                kurusaYuvarla(aylar[a]!.kg),
+                kgYuvarla(aylar[a]!.kg),
                 aylar[a]!.kg > 0 ? kurusaYuvarla(aylar[a]!.tutar / aylar[a]!.kg) : 0.0,
                 kurusaYuvarla(aylar[a]!.tutar),
               ],
@@ -270,7 +270,7 @@ class RaporServisi {
                 [
                   urunAdi(urunler, id),
                   urunBirimi(urunler, id),
-                  kurusaYuvarla(miktar[id]!),
+                  kgYuvarla(miktar[id]!),
                   kurusaYuvarla(tl[id]! / miktar[id]!),
                   kurusaYuvarla(tl[id]!),
                 ],
@@ -297,7 +297,7 @@ class RaporServisi {
             RaporSutun('Toplam kg', SutunTipi.miktar),
             RaporSutun('Tutar', SutunTipi.para),
           ],
-          satirlar: [for (final id in idler) [ad(id), m[id]!.adet, kurusaYuvarla(m[id]!.kg), kurusaYuvarla(m[id]!.tutar)]],
+          satirlar: [for (final id in idler) [ad(id), m[id]!.adet, kgYuvarla(m[id]!.kg), kurusaYuvarla(m[id]!.tutar)]],
           not: 'Toplam kg yalnız birimi kg olan ürünlerdir (çuval / adet gibi ürünler yalnız tutara girer).',
         );
 
@@ -550,9 +550,9 @@ class _Hesap {
   double sutKg = 0, sut = 0, yemKg = 0, yem = 0, odeme = 0, tahsilat = 0;
   double get bakiye => kurusaYuvarla((sut + tahsilat) - (yem + odeme));
   void yuvarla() {
-    sutKg = kurusaYuvarla(sutKg);
+    sutKg = kgYuvarla(sutKg);
     sut = kurusaYuvarla(sut);
-    yemKg = kurusaYuvarla(yemKg);
+    yemKg = kgYuvarla(yemKg);
     yem = kurusaYuvarla(yem);
     odeme = kurusaYuvarla(odeme);
     tahsilat = kurusaYuvarla(tahsilat);

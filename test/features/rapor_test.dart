@@ -78,6 +78,17 @@ void main() {
       expect(t.toplamlar[sutun(t, 'Fiyat')], isNull, reason: 'fiyat sütunu toplanmaz');
     });
 
+    test('3 haneli süt (12,345 kg) raporda 2 haneye yuvarlanmaz: hücre, toplam ve metin', () async {
+      await db.insert('sutler', {'cari_id': ali, 'tarih': '2026-12-02', 'sabah': 12.345, 'aksam': 0.004, 'toplam': 12.349});
+      final t = await rapor(RaporTuru.gunlukSut, bas: '2026-12-01', bit: '2026-12-31', cari: ali);
+      final kg = sutun(t, 'Toplam kg');
+      expect(t.toplamlar[kg], 12.349);
+      expect(hucreMetni(t.sutunlar[kg], t.toplamlar[kg]), '12,349');
+      final cariT = await rapor(RaporTuru.cariSutToplami, bas: '2026-12-01', bit: '2026-12-31');
+      expect(satir(cariT, 'Ali Kaya')[sutun(cariT, 'Sabah kg')], 12.345);
+      expect(hucreMetni(cariT.sutunlar[sutun(cariT, 'Sabah kg')], 12.345), '12,345');
+    });
+
     test('Cari hesap özeti ekstreyle ve genel bakiye tumKalanBorclar ile kuruşu kuruşuna aynı; pasif cari dahil', () async {
       final t = await rapor(RaporTuru.cariHesapOzeti);
       final e = await c.read(cariEkstreProvider((cariId: ali, baslangic: DateTime(2026, 11, 1), bitis: DateTime(2026, 11, 30))).future);

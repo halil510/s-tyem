@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../models/cari_model.dart';
+import '../features/cari/providers/cari_providers.dart' show aktifCarilerProvider;
 import '../models/sut_model.dart';
 import '../models/urun_model.dart';
 import '../models/yem_model.dart';
 import '../features/urunler/urun_providers.dart';
-import '../features/cari_hesap/providers/cari_hesap_providers.dart' show kgUrunuMu;
+import '../features/cari_hesap/providers/cari_hesap_providers.dart' show kgUrunuMu, tumKalanBorclarProvider;
 import 'package:intl/intl.dart';
 import '../utils/sayi_format.dart';
 import '../utils/excel_export.dart';
@@ -46,17 +47,27 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
   Future<void> _verileriYukle() async {
     setState(() => _yukleniyor = true);
 
-    _sutRepo = await ref.read(sutRepositoryProvider.future);
-    _yemRepo = await ref.read(yemRepositoryProvider.future);
+    try {
+      _sutRepo = await ref.read(sutRepositoryProvider.future);
+      _yemRepo = await ref.read(yemRepositoryProvider.future);
 
-    final simdi = DateTime.now();
-    final baslangic = DateTime(simdi.year, simdi.month, 1);
-    final bitis = DateTime(simdi.year, simdi.month + 1, 0);
+      // Son 30 gün (bugün dahil): ayın ilk günü ekran boş görünmesin.
+      final bugun = DateUtils.dateOnly(DateTime.now());
+      _selectedRange = DateTimeRange(start: bugun.subtract(const Duration(days: 29)), end: bugun);
 
-    _selectedRange = DateTimeRange(start: baslangic, end: bitis);
+      await _kayitlariGetir();
+    } catch (e) {
+      _okunamadi(e);
+    } finally {
+      if (mounted) setState(() => _yukleniyor = false);
+    }
+  }
 
-    await _kayitlariGetir();
-    if (mounted) setState(() => _yukleniyor = false);
+  void _okunamadi(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Kayıtlar okunamadı: $e'), backgroundColor: Colors.red),
+    );
   }
 
   Future<void> _kayitlariGetir() async {
@@ -65,14 +76,28 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     final baslangicStr = DateFormat('yyyy-MM-dd').format(_selectedRange!.start);
     final bitisStr = DateFormat('yyyy-MM-dd').format(_selectedRange!.end);
 
-    List<Sut> sutler = await _sutRepo.getByCari(widget.cari.id!, baslangicStr, bitisStr);
-    List<Yem> yemler = await _yemRepo.getByCari(widget.cari.id!, baslangicStr, bitisStr);
+    try {
+      List<Sut> sutler = await _sutRepo.getByCari(widget.cari.id!, baslangicStr, bitisStr);
+      List<Yem> yemler = await _yemRepo.getByCari(widget.cari.id!, baslangicStr, bitisStr);
 
-    if (!mounted) return;
-    setState(() {
-      _sutKayitlari = List.from(sutler.reversed);
-      _yemKayitlari = List.from(yemler.reversed);
-    });
+      if (!mounted) return;
+      setState(() {
+        _sutKayitlari = List.from(sutler.reversed);
+        _yemKayitlari = List.from(yemler.reversed);
+      });
+    } catch (e) {
+      _okunamadi(e);
+    }
+  }
+
+  /// Cari ekranında ad / telefon / adres değişirse burada da güncel görünsün.
+  Cari get _cari {
+    final liste = ref.watch(aktifCarilerProvider).valueOrNull;
+    if (liste == null) return widget.cari;
+    for (final c in liste) {
+      if (c.id == widget.cari.id) return c;
+    }
+    return widget.cari;
   }
 
   Future<void> _tarihAraligiSec() async {
@@ -297,14 +322,15 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text('${widget.cari.ad} ${widget.cari.soyad}'),
+        title: Text('${_cari.ad} ${_cari.soyad}'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.blue[800],
         elevation: 2,
         actions: [
           IconButton(
             icon: const Icon(Icons.download),
-            onPressed: _excelExportDialog,
+            // Yükleme sürerken / yüklenemediyse tarih aralığı yok → rapor oluşturulamaz.
+            onPressed: _yukleniyor || _selectedRange == null ? null : _excelExportDialog,
             tooltip: 'Excel\'e Aktar',
           ),
         ],
@@ -359,12 +385,12 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${widget.cari.ad} ${widget.cari.soyad}',
+                      '${_cari.ad} ${_cari.soyad}',
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.cari.hayvanTuru ?? 'Belirtilmemiş',
+                      _cari.hayvanTuru ?? 'Belirtilmemiş',
                       style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     ),
                   ],
@@ -373,19 +399,13 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
             ],
           ),
           const SizedBox(height: 16),
+          if (_cari.telefon != null && _cari.telefon!.isNotEmpty) ...[
+            _buildBilgiSatiri(Icons.phone, _cari.telefon!),
+          ],
           Row(
             children: [
-              if (widget.cari.telefon != null && widget.cari.telefon!.isNotEmpty) ...[
-                Icon(Icons.phone, size: 18, color: Colors.grey[500]),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.cari.telefon!,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                ),
-              ] else
-                const Expanded(child: SizedBox()),
+              Expanded(child: _buildBakiye()),
+              const SizedBox(width: 8),
               TextButton.icon(
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -406,9 +426,9 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
               ),
             ],
           ),
-          if (widget.cari.adres != null && widget.cari.adres!.isNotEmpty) ...[
+          if (_cari.adres != null && _cari.adres!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _buildBilgiSatiri(Icons.location_on, widget.cari.adres!),
+            _buildBilgiSatiri(Icons.location_on, _cari.adres!),
           ],
           const SizedBox(height: 16),
           InkWell(
@@ -443,6 +463,45 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Güncel (tüm zamanlar) bakiye — Ödemeler sekmesi ve ekstreyle AYNI kaynak (`tumKalanBorclarProvider`).
+  /// Pozitif: cari alacaklı (işletme öder); negatif: cari borçlu (işletme tahsil eder).
+  Widget _buildBakiye() {
+    final async = ref.watch(tumKalanBorclarProvider);
+    if (async.hasError) {
+      return Text('Bakiye okunamadı', style: TextStyle(color: Colors.red[700], fontSize: 12));
+    }
+    final bakiye = async.valueOrNull;
+    if (bakiye == null && !async.hasValue) {
+      return const Align(
+        alignment: Alignment.centerLeft,
+        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    final b = (bakiye ?? const <int, double>{})[widget.cari.id] ?? 0.0;
+    const epsilon = 0.005;
+    final alacakli = b > epsilon;
+    final borclu = b < -epsilon;
+    final renk = alacakli ? const Color(0xFF0D47A1) : (borclu ? const Color(0xFFE65100) : Colors.grey[700]!);
+    final etiket = alacakli ? 'Alacaklı' : (borclu ? 'Borçlu' : 'Hesap kapalı');
+    final tutar = NumberFormat.currency(locale: 'tr_TR', symbol: '₺', decimalDigits: 2).format(b.abs());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Bakiye · $etiket', maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            (alacakli || borclu) ? tutar : '0,00 ₺',
+            style: TextStyle(color: renk, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
     );
   }
 
@@ -646,28 +705,41 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sabah: ${sayiGoster(sut.sabah)}kg • Akşam: ${sayiGoster(sut.aksam)}kg',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    'Sabah: ${sayiGoster(sut.sabah)} kg',
+                    style: const TextStyle(color: Color(0xFF1565C0), fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Akşam: ${sayiGoster(sut.aksam)} kg',
+                    style: const TextStyle(color: Color(0xFFE65100), fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
             // Sağ badge ve menü
-            Row(
+            Flexible(
+              child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                // Dar ekranda toplam etiketi küçülür, satır taşmaz.
+                Flexible(
+                  child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: bugunKayit ? Colors.green[50] : Colors.blue[50],
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Text(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
                     '${sayiGoster(sut.toplam)}kg',
                     style: TextStyle(
                       color: bugunKayit ? Colors.green[700] : Colors.blue[700],
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  ),
                   ),
                 ),
                 PopupMenuButton<String>(
@@ -687,6 +759,7 @@ class _DetayEkraniState extends ConsumerState<DetayEkrani> {
                   },
                 ),
               ],
+              ),
             ),
           ],
         ),

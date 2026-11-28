@@ -330,8 +330,27 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindi
     return _cariler.where((c) => aramaEslesir(c.tamAd, _arama)).toList();
   }
 
-  double get _gunlukToplamKg =>
-      _mevcutKayitlar.values.fold(0.0, (t, s) => t + s.toplam);
+  /// Günlük toplam = ekrandaki (aktif cari) satırların CANLI toplamı: kilitli öğün kayıttan,
+  /// açık öğün yazılan değerden. Geçersiz yazılmış alan 0 sayılır (satır zaten kırmızı işaretlenir).
+  /// Eskiden yalnız KAYDEDİLMİŞ kayıtlar ve pasif cariler de toplanıyordu: alttaki rakam satırlarla tutmuyordu.
+  double get _gunlukToplamKg {
+    var toplam = 0.0;
+    for (final cari in _cariler) {
+      final d = _degerler(cari.id!);
+      toplam += (d.sabah ?? 0) + (d.aksam ?? 0);
+    }
+    return kurusaYuvarla(toplam);
+  }
+
+  /// O gün kaydı olan ama listede görünmeyen (pasif) carilerin sütü — gizli kalmasın diye ayrı gösterilir.
+  double get _pasifCariKg {
+    final aktifIdler = {for (final c in _cariler) c.id};
+    var toplam = 0.0;
+    for (final e in _mevcutKayitlar.entries) {
+      if (!aktifIdler.contains(e.key)) toplam += e.value.toplam;
+    }
+    return kurusaYuvarla(toplam);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -428,13 +447,18 @@ class _HizliSutGirisState extends ConsumerState<HizliSutGiris> with WidgetsBindi
                       ),
             ),
           ),
-          _AltPanel(
-            // Yalnız LİSTEDEKİ (aktif) cariler sayılır; o gün kaydı olan pasif cari "Kayıtlı/Boş"u bozmasın.
-            kayitliSayisi: _cariler.where((c) => _mevcutKayitlar.containsKey(c.id)).length,
-            cariSayisi: _cariler.length,
-            gunlukToplamKg: _gunlukToplamKg,
-            kaydediliyor: _kaydediliyor,
-            onKaydet: _kaydediliyor || _yukleniyor ? null : _tumunuKaydet,
+          // Kutulara yazdıkça yalnız alt panel yenilenir (liste değil): toplam canlı güncellenir.
+          ListenableBuilder(
+            listenable: Listenable.merge([..._sabahCtrl.values, ..._aksamCtrl.values]),
+            builder: (context, _) => _AltPanel(
+              // Yalnız LİSTEDEKİ (aktif) cariler sayılır; o gün kaydı olan pasif cari "Kayıtlı/Boş"u bozmasın.
+              kayitliSayisi: _cariler.where((c) => _mevcutKayitlar.containsKey(c.id)).length,
+              cariSayisi: _cariler.length,
+              gunlukToplamKg: _gunlukToplamKg,
+              pasifCariKg: _pasifCariKg,
+              kaydediliyor: _kaydediliyor,
+              onKaydet: _kaydediliyor || _yukleniyor ? null : _tumunuKaydet,
+            ),
           ),
         ],
       ),
@@ -629,6 +653,7 @@ class _AltPanel extends StatelessWidget {
   final int kayitliSayisi;
   final int cariSayisi;
   final double gunlukToplamKg;
+  final double pasifCariKg;
   final bool kaydediliyor;
   final VoidCallback? onKaydet;
 
@@ -636,6 +661,7 @@ class _AltPanel extends StatelessWidget {
     required this.kayitliSayisi,
     required this.cariSayisi,
     required this.gunlukToplamKg,
+    this.pasifCariKg = 0,
     required this.kaydediliyor,
     required this.onKaydet,
   });
@@ -685,6 +711,15 @@ class _AltPanel extends StatelessWidget {
                 Expanded(flex: 2, child: _kutu('Günlük Toplam', '${sayiGoster(gunlukToplamKg)} kg', Colors.blue)),
               ],
             ),
+            if (pasifCariKg > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Ayrıca pasif carilerde ${sayiGoster(pasifCariKg)} kg kayıtlı (toplama dahil değil)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+              ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,

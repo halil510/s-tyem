@@ -975,6 +975,33 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
 - Fırın ERP (`firin-derle`, `firin-sema-degisikligi`) ve Ürün Güncelleme (`urun-derle-dagit`, `urun-yeni-islem`,
   `urun-pdf-bicimi`) için de CLAUDE.md + skill'ler yazıldı.
 
+### 2026-11-28 — Cari Detay / Süt / Hızlı Süt Girişi taraması (sürüm 1.4.1+22)
+| # | Ekran | Sorun | Çözüm |
+|---|---|---|---|
+| 1 | Cari Detay | Süt kartında sabah/akşam tek satır, küçük yazı | Alt alta iki satır, 15 punto |
+| 2 | Cari Detay | Yükleme hatasında çark sonsuza dek dönüyor, mesaj yok | try/catch/finally + "Kayıtlar okunamadı" |
+| 3 | Cari Detay | Varsayılan dönem "bu ay": ayın 1'inde süt listesi boş | Son 30 gün (bugün dahil) |
+| 4 | Cari Detay | Başlıkta ad/telefon/adres cari ekranında değişince eski kalıyordu | `aktifCarilerProvider`'dan güncel cari |
+| 5 | Süt sekmesi | Arama sonucu boşken yenileme çalışmıyor, "x / y alındı" özeti kayboluyordu | Boş durum liste içine alındı |
+| 6 | Hızlı Süt Girişi | "Günlük Toplam" yalnız KAYDEDİLMİŞ kayıtları ve PASİF carileri de topluyordu; satırlarla tutmuyordu | Ekrandaki (aktif) satırların CANLI toplamı; pasif cari sütü ayrı satırda yazılır |
+- Bakılıp sorun bulunmayanlar: ödeme/tahsilat sheet, ekstre ve bakiye hesabı (tek kaynak), Yem Girişi, `TarihSecici`.
+- Cari Detay: Ödeme düğmesinin soluna **Bakiye** eklendi (`tumKalanBorclarProvider` — Ödemeler sekmesi/ekstreyle aynı kaynak;
+  Alacaklı mavi, Borçlu turuncu, kapalıysa "0,00 ₺"); telefon kendi satırına alındı. Excel düğmesi yükleme sürerken kapalı.
+- **Excel (7):** her sayı 2 haneye yuvarlanıyordu; süt 3 haneye kadar kaydedilir (12,345) → Excel'de 12,35 yazıp günlük
+  hücreler toplamla tutmuyordu. `ExcelExport._y` artık 3 hane (para zaten kuruşlu gelir). PDF'te kg yok, etkilenmedi.
+  Bakılıp sorun bulunmayanlar: ekstre Excel (yürüyen bakiye), aylık hesaplama ve hakediş kolon eşleşmeleri/toplamları, yem raporu.
+- **Sonradan (aynı gün, 8-11):** (8) Cari Detay süt kartı: Sabah mavi / Akşam turuncu, toplam etiketi 18 punto kalın
+  (dar ekranda FittedBox ile küçülür; 320 px'te taşıyordu). (9) **Raporlar:** kg 2 haneye yuvarlanıp gösteriliyordu
+  (12,345 → 12,35) ve toplamlar gram siliyordu → `kgYaz` 3 hane, kg toplamları `kgYuvarla` (sayi_format.dart), para yine
+  kuruş. (10) Ödemeler sekmesi tutarları artık tr_TR ("1.234,56 ₺"), toplamlar kuruşa yuvarlı. (11) Yedekleme ekranı:
+  içeri alma bitince `setState` öncesi `mounted` kontrolü. Yedek/içe aktarma mantığı (YedekServisi, .db doğrulama)
+  incelendi, sorun yok.
+- Bilinen küçük eksikler (dokunulmadı): Hızlı Süt Girişi'nde klavye açıkken alt panel liste alanını daraltıyor; .db içeri
+  alırken uygulama kilitliyse master şifre sorulmuyor (yalnız JSON'da soruluyor).
+- Test: `sut_ekran_test.dart` (canlı toplam) + `excel_rapor_test.dart` + `rapor_test.dart` (3 haneli süt). Testler: 618 geçti, 1 atlandı.
+- APK: `build/app/outputs/flutter-apk/Sutyem-1.4.1+22.apk` (84.5 MB), com.sutyem.pro, versionCode 22, imza
+  `CN=SUTYEM PRO` SHA-256 9EB0EAF8…BDC6528D (telefondakiyle aynı anahtar — güncelleme olarak yüklenir). Şema/eşitleme değişmedi.
+
 ## ⚠️ Açık riskler / karar bekleyenler
 
 1. **Yedekleme ekranındaki "veritabanı şifresi"**: dosyadan geri yükleme ve "tüm süt/yem kayıtlarını sil"

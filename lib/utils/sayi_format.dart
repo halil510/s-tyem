@@ -49,6 +49,13 @@ double kurusaYuvarla(double tutar) {
   return (kurus + (kurus >= 0 ? 1e-7 : -1e-7)).roundToDouble() / 100;
 }
 
+/// Miktar (kg) toplamı: 3 haneye yuvarlar (süt 12,345 kg kaydedilebilir; kuruşa (2 hane) yuvarlamak
+/// toplamdan gram siler). Para için [kurusaYuvarla] kullanılır.
+double kgYuvarla(double kg) {
+  final g = kg * 1000;
+  return (g + (g >= 0 ? 1e-6 : -1e-6)).roundToDouble() / 1000;
+}
+
 /// Miktarı gereksiz sıfırlar olmadan gösterir: `12` · `12.5` · `12.25` · `12.345`.
 /// (`12.340000000000001` gibi kayan nokta artıklarını gizler.)
 /// Toplamlar tek haneye YUVARLANMAZ: 47.8 + 30.54 = `78.34` (eskiden 78.3).

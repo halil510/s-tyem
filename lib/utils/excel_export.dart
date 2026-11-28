@@ -10,7 +10,6 @@ import '../models/yem_model.dart';
 import '../features/cari_hesap/providers/cari_hesap_providers.dart' show AylikCariOzet;
 import '../features/donem/donem_servisi.dart' show HakedisSatiri;
 import 'ekstre_satirlari.dart';
-import 'sayi_format.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
 
@@ -46,7 +45,13 @@ class ExcelExport {
     return temiz.isEmpty ? 'Rapor' : temiz;
   }
 
-  static double _y(num v) => kurusaYuvarla(v.toDouble());
+  /// 3 haneye yuvarlar. Süt miktarı 3 haneye kadar kaydedilir (12,345 kg) ve ekranda öyle görünür;
+  /// eskiden Excel'e 2 haneyle (12,35) yazılıyordu → günlük hücreler toplamla kuruşu kuruşuna tutmuyordu.
+  /// Para değerleri zaten kuruşa yuvarlanmış gelir; bu yalnız kayan nokta artığını (0.1+0.2) temizler.
+  static double _y(num v) {
+    final d = v.toDouble();
+    return d.isFinite ? double.parse(d.toStringAsFixed(3)) : 0.0;
+  }
 
   static const _bosSayfa = 'Sheet1';
 

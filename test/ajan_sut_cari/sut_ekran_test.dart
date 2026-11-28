@@ -399,6 +399,24 @@ void main() {
     });
 
     testWidgets(
+        'DÜZELTİLDİ: "Günlük Toplam" ekrandaki satırların CANLI toplamıdır (yazılan dahil, pasif cari hariç)',
+        (tester) async {
+      await hazirla(tester);
+      await tester.runAsync(() async {
+        final pasif = await cariEkle(db, ad: 'Cem', soyad: 'Pasif');
+        await db.insert('sutler', {'cari_id': pasif, 'tarih': bugunStr, 'sabah': 40, 'aksam': 0, 'toplam': 40});
+        await db.update('cariler', {'aktif': 0, 'sira': null}, where: 'id = ?', whereArgs: [pasif]);
+      });
+      await tester.pumpWidget(_uygulama(db, const HizliSutGiris()));
+      await _bekle(tester, () => find.text('Ali Kaya').evaluate().isNotEmpty, 'cariler');
+      expect(kutuDegeri(tester, 'Günlük Toplam'), '0 kg', reason: 'pasif carinin 40 kg\'ı satırlarda yok');
+      expect(find.textContaining('pasif carilerde 40 kg'), findsOneWidget, reason: 'pasif süt gizli kalmamalı');
+      await tester.enterText(alan(1), '20'); // Ali sabah, KAYDEDİLMEDEN
+      await tester.pump();
+      expect(kutuDegeri(tester, 'Günlük Toplam'), '20 kg', reason: 'yazılan miktar toplama anında yansımalı');
+    });
+
+    testWidgets(
         'DÜZELTİLDİ: İLERİ tarihli taslak (telefon saati geri alınınca) BUGÜNÜN alanlarına uygulanır',
         (tester) async {
       await hazirla(tester);

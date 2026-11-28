@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../features/cari/providers/cari_providers.dart';
+import '../utils/sayi_format.dart' show kurusaYuvarla;
 import '../utils/turkce.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/cari_model.dart';
 import '../core/router/app_router.dart';
 import '../features/cari_hesap/providers/cari_hesap_providers.dart';
+
+/// Cari Detay / ekstreyle aynı Türkçe biçim: 1.234,56 ₺
+String _tlGoster(double v) => NumberFormat.currency(locale: 'tr_TR', symbol: '₺').format(v);
 
 /// "Ödemeler" sekmesi — tüm carilerin güncel (işaretli) bakiyesini listeler.
 ///
@@ -69,9 +74,9 @@ class _OdeEkraniState extends ConsumerState<OdeEkrani> {
               // olması için burada da aynı tolerans kullanılıyor.
               const epsilon = 0.005;
               // Alacaklı cariler için toplam (işletmenin ödeyeceği tutar)
-              final toplamAlacak = bakiyeler.values.fold(0.0, (s, v) => s + (v > epsilon ? v : 0));
+              final toplamAlacak = kurusaYuvarla(bakiyeler.values.fold(0.0, (s, v) => s + (v > epsilon ? v : 0)));
               // Borçlu cariler için toplam (işletmenin tahsil edeceği tutar)
-              final toplamBorc = bakiyeler.values.fold(0.0, (s, v) => s + (v < -epsilon ? -v : 0));
+              final toplamBorc = kurusaYuvarla(bakiyeler.values.fold(0.0, (s, v) => s + (v < -epsilon ? -v : 0)));
               final alacakliSayisi = bakiyeler.values.where((v) => v > epsilon).length;
               final borcluSayisi = bakiyeler.values.where((v) => v < -epsilon).length;
 
@@ -211,7 +216,7 @@ class _OzetKarti extends StatelessWidget {
               children: [
                 const Text('Ödenecek (Alacaklı)', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text('${toplamAlacak.toStringAsFixed(2)} ₺',
+                Text(_tlGoster(toplamAlacak),
                     style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                 Text('$alacakliSayisi cari', style: const TextStyle(color: Colors.white70, fontSize: 11)),
               ],
@@ -225,7 +230,7 @@ class _OzetKarti extends StatelessWidget {
               children: [
                 const Text('Tahsil Edilecek (Borçlu)', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text('${toplamBorc.toStringAsFixed(2)} ₺',
+                Text(_tlGoster(toplamBorc),
                     style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                 Text('$borcluSayisi cari', style: const TextStyle(color: Colors.white70, fontSize: 11)),
               ],
@@ -321,7 +326,7 @@ class _CariOdemeKarti extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(color: bgRenk, borderRadius: BorderRadius.circular(10)),
                     child: Text(
-                      bakiye.abs() <= epsilon ? 'Hesap Kapalı' : '${bakiye.abs().toStringAsFixed(2)} ₺',
+                      bakiye.abs() <= epsilon ? 'Hesap Kapalı' : _tlGoster(bakiye.abs()),
                       style: TextStyle(color: durumRenk, fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ),

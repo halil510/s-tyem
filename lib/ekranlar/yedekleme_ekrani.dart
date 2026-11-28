@@ -272,7 +272,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
     } catch (e) {
       _showSnack('❌ Hata: $e');
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 

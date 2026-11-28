@@ -109,21 +109,6 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
             child: carilerAsync.when(
               data: (cariler) {
                   final filtrelenen = _filtreUygula(cariler);
-                  if (filtrelenen.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.water_drop_outlined, size: 72, color: Colors.blue[200]),
-                          const SizedBox(height: 16),
-                          Text(
-                            cariler.isEmpty ? 'Henüz cari kaydı yok' : 'Cari bulunamadı',
-                            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
                   final alinan = cariler.where((c) => ogunAlindi(bugunkuler[c.id], ogun)).length;
                   return RefreshIndicator(
                     onRefresh: () async {
@@ -131,11 +116,27 @@ class _SutEkraniState extends ConsumerState<SutEkrani> {
                       ref.invalidate(gunlukSutlerProvider(gun));
                     },
                     child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      itemCount: filtrelenen.length + 1,
+                      itemCount: filtrelenen.isEmpty ? 2 : filtrelenen.length + 1,
                       itemBuilder: (ctx, i) {
                         if (i == 0) {
                           return _ToplamaOzeti(ogun: ogun, alinan: alinan, toplam: cariler.length);
+                        }
+                        if (filtrelenen.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 48),
+                            child: Column(
+                              children: [
+                                Icon(Icons.water_drop_outlined, size: 72, color: Colors.blue[200]),
+                                const SizedBox(height: 16),
+                                Text(
+                                  cariler.isEmpty ? 'Henüz cari kaydı yok' : 'Cari bulunamadı',
+                                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                                ),
+                              ],
+                            ),
+                          );
                         }
                         final cari = filtrelenen[i - 1];
                         return _CariKarti(
