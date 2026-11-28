@@ -59,7 +59,7 @@ class _DonemEkraniState extends ConsumerState<DonemEkrani> {
   }
 
   Future<void> _kapat(DonemBilgisi b) async {
-    final odenecek = b.satirlar.where((s) => s.donemSonu > 0).fold(0.0, (t, s) => t + s.donemSonu);
+    final odenecek = kurusaYuvarla(b.satirlar.where((s) => s.donemSonu > 0).fold(0.0, (t, s) => t + s.donemSonu));
     final onay = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -239,9 +239,9 @@ class _DonemEkraniState extends ConsumerState<DonemEkrani> {
   }
 
   Widget _toplamKarti(DonemBilgisi b) {
-    double topla(double Function(HakedisSatiri) f) => b.satirlar.fold(0.0, (t, s) => t + f(s));
-    final odenecek = b.satirlar.where((s) => s.donemSonu > 0).fold(0.0, (t, s) => t + s.donemSonu);
-    final alacak = b.satirlar.where((s) => s.donemSonu < 0).fold(0.0, (t, s) => t - s.donemSonu);
+    double topla(double Function(HakedisSatiri) f) => kurusaYuvarla(b.satirlar.fold(0.0, (t, s) => t + f(s)));
+    final odenecek = kurusaYuvarla(b.satirlar.where((s) => s.donemSonu > 0).fold(0.0, (t, s) => t + s.donemSonu));
+    final alacak = kurusaYuvarla(b.satirlar.where((s) => s.donemSonu < 0).fold(0.0, (t, s) => t - s.donemSonu));
     Widget kalem(String etiket, String deger) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(children: [
@@ -253,7 +253,7 @@ class _DonemEkraniState extends ConsumerState<DonemEkrani> {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(children: [
-          kalem('Toplanan süt', '${_kg.format(topla((s) => s.sutKg))} kg'),
+          kalem('Toplanan süt', '${_kg.format(kgYuvarla(b.satirlar.fold(0.0, (t, s) => t + s.sutKg)))} kg'),
           kalem('Süt tutarı', _para.format(topla((s) => s.sutTutar))),
           kalem('Verilen yem', _para.format(topla((s) => s.yemTutar))),
           kalem('Ay içinde ödenen', _para.format(topla((s) => s.odeme))),
@@ -324,8 +324,8 @@ class _HakedisKarti extends StatelessWidget {
           const SizedBox(height: 6),
           satir('Önceki dönemden devir', s.devir, eksi: s.devir < 0),
           if (s.sutKg > 0)
-            satir('Süt ${sayiGoster(s.sutKg)} kg × ${s.sutFiyat.toStringAsFixed(2)} ₺', s.sutTutar),
-          satir('Yem ${sayiGoster(s.yemKg)} kg', s.yemTutar, eksi: true),
+            satir('Süt ${sayiGoster(s.sutKg)} kg × ${_para.format(s.sutFiyat)}', s.sutTutar),
+          satir(s.yemKg > 0 ? 'Yem ${sayiGoster(s.yemKg)} kg' : 'Yem / ürün', s.yemTutar, eksi: true),
           satir('Ödenen', s.odeme, eksi: true),
           satir('Tahsil edilen', s.tahsilat),
         ]),

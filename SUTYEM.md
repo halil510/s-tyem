@@ -975,7 +975,7 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
 - Fırın ERP (`firin-derle`, `firin-sema-degisikligi`) ve Ürün Güncelleme (`urun-derle-dagit`, `urun-yeni-islem`,
   `urun-pdf-bicimi`) için de CLAUDE.md + skill'ler yazıldı.
 
-### 2026-11-28 — Cari Detay / Süt / Hızlı Süt Girişi taraması (sürüm 1.4.1+22)
+### 2026-11-28 — Cari Detay / Süt / Hızlı Süt Girişi taraması (sürüm 1.4.1+23)
 | # | Ekran | Sorun | Çözüm |
 |---|---|---|---|
 | 1 | Cari Detay | Süt kartında sabah/akşam tek satır, küçük yazı | Alt alta iki satır, 15 punto |
@@ -999,7 +999,11 @@ Kullanıcı isteği: "Ödemeler ekranında ödeme ve tahsilat fişi yazdırma yo
 - Bilinen küçük eksikler (dokunulmadı): Hızlı Süt Girişi'nde klavye açıkken alt panel liste alanını daraltıyor; .db içeri
   alırken uygulama kilitliyse master şifre sorulmuyor (yalnız JSON'da soruluyor).
 - Test: `sut_ekran_test.dart` (canlı toplam) + `excel_rapor_test.dart` + `rapor_test.dart` (3 haneli süt). Testler: 618 geçti, 1 atlandı.
-- APK: `build/app/outputs/flutter-apk/Sutyem-1.4.1+22.apk` (84.5 MB), com.sutyem.pro, versionCode 22, imza
+- **Dönem / fabrika taraması (12):** Dönem kapanışı/hakediş (`donem_servisi`) ve `fabrika_hesap` mantığı incelendi, hata yok.
+  Dönem ekranı: toplam kartı kuruşa yuvarlı, toplanan süt kg 3 hane, süt fiyatı tr_TR, yalnız çuval/adet yemde "Yem / ürün".
+  Fiyat ekranları (süt/yem), fabrika-sevkiyat diyalogları ve ürünler ekranında sayı girişleri `sayiCoz` ile doğrulanıyor, sorun yok.
+  Ayrıntılı ekran incelemesi yapılmayanlar: çoklu cihaz eşitleme, Bluetooth/Wi-Fi/terazi, fiş yazdırma, pano.
+- APK: `build/app/outputs/flutter-apk/Sutyem-1.4.1+23.apk` (84.5 MB), com.sutyem.pro, versionCode 23, imza
   `CN=SUTYEM PRO` SHA-256 9EB0EAF8…BDC6528D (telefondakiyle aynı anahtar — güncelleme olarak yüklenir). Şema/eşitleme değişmedi.
 
 ## ⚠️ Açık riskler / karar bekleyenler
